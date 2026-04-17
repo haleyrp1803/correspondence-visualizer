@@ -742,115 +742,6 @@ function computePersonEdgeWidth(count) {
   return Math.max(0.6, Math.min(4.2, 0.6 + Math.pow(count, 0.72) * 0.42));
 }
 
-function buildForceDirectedPersonPositions(people, edgeRecords, width, height) {
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const seededNodes = people.map((person, index, arr) => {
-    const angle = (index / Math.max(arr.length, 1)) * Math.PI * 2;
-    const ring = 210 + (index % 5) * 24;
-    return {
-      ...person,
-      x: centerX + Math.cos(angle) * ring,
-      y: centerY + Math.sin(angle) * ring,
-      vx: 0,
-      vy: 0,
-    };
-  });
-
-  const nodeById = new Map(seededNodes.map((node) => [node.id, node]));
-  const links = edgeRecords
-    .map((edge) => ({
-      source: nodeById.get(edge.source),
-      target: nodeById.get(edge.target),
-      count: edge.count,
-    }))
-    .filter((link) => link.source && link.target);
-
-  const padding = 120;
-  const iterations = 240;
-  const chargeStrength = 1400;
-  const centerStrength = 0.0035;
-  const damping = 0.82;
-  const collisionPadding = 18;
-
-  for (let step = 0; step < iterations; step += 1) {
-    for (let i = 0; i < seededNodes.length; i += 1) {
-      const a = seededNodes[i];
-      for (let j = i + 1; j < seededNodes.length; j += 1) {
-        const b = seededNodes[j];
-        let dx = b.x - a.x;
-        let dy = b.y - a.y;
-        let distSq = dx * dx + dy * dy;
-        if (!distSq) {
-          dx = 0.01 * (i + 1);
-          dy = 0.01 * (j + 1);
-          distSq = dx * dx + dy * dy;
-        }
-        const dist = Math.sqrt(distSq);
-
-        const repulsion = chargeStrength / distSq;
-        const rx = (dx / dist) * repulsion;
-        const ry = (dy / dist) * repulsion;
-        a.vx -= rx;
-        a.vy -= ry;
-        b.vx += rx;
-        b.vy += ry;
-
-        const minDist = (a.radius || 6) + (b.radius || 6) + collisionPadding;
-        if (dist < minDist) {
-          const overlap = (minDist - dist) / Math.max(dist, 0.0001) * 0.18;
-          const ox = dx * overlap;
-          const oy = dy * overlap;
-          a.vx -= ox;
-          a.vy -= oy;
-          b.vx += ox;
-          b.vy += oy;
-        }
-      }
-    }
-
-    for (const link of links) {
-      const dx = link.target.x - link.source.x;
-      const dy = link.target.y - link.source.y;
-      const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-      const desiredDistance = Math.max(95, 170 - Math.min(link.count, 12) * 6);
-      const linkStrength = 0.005 + Math.min(link.count, 10) * 0.0012;
-      const spring = (distance - desiredDistance) * linkStrength;
-      const sx = (dx / distance) * spring;
-      const sy = (dy / distance) * spring;
-      link.source.vx += sx;
-      link.source.vy += sy;
-      link.target.vx -= sx;
-      link.target.vy -= sy;
-    }
-
-    for (const node of seededNodes) {
-      node.vx += (centerX - node.x) * centerStrength;
-      node.vy += (centerY - node.y) * centerStrength;
-      node.vx *= damping;
-      node.vy *= damping;
-      node.x += node.vx;
-      node.y += node.vy;
-    }
-  }
-
-  const minX = Math.min(...seededNodes.map((node) => node.x));
-  const maxX = Math.max(...seededNodes.map((node) => node.x));
-  const minY = Math.min(...seededNodes.map((node) => node.y));
-  const maxY = Math.max(...seededNodes.map((node) => node.y));
-  const spanX = Math.max(1, maxX - minX);
-  const spanY = Math.max(1, maxY - minY);
-  const fitScale = Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanY, 1.35);
-  const offsetX = centerX - ((minX + maxX) / 2) * fitScale;
-  const offsetY = centerY - ((minY + maxY) / 2) * fitScale;
-
-  return seededNodes.map(({ vx, vy, ...node }) => ({
-    ...node,
-    x: node.x * fitScale + offsetX,
-    y: node.y * fitScale + offsetY,
-  }));
-}
-
 // Person-network graph builder for the alternate analytic view.
 function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQuery = '') {
   const personMap = new Map();
@@ -915,39 +806,43 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
 
   let people = Array.from(personMap.values())
     .filter((person) => peopleInUse.has(person.id))
-    .map((person) => ({
-      ...person,
-      x: width / 2,
-      y: height / 2,
-      anchorLabel: '',
-      isMappable: true,
-      degree: 0,
-      radius: 6,
-    }));
+    .map((person, index, arr) => {
+      let x = width / 2;
+      let y = height / 2;
+      let anchorLabel = '';
+      let isMappable = true;
+
+      if (layoutMode === 'geographic') {
+        if (!person.locationCounts.size) {
+          isMappable = false;
+        } else {
+          const best = Array.from(person.locationCounts.entries()).sort((a, b) => b[1] - a[1])[0][0];
+          const [label, lat, lon] = best.split('__');
+          const projected = projectToSvg(Number(lon), Number(lat), width, height);
+          x = projected.x;
+          y = projected.y;
+          anchorLabel = label;
+        }
+      } else {
+        const angle = (index / Math.max(arr.length, 1)) * Math.PI * 2;
+        const ring = 210 + (index % 5) * 24;
+        x = width / 2 + Math.cos(angle) * ring;
+        y = height / 2 + Math.sin(angle) * ring;
+      }
+
+      return {
+        ...person,
+        x,
+        y,
+        anchorLabel,
+        isMappable,
+        degree: 0,
+        radius: 6,
+      };
+    });
 
   if (layoutMode === 'geographic') {
-    people = people
-      .map((person) => {
-        if (!person.locationCounts.size) {
-          return {
-            ...person,
-            isMappable: false,
-          };
-        }
-
-        const best = Array.from(person.locationCounts.entries()).sort((a, b) => b[1] - a[1])[0][0];
-        const [label, lat, lon] = best.split('__');
-        const projected = projectToSvg(Number(lon), Number(lat), width, height);
-        return {
-          ...person,
-          x: projected.x,
-          y: projected.y,
-          anchorLabel: label,
-        };
-      })
-      .filter((person) => person.isMappable);
-  } else {
-    people = buildForceDirectedPersonPositions(people, filteredEdgeRecords, width, height);
+    people = people.filter((person) => person.isMappable);
   }
 
   const personById = new Map(people.map((p) => [p.id, p]));
@@ -1281,30 +1176,31 @@ const MAP_STYLE_PRESETS = {
     mapWarningText: '#ffffff',
   },
   modern: {
-    mapCanvasBg: '#dfeaf3',
-    mapFrameBg: '#edf4f9',
-    mapFrameBorder: '#b7cad9',
-    mapLandFill: '#d3dde5',
-    mapLandStroke: '#a3b6c4',
-    mapGridStroke: '#c1d1dd',
-    mapEdge: '#6d95b6',
-    mapEdgeHover: '#89acd0',
-    mapEdgeActive: '#4f7ea4',
-    mapEdgeSelected: '#345c7b',
-    mapNode: '#5d87a7',
-    mapNodeCluster: '#90aec6',
-    mapNodeAnimated: '#4b7598',
-    mapNodeSelected: '#2f5672',
-    mapNodeStroke: '#ffffff',
-    mapLabelText: '#29445b',
-    mapLabelHalo: 'transparent',
-    mapTextureSea: '#d7e7f2',
-    mapTextureSeaLine: '#b8cede',
-    mapTextureLandTint: '#d8e3ea',
-    mapTextureLandLine: '#c2d3df',
-    mapTextureFrameWash: '#eef5fa',
-    mapTextureCompass: '#6f8ca6',
-    mapWarningBg: '#7f94a8',
+
+    mapCanvasBg: '#102544',
+    mapFrameBg: '#173154',
+    mapFrameBorder: '#3c5678',
+    mapLandFill: '#e8ddcb',
+    mapLandStroke: '#9d8f7c',
+    mapGridStroke: '#3d5574',
+    mapEdge: '#84a8c8',
+    mapEdgeHover: '#a8c3dc',
+    mapEdgeActive: '#6f95b8',
+    mapEdgeSelected: '#5b748f',
+    mapNode: '#7ea1ba',
+    mapNodeCluster: '#b9818f',
+    mapNodeAnimated: '#96adbf',
+    mapNodeSelected: '#8e6a73',
+    mapNodeStroke: '#f6f1e8',
+    mapLabelText: '#8b6f74',
+    mapLabelHalo: '#f3ede4',
+    mapTextureSea: '#173154',
+    mapTextureSeaLine: '#314d70',
+    mapTextureLandTint: '#f0e8dd',
+    mapTextureLandLine: '#c9baa6',
+    mapTextureFrameWash: '#1e3b60',
+    mapTextureCompass: '#6a7d99',
+    mapWarningBg: '#5f7f9b',
     mapWarningText: '#ffffff',
   },
 };
@@ -2115,7 +2011,6 @@ function buildMapStageProps(args) {
     activeAnimationEdgeId: args.activeAnimationEdgeId,
     activeAnimationNodeIds: args.activeAnimationNodeIds,
     viewMode: args.viewMode,
-    personLayoutMode: args.personLayoutMode,
     handleBlankMapClick: args.handleBlankMapClick,
     selectedProps: args.selectedProps,
     zoomTuning: args.zoomTuning,
@@ -2271,9 +2166,7 @@ function SvgMap({
   const lastViewportSizeRef = useRef({ width: 0, height: 0 });
 
   const clampScale = (scale) => Math.max(0.6, Math.min(160, scale));
-  const frame = showBasemap
-    ? { x: 20, y: 20, w: width - 40, h: height - 40 }
-    : { x: 0, y: 0, w: width, h: height };
+  const frame = { x: 20, y: 20, w: width - 40, h: height - 40 };
 
   const projection = useMemo(() => createWorldProjection(width, height), [width, height]);
 
@@ -2667,99 +2560,86 @@ function SvgMap({
             <text x="0" y="-30" textAnchor="middle" fontSize="10" fontWeight="700" fill="var(--map-texture-compass)">N</text>
           </g>
         </defs>
-        {showBasemap ? (
-          <>
-            <rect x="0" y="0" width={width} height={height} fill="var(--map-canvas-bg)" />
-            <rect x="0" y="0" width={width} height={height} fill="var(--map-texture-sea)" opacity="0.35" filter="url(#map-paper-grain)" />
-            <rect x="0" y="0" width={width} height={height} fill="url(#map-sea-lines)" opacity="0.78" />
-            <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-frame-bg)" stroke="var(--map-frame-border)" strokeWidth="1.4" rx="16" />
-            <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-texture-sea)" opacity="0.26" rx="16" />
-            <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="url(#map-sea-lines)" opacity="0.55" rx="16" />
-            <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-texture-frame-wash)" opacity="0.18" filter="url(#map-paper-grain)" rx="16" />
-            <rect x={frame.x + 8} y={frame.y + 8} width={frame.w - 16} height={frame.h - 16} fill="none" stroke="var(--map-frame-border)" strokeOpacity="0.35" strokeWidth="0.9" rx="12" />
-          </>
-        ) : (
-          <>
-            <rect x="0" y="0" width={width} height={height} fill="var(--shell-bg)" />
-            <rect x="12" y="12" width={width - 24} height={height - 24} fill="var(--map-frame-bg)" stroke="var(--map-frame-border)" strokeOpacity="0.22" strokeWidth="1.1" rx="18" />
-          </>
-        )}
+        <rect x="0" y="0" width={width} height={height} fill="var(--map-canvas-bg)" />
+        <rect x="0" y="0" width={width} height={height} fill="var(--map-texture-sea)" opacity="0.35" filter="url(#map-paper-grain)" />
+        <rect x="0" y="0" width={width} height={height} fill="url(#map-sea-lines)" opacity="0.78" />
+        <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-frame-bg)" stroke="var(--map-frame-border)" strokeWidth="1.4" rx="16" />
+        <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-texture-sea)" opacity="0.26" rx="16" />
+        <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="url(#map-sea-lines)" opacity="0.55" rx="16" />
+        <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-texture-frame-wash)" opacity="0.18" filter="url(#map-paper-grain)" rx="16" />
+        <rect x={frame.x + 8} y={frame.y + 8} width={frame.w - 16} height={frame.h - 16} fill="none" stroke="var(--map-frame-border)" strokeOpacity="0.35" strokeWidth="0.9" rx="12" />
         <g clipPath="url(#map-frame-clip)">
           <g transform={`translate(${view.tx} ${view.ty}) scale(${view.scale})`}>
-            {showBasemap ? (
-              <>
-                {basemapPaths.length ? basemapPaths.map((featureItem) => (
-                  <g key={featureItem.id}>
-                    <path
-                      d={featureItem.d}
-                      fill="var(--map-land-fill)"
-                      stroke="var(--map-land-stroke)"
-                      strokeWidth="1"
-                      vectorEffect="non-scaling-stroke"
-                      opacity="0.94"
-                    />
-                    <path
-                      d={featureItem.d}
-                      fill="url(#map-land-lines)"
-                      opacity="0.42"
-                    />
-                    <path
-                      d={featureItem.d}
-                      fill="var(--map-texture-land-tint)"
-                      opacity="0.08"
-                      filter="url(#map-paper-grain)"
-                    />
-                  </g>
-                )) : (
-                  <rect x="24" y="24" width={width - 48} height={height - 48} rx="24" fill="var(--map-land-fill)" opacity="0.55" />
-                )}
-                <g opacity="0.14" stroke="var(--map-grid-stroke)" strokeWidth="1">
-                  <line x1="140" y1="120" x2="140" y2="680" />
-                  <line x1="260" y1="120" x2="260" y2="680" />
-                  <line x1="380" y1="120" x2="380" y2="680" />
-                  <line x1="500" y1="120" x2="500" y2="680" />
-                  <line x1="620" y1="120" x2="620" y2="680" />
-                  <line x1="740" y1="120" x2="740" y2="680" />
-                  <line x1="100" y1="180" x2="860" y2="180" />
-                  <line x1="100" y1="300" x2="860" y2="300" />
-                  <line x1="100" y1="420" x2="860" y2="420" />
-                  <line x1="100" y1="540" x2="860" y2="540" />
-                  <line x1="100" y1="660" x2="860" y2="660" />
-                </g>
-                <use href="#map-compass-rose" x={frame.x + frame.w - 70} y={frame.y + 72} opacity="0.5" />
-                <g pointerEvents="none" opacity="0.62">
-                  {screenWaterLabels.map((item) => {
-                    const lines = Array.isArray(item.lines) && item.lines.length ? item.lines : [item.label || ''];
-                    const lineStep = item.size * 1.02;
-                    const startDy = lines.length > 1 ? -((lines.length - 1) * lineStep) / 2 : 0;
-                    return (
-                      <text
-                        key={item.id}
-                        x={item.x}
-                        y={item.y}
-                        fill="var(--map-texture-compass)"
-                        fillOpacity="0.72"
-                        fontSize={item.size}
-                        fontStyle="italic"
-                        fontFamily="Georgia, Palatino Linotype, Book Antiqua, Palatino, serif"
-                        textAnchor="middle"
-                        letterSpacing="0.08em"
-                      >
-                        {lines.map((line, index) => (
-                          <tspan
-                            key={`${item.id}-line-${index}`}
-                            x={item.x}
-                            dy={index === 0 ? startDy : lineStep}
-                          >
-                            {line}
-                          </tspan>
-                        ))}
-                      </text>
-                    );
-                  })}
-                </g>
-              </>
+            {showBasemap && basemapPaths.length ? basemapPaths.map((featureItem) => (
+              <g key={featureItem.id}>
+                <path
+                  d={featureItem.d}
+                  fill="var(--map-land-fill)"
+                  stroke="var(--map-land-stroke)"
+                  strokeWidth="1"
+                  vectorEffect="non-scaling-stroke"
+                  opacity="0.94"
+                />
+                <path
+                  d={featureItem.d}
+                  fill="url(#map-land-lines)"
+                  opacity="0.42"
+                />
+                <path
+                  d={featureItem.d}
+                  fill="var(--map-texture-land-tint)"
+                  opacity="0.08"
+                  filter="url(#map-paper-grain)"
+                />
+              </g>
+            )) : showBasemap ? (
+              <rect x="24" y="24" width={width - 48} height={height - 48} rx="24" fill="var(--map-land-fill)" opacity="0.55" />
             ) : null}
+            <g opacity="0.14" stroke="var(--map-grid-stroke)" strokeWidth="1">
+              <line x1="140" y1="120" x2="140" y2="680" />
+              <line x1="260" y1="120" x2="260" y2="680" />
+              <line x1="380" y1="120" x2="380" y2="680" />
+              <line x1="500" y1="120" x2="500" y2="680" />
+              <line x1="620" y1="120" x2="620" y2="680" />
+              <line x1="740" y1="120" x2="740" y2="680" />
+              <line x1="100" y1="180" x2="860" y2="180" />
+              <line x1="100" y1="300" x2="860" y2="300" />
+              <line x1="100" y1="420" x2="860" y2="420" />
+              <line x1="100" y1="540" x2="860" y2="540" />
+              <line x1="100" y1="660" x2="860" y2="660" />
+            </g>
+            <use href="#map-compass-rose" x={frame.x + frame.w - 70} y={frame.y + 72} opacity="0.5" />
+            <g pointerEvents="none" opacity="0.62">
+              {screenWaterLabels.map((item) => {
+                const lines = Array.isArray(item.lines) && item.lines.length ? item.lines : [item.label || ''];
+                const lineStep = item.size * 1.02;
+                const startDy = lines.length > 1 ? -((lines.length - 1) * lineStep) / 2 : 0;
+                return (
+                  <text
+                    key={item.id}
+                    x={item.x}
+                    y={item.y}
+                    fill="var(--map-texture-compass)"
+                    fillOpacity="0.72"
+                    fontSize={item.size}
+                    fontStyle="italic"
+                    fontFamily="Georgia, Palatino Linotype, Book Antiqua, Palatino, serif"
+                    textAnchor="middle"
+                    letterSpacing="0.08em"
+                  >
+                    {lines.map((line, index) => (
+                      <tspan
+                        key={`${item.id}-line-${index}`}
+                        x={item.x}
+                        dy={index === 0 ? startDy : lineStep}
+                      >
+                        {line}
+                      </tspan>
+                    ))}
+                  </text>
+                );
+              })}
+            </g>
             <g>
               {screenEdges.map((edge) => {
                 const isAnimated = edge.id === activeAnimationEdgeId;
@@ -3185,7 +3065,6 @@ function MapStage({
   activeAnimationEdgeId,
   activeAnimationNodeIds,
   viewMode,
-  personLayoutMode,
   handleBlankMapClick,
   selectedProps,
   zoomTuning,
@@ -3211,7 +3090,6 @@ function MapStage({
           activeAnimationNodeIds={activeAnimationNodeIds}
           clusterSingularLabel={viewMode === 'geographic' ? 'place' : 'person'}
           clusterPluralLabel={viewMode === 'geographic' ? 'places' : 'people'}
-          showBasemap={!(viewMode === 'person' && personLayoutMode === 'force')}
           onBlankClick={handleBlankMapClick}
           selectedFeature={selectedProps}
           zoomTuning={zoomTuning}
@@ -4029,6 +3907,7 @@ export default function EuropeNetworkMapApp() {
     clusterThreshold: 0,
   });
   const [themeTuning, setThemeTuning] = useState(THEME_DEFAULTS);
+  const [themePresetKey, setThemePresetKey] = useState('preModern');
 
   const minCountOptions = [
     { label: '1', value: 1 },
@@ -4364,6 +4243,7 @@ export default function EuropeNetworkMapApp() {
   const applyThemePreset = (presetKey) => {
     const preset = MAP_STYLE_PRESETS[presetKey];
     if (!preset) return;
+    setThemePresetKey(presetKey);
     setThemeTuning((prev) => ({
       ...prev,
       ...preset,
@@ -4371,6 +4251,7 @@ export default function EuropeNetworkMapApp() {
   };
 
   const resetTheme = () => {
+    setThemePresetKey('preModern');
     setThemeTuning(THEME_DEFAULTS);
   };
 
@@ -4476,13 +4357,12 @@ export default function EuropeNetworkMapApp() {
     activeAnimationEdgeId,
     activeAnimationNodeIds,
     viewMode,
-    personLayoutMode,
     handleBlankMapClick,
     selectedProps,
     zoomTuning,
     viewResetKey,
     hoverCard,
-  });
+            });
 
   const leftControlPanelProps = buildLeftControlPanelProps({
     showLeftSidebar,
