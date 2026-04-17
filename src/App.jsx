@@ -1101,6 +1101,8 @@ const THEME_DEFAULTS = {
   mapLabelFontFamily: 'Georgia, Palatino Linotype, Book Antiqua, Palatino, serif',
   mapLabelFontWeight: '400',
   mapLabelFontStyle: 'italic',
+  mapLabelStroke: 'transparent',
+  mapLabelStrokeWidth: '0',
   mapWaterLabelFontFamily: 'Georgia, Palatino Linotype, Book Antiqua, Palatino, serif',
   mapTextureSea: '#a9c3c8',
   mapTextureSeaLine: '#7e9da4',
@@ -1200,11 +1202,13 @@ const MAP_STYLE_PRESETS = {
     mapNodeAnimated: '#96adbf',
     mapNodeSelected: '#8e6a73',
     mapNodeStroke: '#f6f1e8',
-    mapLabelText: '#8b6f74',
+    mapLabelText: '#22364f',
     mapLabelHalo: '#f3ede4',
     mapLabelFontFamily: 'Avenir Next, Century Gothic, Montserrat, Jost, Manrope, Inter, Segoe UI, sans-serif',
     mapLabelFontWeight: '600',
     mapLabelFontStyle: 'normal',
+    mapLabelStroke: '#ffffff',
+    mapLabelStrokeWidth: '0.65',
     mapWaterLabelFontFamily: 'Avenir Next, Century Gothic, Montserrat, Jost, Manrope, Inter, Segoe UI, sans-serif',
     mapTextureSea: '#173154',
     mapTextureSeaLine: '#314d70',
@@ -2762,6 +2766,10 @@ function SvgMap({
                   fontStyle="var(--map-label-font-style)"
                   fontFamily="var(--map-label-font-family)"
                   fill="var(--map-label-text)"
+                  stroke="var(--map-label-stroke)"
+                  strokeWidth="var(--map-label-stroke-width)"
+                  paintOrder="stroke"
+                  strokeLinejoin="round"
                   style={{ letterSpacing: '0.01em' }}
                 >
                   {labelText}
