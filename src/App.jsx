@@ -14,6 +14,7 @@ import {
   enrichSelectedLetters,
   resolveSelection,
 } from './interactionHelpers';
+import { buildMapInteractionHandlers } from './mapInteractionHandlers';
 import { HoverCardOverlay, MapControlsOverlay, MapLegendOverlay, MapTitleBar } from './mapStageComponents';
 
 
@@ -3934,33 +3935,22 @@ export default function EuropeNetworkMapApp() {
   };
 
 
-  const handleBlankMapClick = () => {
-    setHoverCard(null);
-    setHoveredEdgeId('');
-    clearSelection();
-  };
-
-  const handleEdgeClick = (edge, point) => {
-    setShowRightSidebar(true);
-    setSelectedSelection({ kind: 'edge', id: edge.id });
-    setShowAllLinkedLetters(false);
-    setHoverCard(buildHoverCardState(`${edge.sourceLabel} → ${edge.targetLabel}`, `Weight: ${edge.count}`, point));
-  };
-
-  const handleNodeHover = (node, point) => {
-    setHoverCard(buildHoverCardState(node.label, buildNodeHoverSummary(node, viewMode), point));
-  };
-
-  const handleNodeClick = (node, point) => {
-    setShowRightSidebar(true);
-    setHoverCard(buildHoverCardState(node.label, buildNodeHoverSummary(node, viewMode), point));
-
-    setSelectedSelection({
-      kind: node.isCluster ? 'cluster' : 'node',
-      id: node.id,
-    });
-    setShowAllLinkedLetters(false);
-  };
+  const {
+    handleBlankMapClick,
+    handleEdgeClick,
+    handleNodeHover,
+    handleNodeClick,
+  } = buildMapInteractionHandlers({
+    clearSelection,
+    setHoverCard,
+    setHoveredEdgeId,
+    setSelectedSelection,
+    setShowAllLinkedLetters,
+    setShowRightSidebar,
+    buildHoverCardState,
+    buildNodeHoverSummary,
+    viewMode,
+  });
 
 
   useEffect(() => {
