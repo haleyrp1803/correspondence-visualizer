@@ -734,6 +734,14 @@ function buildGraph(places, aggregatedEdges, width, height) {
   return { nodes, edges, edgeCountsByPlaceId };
 }
 
+function computePersonNodeRadius(degree) {
+  return Math.max(5.5, Math.min(18, 5.5 + Math.pow(Math.max(degree, 1), 0.9) * 1.0));
+}
+
+function computePersonEdgeWidth(count) {
+  return Math.max(0.6, Math.min(4.2, 0.6 + Math.pow(count, 0.72) * 0.42));
+}
+
 // Person-network graph builder for the alternate analytic view.
 function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQuery = '') {
   const personMap = new Map();
@@ -829,7 +837,7 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
         anchorLabel,
         isMappable,
         degree: 0,
-        radius: Math.max(6, Math.min(20, 6 + Math.sqrt(person.appearances) * 1.4)),
+        radius: 6,
       };
     });
 
@@ -851,7 +859,7 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
         sourceLabel: source.label,
         targetLabel: target.label,
         path: curvedPath({ x: source.x, y: source.y }, { x: target.x, y: target.y }, layoutMode === 'geographic' ? 0.12 : 0.22),
-        width: Math.max(1.5, Math.min(14, 1.5 + edge.count * 0.8)),
+        width: computePersonEdgeWidth(edge.count),
         letterMetadata: edge.rows,
         samplePairs: [`${edge.source} → ${edge.target}`],
         sources: [edge.source],
@@ -862,7 +870,7 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
     .filter(Boolean);
 
   people.forEach((p) => {
-    p.radius = Math.max(6, Math.min(20, 6 + Math.sqrt(Math.max(p.degree, 1)) * 1.2));
+    p.radius = computePersonNodeRadius(p.degree);
   });
 
   return { nodes: people, edges };
@@ -1973,7 +1981,7 @@ function buildNodeHoverSummary(node, viewMode) {
 
   return viewMode === 'geographic'
     ? `Weighted degree: ${node.degree}`
-    : `Connections: ${node.degree}`;
+    : `Weighted connections: ${node.degree}`;
 }
 
 function buildHoverCardState(title, subtitle, point) {
@@ -2239,8 +2247,8 @@ function SvgMap({
   const tuning = {
     nodeMinRadius: 6.4,
     edgeMinWidth: 2,
-    nodeMultiplier: 1.91,
-    edgeMultiplier: 6.32,
+    nodeMultiplier: 2,
+    edgeMultiplier: 5,
     edgeOpacity: 0.375,
     labelFontSize: 16.85,
     labelOffset: 13.7,
@@ -3889,8 +3897,8 @@ export default function EuropeNetworkMapApp() {
   const [zoomTuning] = useState({
     nodeMinRadius: 6.4,
     edgeMinWidth: 2,
-    nodeMultiplier: 1.91,
-    edgeMultiplier: 6.32,
+    nodeMultiplier: 2,
+    edgeMultiplier: 5,
     edgeOpacity: 0.375,
     labelFontSize: 16.85,
     labelOffset: 13.7,
