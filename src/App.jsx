@@ -1098,6 +1098,10 @@ const THEME_DEFAULTS = {
   mapNodeStroke: '#fbf5e8',
   mapLabelText: '#4e3923',
   mapLabelHalo: 'transparent',
+  mapLabelFontFamily: 'Georgia, Palatino Linotype, Book Antiqua, Palatino, serif',
+  mapLabelFontWeight: '400',
+  mapLabelFontStyle: 'italic',
+  mapWaterLabelFontFamily: 'Georgia, Palatino Linotype, Book Antiqua, Palatino, serif',
   mapTextureSea: '#a9c3c8',
   mapTextureSeaLine: '#7e9da4',
   mapTextureLandTint: '#c8b97f',
@@ -1166,6 +1170,10 @@ const MAP_STYLE_PRESETS = {
     mapNodeStroke: '#fbf5e8',
     mapLabelText: '#4e3923',
     mapLabelHalo: 'transparent',
+    mapLabelFontFamily: 'Georgia, Palatino Linotype, Book Antiqua, Palatino, serif',
+    mapLabelFontWeight: '400',
+    mapLabelFontStyle: 'italic',
+    mapWaterLabelFontFamily: 'Georgia, Palatino Linotype, Book Antiqua, Palatino, serif',
     mapTextureSea: '#a9c3c8',
     mapTextureSeaLine: '#7e9da4',
     mapTextureLandTint: '#c8b97f',
@@ -1194,6 +1202,10 @@ const MAP_STYLE_PRESETS = {
     mapNodeStroke: '#f6f1e8',
     mapLabelText: '#8b6f74',
     mapLabelHalo: '#f3ede4',
+    mapLabelFontFamily: 'Avenir Next, Century Gothic, Montserrat, Jost, Manrope, Inter, Segoe UI, sans-serif',
+    mapLabelFontWeight: '600',
+    mapLabelFontStyle: 'normal',
+    mapWaterLabelFontFamily: 'Avenir Next, Century Gothic, Montserrat, Jost, Manrope, Inter, Segoe UI, sans-serif',
     mapTextureSea: '#173154',
     mapTextureSeaLine: '#314d70',
     mapTextureLandTint: '#f0e8dd',
@@ -2623,7 +2635,7 @@ function SvgMap({
                     fillOpacity="0.72"
                     fontSize={item.size}
                     fontStyle="italic"
-                    fontFamily="Georgia, Palatino Linotype, Book Antiqua, Palatino, serif"
+                    fontFamily="var(--map-water-label-font-family)"
                     textAnchor="middle"
                     letterSpacing="0.08em"
                   >
@@ -2746,9 +2758,9 @@ function SvgMap({
                   y={node.screenY + node.screenRadius + labelOffset}
                   textAnchor="middle"
                   fontSize={labelFontSize}
-                  fontWeight="400"
-                  fontStyle="italic"
-                  fontFamily="Georgia, Palatino Linotype, Book Antiqua, Palatino, serif"
+                  fontWeight="var(--map-label-font-weight)"
+                  fontStyle="var(--map-label-font-style)"
+                  fontFamily="var(--map-label-font-family)"
                   fill="var(--map-label-text)"
                   style={{ letterSpacing: '0.01em' }}
                 >
