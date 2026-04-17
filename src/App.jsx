@@ -742,6 +742,115 @@ function computePersonEdgeWidth(count) {
   return Math.max(0.6, Math.min(4.2, 0.6 + Math.pow(count, 0.72) * 0.42));
 }
 
+function buildForceDirectedPersonPositions(people, edgeRecords, width, height) {
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const seededNodes = people.map((person, index, arr) => {
+    const angle = (index / Math.max(arr.length, 1)) * Math.PI * 2;
+    const ring = 210 + (index % 5) * 24;
+    return {
+      ...person,
+      x: centerX + Math.cos(angle) * ring,
+      y: centerY + Math.sin(angle) * ring,
+      vx: 0,
+      vy: 0,
+    };
+  });
+
+  const nodeById = new Map(seededNodes.map((node) => [node.id, node]));
+  const links = edgeRecords
+    .map((edge) => ({
+      source: nodeById.get(edge.source),
+      target: nodeById.get(edge.target),
+      count: edge.count,
+    }))
+    .filter((link) => link.source && link.target);
+
+  const padding = 120;
+  const iterations = 240;
+  const chargeStrength = 1400;
+  const centerStrength = 0.0035;
+  const damping = 0.82;
+  const collisionPadding = 18;
+
+  for (let step = 0; step < iterations; step += 1) {
+    for (let i = 0; i < seededNodes.length; i += 1) {
+      const a = seededNodes[i];
+      for (let j = i + 1; j < seededNodes.length; j += 1) {
+        const b = seededNodes[j];
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let distSq = dx * dx + dy * dy;
+        if (!distSq) {
+          dx = 0.01 * (i + 1);
+          dy = 0.01 * (j + 1);
+          distSq = dx * dx + dy * dy;
+        }
+        const dist = Math.sqrt(distSq);
+
+        const repulsion = chargeStrength / distSq;
+        const rx = (dx / dist) * repulsion;
+        const ry = (dy / dist) * repulsion;
+        a.vx -= rx;
+        a.vy -= ry;
+        b.vx += rx;
+        b.vy += ry;
+
+        const minDist = (a.radius || 6) + (b.radius || 6) + collisionPadding;
+        if (dist < minDist) {
+          const overlap = (minDist - dist) / Math.max(dist, 0.0001) * 0.18;
+          const ox = dx * overlap;
+          const oy = dy * overlap;
+          a.vx -= ox;
+          a.vy -= oy;
+          b.vx += ox;
+          b.vy += oy;
+        }
+      }
+    }
+
+    for (const link of links) {
+      const dx = link.target.x - link.source.x;
+      const dy = link.target.y - link.source.y;
+      const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+      const desiredDistance = Math.max(95, 170 - Math.min(link.count, 12) * 6);
+      const linkStrength = 0.005 + Math.min(link.count, 10) * 0.0012;
+      const spring = (distance - desiredDistance) * linkStrength;
+      const sx = (dx / distance) * spring;
+      const sy = (dy / distance) * spring;
+      link.source.vx += sx;
+      link.source.vy += sy;
+      link.target.vx -= sx;
+      link.target.vy -= sy;
+    }
+
+    for (const node of seededNodes) {
+      node.vx += (centerX - node.x) * centerStrength;
+      node.vy += (centerY - node.y) * centerStrength;
+      node.vx *= damping;
+      node.vy *= damping;
+      node.x += node.vx;
+      node.y += node.vy;
+    }
+  }
+
+  const minX = Math.min(...seededNodes.map((node) => node.x));
+  const maxX = Math.max(...seededNodes.map((node) => node.x));
+  const minY = Math.min(...seededNodes.map((node) => node.y));
+  const maxY = Math.max(...seededNodes.map((node) => node.y));
+  const spanX = Math.max(1, maxX - minX);
+  const spanY = Math.max(1, maxY - minY);
+  const fitScale = Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanY, 1.35);
+  const offsetX = centerX - ((minX + maxX) / 2) * fitScale;
+  const offsetY = centerY - ((minY + maxY) / 2) * fitScale;
+
+  return seededNodes.map(({ vx, vy, ...node }) => ({
+    ...node,
+    x: node.x * fitScale + offsetX,
+    y: node.y * fitScale + offsetY,
+  }));
+}
+
 // Person-network graph builder for the alternate analytic view.
 function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQuery = '') {
   const personMap = new Map();
@@ -806,43 +915,39 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
 
   let people = Array.from(personMap.values())
     .filter((person) => peopleInUse.has(person.id))
-    .map((person, index, arr) => {
-      let x = width / 2;
-      let y = height / 2;
-      let anchorLabel = '';
-      let isMappable = true;
-
-      if (layoutMode === 'geographic') {
-        if (!person.locationCounts.size) {
-          isMappable = false;
-        } else {
-          const best = Array.from(person.locationCounts.entries()).sort((a, b) => b[1] - a[1])[0][0];
-          const [label, lat, lon] = best.split('__');
-          const projected = projectToSvg(Number(lon), Number(lat), width, height);
-          x = projected.x;
-          y = projected.y;
-          anchorLabel = label;
-        }
-      } else {
-        const angle = (index / Math.max(arr.length, 1)) * Math.PI * 2;
-        const ring = 210 + (index % 5) * 24;
-        x = width / 2 + Math.cos(angle) * ring;
-        y = height / 2 + Math.sin(angle) * ring;
-      }
-
-      return {
-        ...person,
-        x,
-        y,
-        anchorLabel,
-        isMappable,
-        degree: 0,
-        radius: 6,
-      };
-    });
+    .map((person) => ({
+      ...person,
+      x: width / 2,
+      y: height / 2,
+      anchorLabel: '',
+      isMappable: true,
+      degree: 0,
+      radius: 6,
+    }));
 
   if (layoutMode === 'geographic') {
-    people = people.filter((person) => person.isMappable);
+    people = people
+      .map((person) => {
+        if (!person.locationCounts.size) {
+          return {
+            ...person,
+            isMappable: false,
+          };
+        }
+
+        const best = Array.from(person.locationCounts.entries()).sort((a, b) => b[1] - a[1])[0][0];
+        const [label, lat, lon] = best.split('__');
+        const projected = projectToSvg(Number(lon), Number(lat), width, height);
+        return {
+          ...person,
+          x: projected.x,
+          y: projected.y,
+          anchorLabel: label,
+        };
+      })
+      .filter((person) => person.isMappable);
+  } else {
+    people = buildForceDirectedPersonPositions(people, filteredEdgeRecords, width, height);
   }
 
   const personById = new Map(people.map((p) => [p.id, p]));
