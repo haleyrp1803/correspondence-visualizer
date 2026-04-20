@@ -2,362 +2,191 @@
 
 ## Purpose
 
-This document is the living architectural reference for the correspondence visualizer app. It explains what the app does, how it is currently structured, where its major risks live, and how future maintainers should think about safe changes.
+This document is the architectural reference for the correspondence visualizer app. It should stay aligned with the committed source of truth in the repository and with the workflow rules in `PROJECT_WORKFLOW_CHARTER.md`.
 
-This guide should be:
-
-- grounded in the current source-of-truth repository or file
-- consulted before and during implementation passes
-- updated only on committed changes
-- kept consistent with `PROJECT_WORKFLOW_CHARTER.md`
+This guide is updated on committed architectural changes. It is not meant to track every temporary experiment or failed checkpoint.
 
 ---
 
-## Project overview
+## Repository shape
 
-The correspondence visualizer is a Vite/React/Tailwind application for exploring correspondence data as an interactive network.
+Current live app surface:
 
-The app currently supports two main analytical views:
+- `src/App.jsx`
+- `src/index.css`
+- `src/main.jsx`
 
-- **Geographic view**: places as nodes, with routes between places shown as edges
-- **Person view**: people as nodes, with correspondence relationships shown as edges
+Extracted support modules now present in `src/`:
 
-It is designed for researcher-oriented exploration rather than generic dashboard reporting. The app combines:
+- `src/mapLayoutHelpers.js`
+- `src/mapStageComponents.jsx`
+- `src/interactionHelpers.js`
+- `src/mapInteractionHandlers.js`
+- `src/timelinePlaybackHelpers.js`
+- `src/timelinePlaybackComponents.jsx`
 
-- historical-data ingestion
+Maintainer/workflow documents at repo root:
+
+- `README.md`
+- `MAINTAINERS_GUIDE.md`
+- `PROJECT_WORKFLOW_CHARTER.md`
+- `CHANGELOG.md`
+
+---
+
+## Architectural summary
+
+The app is a Vite/React/Tailwind correspondence visualizer with two main analytical modes:
+
+- **Geographic view**: places as nodes, routes between places as edges
+- **Person view**: people as nodes, correspondence relationships as edges
+
+The app includes:
+
+- CSV ingestion and normalization
 - graph derivation
-- interactive network rendering
-- map-based exploration
+- interactive SVG-based rendering
 - timeline filtering and playback
-- inspector-driven detail views
-- theming and aesthetic presets
-- export tools for map images and tabular data
+- right-panel inspection workflow
+- theme presets and visual controls
+- export tools for image and tabular outputs
+
+The main maintenance challenge remains structural concentration in `src/App.jsx`, but that concentration has been reduced in bounded passes.
 
 ---
 
-## Current high-level architecture
+## Current module responsibilities
 
-At the repository level, the application shell is lightweight. Most of the actual behavior is concentrated in a single large file:
+### `src/App.jsx`
+Still the main orchestration file. It owns top-level state, derived data wiring, high-level prop passing, and workspace composition.
 
-- `src/main.jsx` — React entry point
-- `src/index.css` — global CSS and Tailwind directives
-- `src/App.jsx` — primary application logic, orchestration, rendering, state, data processing, and most UI
+### `src/mapLayoutHelpers.js`
+Pure map/layout helper logic extracted from `App.jsx`.
 
-### Architectural reality
+### `src/mapStageComponents.jsx`
+Map-stage-adjacent UI/chrome components extracted from `App.jsx`.
 
-The app is already feature-rich, but it is still in a structurally centralized phase. The largest architectural fact a maintainer must understand is this:
+### `src/interactionHelpers.js`
+Pure interaction-resolution helpers extracted from `App.jsx`.
 
-> The app's main maintenance risk is not lack of functionality. It is the concentration of many subsystems inside `src/App.jsx`.
+### `src/mapInteractionHandlers.js`
+Top-level map interaction handlers extracted from `App.jsx`.
 
-That centralization increases the chance that visual changes, behavior changes, and refactors can interfere with each other unless they are handled in very controlled passes.
+### `src/timelinePlaybackHelpers.js`
+Pure timeline/playback derivation helpers extracted from `App.jsx`.
 
----
-
-## What the app does
-
-### 1. Data ingestion
-
-The app can ingest correspondence-related datasets from CSV inputs. The current design supports multiple data roles, including:
-
-- geography/correspondence rows
-- letters metadata rows
-- person metadata rows
-
-The app also includes embedded fallback/sample data so the interface can run before a user uploads their own files.
-
-### 2. Data normalization
-
-Incoming rows are normalized into a consistent internal shape. This includes:
-
-- header normalization
-- defensive text coercion
-- number coercion
-- coordinate validation
-- date parsing for historical records
-- place-key generation and related matching logic
-
-### 3. Graph derivation
-
-Normalized rows are aggregated into graph structures for the active mode. The app derives:
-
-- nodes
-- edges
-- counts and weights
-- scaling information for node radius and edge width
-- view-specific graph structures for place view and person view
-
-### 4. Interactive rendering
-
-The app renders the graph in an interactive SVG-based workspace. Core interactions include:
-
-- hover
-- click selection
-- inspector synchronization
-- zoom and pan
-- reset/recenter behavior
-- visible label logic
-- clustered behavior in crowded regions
-- playback highlighting
-
-### 5. Research inspection
-
-The right-side inspector is a major functional feature, not a decorative add-on. It is used to examine:
-
-- node details
-- edge details
-- cluster summaries
-- linked letters
-- person metadata
-- expanded excerpts or text blocks
-
-### 6. Filtering and timeline analysis
-
-The app supports time-aware exploration, including:
-
-- date-window filtering
-- timeline boundary selection
-- chronological playback
-- playback-specific row filtering
-- view-state updates tied to temporal subsets
-
-### 7. Export
-
-The app can export both graphics and tables, including:
-
-- SVG map export
-- PNG map export
-- nodes CSV export
-- edges/routes CSV export
+### `src/timelinePlaybackComponents.jsx`
+Timeline/playback panel UI boundary extracted from `App.jsx`.
 
 ---
 
-## Internal structure of `src/App.jsx`
+## What was accomplished in Step 1
 
-Although `App.jsx` is large, its contents can be understood in logical layers.
+### Issue 1: map interaction risk reduction
 
-### Layer A: embedded defaults and sample data
+Completed in bounded passes:
 
-The file begins with baseline data and constants that allow the app to render before uploads.
+1. pure map/layout helper extraction
+2. map-stage component boundary cleanup
+3. interaction helper and handler extraction
 
-### Layer B: parsing and normalization
+Committed results:
 
-This section handles text-table parsing, header normalization, coercion, validation, and canonical row shaping.
+- `02dcfc4` — Extract pure map layout helpers from App
+- `181a63e` — Extract map stage components from App
+- `30e5b1b` — Extract interaction resolution helpers from App
+- `145cfc2` — Extract map interaction handlers from App
 
-### Layer C: graph construction and derivation
-
-This section aggregates normalized rows into nodes, edges, and related structures for the current display mode.
-
-### Layer D: export and utility helpers
-
-This section handles CSV serialization, SVG serialization, rasterization support, file reading, and download preparation.
-
-### Layer E: theme system and class helpers
-
-This section defines theme defaults, CSS-variable-driven design tokens, and shared class helpers used throughout the interface.
-
-### Layer F: reusable UI components
-
-This includes cards, controls, sliders, upload widgets, detail rows, and other building blocks.
-
-### Layer G: map geometry, hit testing, and selection resolution
-
-This includes projection support, clustered-node logic, visible-label rules, path parsing, hover/click targeting, and selection-model building.
-
-### Layer H: timeline and export-row builders
-
-This includes helpers that derive time slices, playback sequences, export rows, and hover summaries.
-
-### Layer I: map renderer
-
-The SVG map component handles the most interaction-heavy logic in the app:
-
-- zooming
-- panning
-- hover
-- click selection
-- control overlays
-- animation and reset behavior
-
-### Layer J: sidebar and inspector panels
-
-This layer renders the visible workspace chrome: panels, titles, legends, exports, appearance controls, and inspector states.
-
-### Layer K: top-level app orchestration
-
-The exported app component owns the overall state graph and wires together:
-
-- uploaded files
-- normalized datasets
-- derived graph data
-- active view mode
-- current selection
-- timeline state
-- playback state
-- theme state
-- export state
-- hover state
-- panel visibility state
+### Architectural effect
+Map-related responsibilities are now less concentrated in `App.jsx`. The subsystem is still interaction-heavy and fragile, but the code is clearer and easier to navigate than before Step 1.
 
 ---
 
-## Design and aesthetic system
+## What was accomplished in Step 2
 
-The design language is one of the app's distinguishing strengths.
+### Issue 2: timeline/playback risk reduction
 
-### Core visual character
+Completed through:
 
-The default interface is not generic dashboard styling. It combines:
+1. pure timeline/playback helper extraction
+2. timeline/playback panel UI boundary cleanup
 
-- archival / museum-like visual language
-- parchment-toned map surfaces
-- muted historical-map color relationships
-- serif typography in key display roles
-- softer naturalistic tones for routes, labels, and surfaces
-- floating cards and layered panel surfaces
+Committed results:
 
-This produces a research-oriented experience with a more scholarly and exhibition-like character.
+- `b2dbe35` — Extract timeline playback helpers from App
+- `383ecc0` — Extract timeline playback panel from App
 
-### Theme architecture
+### Deferred substep
+**Step 2C** was attempted and rolled back after repeated instability at the render/handler boundary. It is intentionally deferred for later work.
 
-The theme system is driven by centralized defaults mapped into CSS custom properties. Components then consume those variables through class names and shared helpers.
-
-This means:
-
-- the design is more systematic than it may first appear
-- visual tuning can often be done centrally
-- theme changes should not be confused with behavior changes
-
-### Preset logic
-
-The app supports more than one aesthetic preset, including a more modern mode in addition to the more archival default mode.
-
-Maintainers should treat preset work as visual work, not structural work, unless the task specifically involves reorganizing the theme system.
+### Architectural effect
+Timeline/playback logic is now partly decomposed, but the remaining render/handler boundary is fragile and should not be casually reworked.
 
 ---
 
-## Principal strengths
+## Deferred timeline work
 
-### 1. The app is already a real analytical tool
+These items should be treated as explicit future goals, not forgotten ideas:
 
-It is not just a mockup. It already integrates ingestion, transformation, rendering, inspection, filtering, and export.
+1. **Preserve user map position during timeline interaction**
+   - Timeline actions such as play/pause should not unexpectedly reset the current zoom/pan view.
+   - Example failure mode already observed: when the user moves around the map during playback and then pauses, the map snaps back to an earlier/original view.
 
-### 2. The theme layer is conceptually strong
+2. **Constrain timeline date selection**
+   - The end date should never be selectable earlier than the currently selected start date.
 
-The visual system is deliberate and gives the project a distinctive identity.
-
-### 3. The inspector model is useful for scholarship
-
-The app is clearly oriented toward research exploration rather than generic summary metrics.
-
-### 4. The interaction model is sophisticated for a prototype
-
-Zoom, pan, hover, selection, playback, and export all coexist in the same application.
+3. **Revisit Step 2C later, but only narrowly**
+   - Return only when there is a concrete bug, feature need, or a much narrower safe target than the failed attempts.
+   - Do not resume Step 2C as casual cleanup.
 
 ---
 
-## Principal maintenance risks
+## Current fragile zones
 
-### 1. Structural centralization in `src/App.jsx`
+These areas should still be treated as high-risk:
 
-This is the largest current risk. The file currently mixes:
+- map viewport centering/reset behavior
+- dense map hover/click interaction
+- selection persistence across filters
+- playback/timeline state coupling
+- export rendering/state coupling
+- broad orchestration work in `src/App.jsx`
 
-- data logic
-- interaction logic
-- render logic
-- panel orchestration
-- theme consumption
-- export behavior
-
-This does not make the app bad. It makes careless edits dangerous.
-
-### 2. Fragile interaction zones
-
-The most sensitive regions of the app are the ones where multiple systems meet. In practice, these are the zones most likely to break during changes:
-
-- viewport centering and reset behavior
-- dense-map hover and click interaction
-- selection persistence across filtering
-- inspector-open interactions
-- playback and timeline state
-- export rendering
-
-These should be treated as fragile zones and changed only in bounded passes.
-
-### 3. Mixed concerns during editing
-
-A single request can easily tempt a maintainer to modify styling, behavior, and structure at once. That is precisely what the workflow charter is designed to prevent.
+Additional note:
+- the timeline/playback render/handler boundary is now a known fragile zone because Step 2C failed twice and was rolled back.
 
 ---
 
-## Safe maintenance guidance
+## Recommended next subsystem order
 
-### What to prefer
+The next safest architectural target is:
 
-- bounded local edits
-- one change type per pass
+1. **Issue 3: export subsystem separation**
+2. **Issue 4: broader `App.jsx` bottleneck reduction**
+
+Timeline/playback Step 2C should come later, and only with a concrete purpose and narrower scope.
+
+---
+
+## Workflow reminder
+
+Use this guide together with `PROJECT_WORKFLOW_CHARTER.md`.
+
+In practice, that means:
+
+- one source of truth per pass
+- bounded passes
 - explicit acceptance tests
-- extraction of pure helpers when a safe structural pass is warranted
-- source-of-truth discipline
-- documented commit/checkpoint decisions
-
-### What to avoid
-
-- casual multi-subsystem rewrites
-- mixing visual redesign with behavioral fixes
-- using GitHub, local files, canvas, and temp copies as co-equal during an editing pass
-- initiating cleanup passes without a clearly bounded scope
-- changing fragile zones without explicit verification criteria
+- checkpoint before high-risk work
+- stop structural cleanup when a boundary proves fragile
+- document committed architectural changes here
 
 ---
 
-## Modularization roadmap
+## Current stable checkpoints
 
-This roadmap exists to guide future decomposition of `App.jsx`. It should inform planning, but it should **not** be executed casually or opportunistically.
+- `checkpoint-pre-step-1c` → `181a63e`
+- `checkpoint-between-step-1-and-step-2` → `dad15a4`
+- `checkpoint-pre-step-2c` → `383ecc0`
 
-Preferred order:
-
-1. pure data helpers
-2. export helpers
-3. theme/constants
-4. small reusable UI pieces
-5. map interaction helpers
-6. left/right panel components
-7. app orchestration last
-
-### Why this order matters
-
-This order reduces risk because it extracts low-coupling logic first and leaves the most stateful orchestration for last.
-
----
-
-## Relationship to the workflow charter
-
-`MAINTAINERS_GUIDE.md` and `PROJECT_WORKFLOW_CHARTER.md` serve different purposes.
-
-- **Maintainer's Guide** = what the app is, how it works, where the risk is
-- **Project Workflow Charter** = how we make changes safely
-
-The two documents should remain consistent.
-
----
-
-## Update rule
-
-Update this guide when a **committed** change materially affects:
-
-- architecture
-- file structure
-- subsystem boundaries
-- major feature set
-- known fragile zones
-- modularization priorities
-
-Do not rewrite it for every temporary experiment or checkpoint.
-
----
-
-## Current maintainer summary
-
-If you remember only one thing, remember this:
-
-> This is a feature-rich correspondence analysis app whose main engineering challenge is safe evolution from a centralized `App.jsx` prototype into a more modular codebase without breaking interaction-heavy researcher workflows.
+These are restore points, not substitutes for the current `main` branch state.

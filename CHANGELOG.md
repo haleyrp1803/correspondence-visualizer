@@ -1,114 +1,45 @@
 # Changelog
 
-This is a lightweight project change log for the Correspondence Visualizer app.
+## `c3f856f` — Add maintainer guide and project workflow charter
+- Added `MAINTAINERS_GUIDE.md`
+- Added `PROJECT_WORKFLOW_CHARTER.md`
 
-It is meant to track committed implementation passes at a practical level:
+## `7742149` — Update README to reflect current app and workflow
+- Replaced the minimal README with a fuller repository-facing overview
+- Aligned top-level project description with the current app and workflow docs
 
-- commit hash
-- one-sentence summary
-- files changed
-- whether the Maintainer's Guide should be updated
-- whether later cleanup is warranted
+## `02dcfc4` — Extract pure map layout helpers from App
+- Added `src/mapLayoutHelpers.js`
+- Moved pure map/layout helper logic out of `src/App.jsx`
 
----
+## `181a63e` — Extract map stage components from App
+- Added `src/mapStageComponents.jsx`
+- Moved map-stage-adjacent UI/chrome components out of `src/App.jsx`
 
-## 2026-04-17
+## `30e5b1b` — Extract interaction resolution helpers from App
+- Added `src/interactionHelpers.js`
+- Moved pure interaction-resolution helpers out of `src/App.jsx`
 
-### `c3f856f` — Add maintainer guide and project workflow charter
+## `145cfc2` — Extract map interaction handlers from App
+- Added `src/mapInteractionHandlers.js`
+- Moved top-level map interaction handler wiring out of `src/App.jsx`
 
-**Summary**
-Added `MAINTAINERS_GUIDE.md` and `PROJECT_WORKFLOW_CHARTER.md` at repo root.
+## `dad15a4` — Update maintainer guide and add changelog
+- Added `CHANGELOG.md`
+- Refreshed maintainer-facing documentation after Step 1 work
 
-**Files changed**
-- `MAINTAINERS_GUIDE.md`
-- `PROJECT_WORKFLOW_CHARTER.md`
+## `b2dbe35` — Extract timeline playback helpers from App
+- Added `src/timelinePlaybackHelpers.js`
+- Moved pure timeline/playback derivation helpers out of `src/App.jsx`
 
-**Maintainer's Guide update needed?**
-- included in this commit
+## `383ecc0` — Extract timeline playback panel from App
+- Added `src/timelinePlaybackComponents.jsx`
+- Moved the timeline/playback panel UI boundary out of `src/App.jsx`
 
-**Later cleanup warranted?**
-- no immediate cleanup; this established the project documentation baseline
+## Deferred work note
+- Step 2C (deeper timeline/playback render/handler boundary cleanup) was attempted and rolled back.
+- It remains deferred for later, purpose-driven work rather than routine structural cleanup.
 
----
-
-### `7742149` — Update README to reflect current app and workflow
-
-**Summary**
-Replaced the minimal README with a fuller project overview aligned to the current app and workflow docs.
-
-**Files changed**
-- `README.md`
-
-**Maintainer's Guide update needed?**
-- no
-
-**Later cleanup warranted?**
-- no immediate cleanup
-
----
-
-### `02dcfc4` — Extract pure map layout helpers from App
-
-**Summary**
-Extracted a first bounded cluster of pure map/layout helpers out of `src/App.jsx`.
-
-**Files changed**
-- `src/App.jsx`
-- `src/mapLayoutHelpers.js`
-
-**Maintainer's Guide update needed?**
-- yes
-
-**Later cleanup warranted?**
-- yes; proceed to map-stage boundary cleanup
-
----
-
-### `181a63e` — Extract map stage components from App
-
-**Summary**
-Extracted map-stage-adjacent UI/chrome components out of `src/App.jsx`.
-
-**Files changed**
-- `src/App.jsx`
-- `src/mapStageComponents.jsx`
-
-**Maintainer's Guide update needed?**
-- yes
-
-**Later cleanup warranted?**
-- yes; continue Step 1C interaction-boundary work
-
----
-
-### `30e5b1b` — Extract interaction resolution helpers from App
-
-**Summary**
-Extracted pure interaction-resolution helpers out of `src/App.jsx`.
-
-**Files changed**
-- `src/App.jsx`
-- `src/interactionHelpers.js`
-
-**Maintainer's Guide update needed?**
-- yes
-
-**Later cleanup warranted?**
-- yes; continue top-level interaction-handler extraction
-
----
-
-### `145cfc2` — Extract map interaction handlers from App
-
-**Summary**
-Extracted top-level map interaction handlers out of `src/App.jsx`.
-
-**Files changed**
-- `src/App.jsx`
-- `src/mapInteractionHandlers.js`
-
-**Maintainer's Guide update needed?**
-- yes
-
-**Later cleanup warranted?**
-- yes; Step 1 is complete for this phase, next priorities are timeline/playback and export
+## Explicit future timeline goals
+- Preserve the user's current map zoom/pan position when interacting with timeline playback controls.
+- Prevent selection of an end date earlier than the selected start date.
