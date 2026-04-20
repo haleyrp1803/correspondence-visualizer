@@ -2,9 +2,7 @@
 
 ## 1. Project Title
 
-**Correspondence Visualizer** is a research-oriented interactive web app for exploring historical correspondence networks as either **geographic routes** or **person-to-person relationship graphs**.
-
-It is designed for projects where letters, correspondents, places, and dates need to be explored together in a visual environment rather than only in spreadsheets or static maps.
+**Correspondence Visualizer** is a research-oriented interactive web app for exploring historical correspondence networks as either **geographic routes** or **person-to-person relationship graphs**. It is designed for projects where letters, correspondents, places, and dates need to be explored together in a visual environment rather than only in spreadsheets or static maps.
 
 ---
 
@@ -26,6 +24,9 @@ The current state of the project includes:
 - theme preset support and map-stage overlays
 - export tooling for both images and tabular data
 - several successful bounded refactors that extracted helper modules from `src/App.jsx`
+- a true pre-settled **force-directed person-network layout** backed by `d3-force`
+- a **geographic-anchor person layout** that still places correspondents by mappable location
+- a force-directed person view that now renders on a **clean theme-driven background** rather than over the geographic map
 
 The codebase is functional, but it is still under active maintenance. The largest remaining structural issue is that significant orchestration logic still lives in `src/App.jsx`.
 
@@ -34,15 +35,20 @@ The codebase is functional, but it is still under active maintenance. The larges
 ## 4. Key Features
 
 ### Visualization modes
+
 - **Geographic view** for mapping correspondence routes between places
 - **Person view** for exploring correspondence as a network of people rather than locations
+  - **Force-directed** person layout using a pre-settled `d3-force` simulation
+  - **Geographic anchor** person layout using each person’s most-used mappable location
 
 ### Data interaction
+
 - CSV-based data ingestion
 - fallback embedded sample geography data so the app can render before user uploads
 - derived node, edge, cluster, and timeline structures based on uploaded or embedded data
 
 ### Research workflow tools
+
 - hover and click inspection
 - right-side inspector for selected nodes, edges, clusters, and linked records
 - timeline range filtering
@@ -50,10 +56,13 @@ The codebase is functional, but it is still under active maintenance. The larges
 - map legend, title bar, and floating control overlays
 
 ### Visual customization
+
 - theme token system with presets
 - map and interface chroming controlled primarily through theme values rather than a large global stylesheet
+- mode-sensitive stage rendering so the **force-directed person view** uses a clean themed background while geographic modes retain the map backdrop
 
 ### Export tools
+
 - export current visualization state as **SVG**
 - render SVG export to **PNG**
 - export derived **nodes CSV**
@@ -66,41 +75,49 @@ The codebase is functional, but it is still under active maintenance. The larges
 The following screenshots reflect the current live app state.
 
 ### Geographic view overview
+
 ![Geographic view overview](docs/images/geographic-view-overview.png)
 
 Full workspace view of the geographic mode, showing the map stage, title bar, legend, and map controls.
 
 ### Person view overview
+
 ![Person view overview](docs/images/person-view-overview.png)
 
 Person-network mode with weighted relationship filtering active in the control panel.
 
 ### Timeline and playback controls
+
 ![Timeline and playback controls](docs/images/timeline-playback.png)
 
 Timeline window selection and playback controls in use, including the animated letter date and playback speed controls.
 
 ### Inspector detail view
+
 ![Inspector detail view](docs/images/person-network-inspector.png)
 
 Example of the right-side inspector populated from a selected relationship in person-network mode.
 
 ### Geographic inspector example
+
 ![Geographic inspector example](docs/images/geographic-inspector.png)
 
 Example of the inspector populated from a selected place in geographic mode.
 
 ### Control panel overview
+
 ![Control panel overview](docs/images/control-panel-overview.png)
 
 Expanded control panel showing data inputs, display and filtering sections, and workspace layout.
 
 ### Additional control panel state
+
 ![Additional control panel state](docs/images/control-panel-secondary.png)
 
 Alternative control panel state showing data-input cards and collapsed analytical sections.
 
 ### Modern theme examples
+
 ![Modern theme example 1](docs/images/modern-theme-1.png)
 ![Modern theme example 2](docs/images/modern-theme-2.png)
 
@@ -116,6 +133,7 @@ This project currently uses:
 - **Vite** for development/build tooling
 - **Tailwind CSS** for utility-driven styling
 - **d3-geo** for projection and map geometry work
+- **d3-force** for pre-settled force-directed person-network layout
 - **topojson-client** for geographic feature handling
 - **world-atlas** for world basemap data
 
@@ -137,6 +155,7 @@ src/
   mapInteractionHandlers.js
   mapLayoutHelpers.js
   mapStageComponents.jsx
+  personForceLayoutHelpers.js
   timelinePlaybackComponents.jsx
   timelinePlaybackHelpers.js
 ```
@@ -148,13 +167,17 @@ Bootstraps the React application and mounts `<App />`.
 
 #### `src/index.css`
 Contains a minimal global layer:
+
 - Tailwind directives
 - full-height layout rules for `html`, `body`, and `#root`
 - default body font stack
 - inherited font settings for form controls
 
 #### `src/App.jsx`
-The main orchestration layer. This file currently handles most of the following:
+The main orchestration layer.
+
+This file currently handles most of the following:
+
 - top-level application state
 - data ingestion and normalization
 - fallback embedded data
@@ -165,6 +188,7 @@ The main orchestration layer. This file currently handles most of the following:
 
 #### `src/mapLayoutHelpers.js`
 Pure helper logic for:
+
 - default viewport construction
 - node clustering
 - label visibility filtering
@@ -172,6 +196,7 @@ Pure helper logic for:
 
 #### `src/interactionHelpers.js`
 Selection and inspection logic, including:
+
 - nearby candidate generation
 - selection resolution
 - node/letter enrichment for inspector workflows
@@ -181,6 +206,7 @@ Centralized map interaction handler factory for hover/click/selection behavior.
 
 #### `src/timelinePlaybackHelpers.js`
 Pure timeline/playback derivation functions, including:
+
 - timeline month generation
 - playback row generation
 - timeline window filtering
@@ -192,6 +218,7 @@ Timeline/playback UI component(s), currently including the bounded timeline pane
 
 #### `src/mapStageComponents.jsx`
 Presentation-layer map chrome and overlays, including:
+
 - title bar
 - legend
 - map controls overlay
@@ -199,12 +226,21 @@ Presentation-layer map chrome and overlays, including:
 
 #### `src/exportHelpers.js`
 Export subsystem utilities for:
+
 - nodes CSV generation
 - edges/routes CSV generation
 - SVG serialization
 - PNG rendering from SVG
 - browser download URL creation/revocation
 - filename normalization
+
+#### `src/personForceLayoutHelpers.js`
+Pure helper logic for the force-directed person-network layout, including:
+
+- stable initial seeding for person nodes
+- pre-settled `d3-force` simulation setup
+- link, charge, collision, and centering forces
+- returning final settled coordinates to `App.jsx` rather than running a live simulation in React
 
 ---
 
@@ -253,7 +289,9 @@ https://github.com/haleyrp1803/correspondence-visualizer
 
 ## 9. Data Inputs
 
-This is a data-driven visualization app. The app is intended to work with correspondence-related tabular data that includes some combination of:
+This is a data-driven visualization app.
+
+The app is intended to work with correspondence-related tabular data that includes some combination of:
 
 - dates
 - source person
@@ -279,7 +317,9 @@ The exact dataset structure may vary by workflow, but the current app logic is b
 
 ### Recommendation
 
-If you are extending this repository, document the exact expected CSV schemas here as the data contracts stabilize. At minimum, future versions of this README should include:
+If you are extending this repository, document the exact expected CSV schemas here as the data contracts stabilize.
+
+At minimum, future versions of this README should include:
 
 - required files
 - required columns
@@ -314,9 +354,11 @@ This workflow is intended to support both exploratory research and production of
 This project is actively maintained, and some areas should be treated cautiously.
 
 ### Current structural limitation
+
 - `src/App.jsx` still contains a large amount of orchestration logic and remains the main concentration point in the codebase.
 
 ### Known fragile zones
+
 The maintainer documentation identifies the following areas as especially sensitive:
 
 - viewport centering/reset behavior
@@ -327,6 +369,7 @@ The maintainer documentation identifies the following areas as especially sensit
 - broad orchestration work inside `src/App.jsx`
 
 ### Practical implication
+
 If you are making changes, avoid broad mixed-purpose edits. Prefer bounded passes that touch one subsystem at a time.
 
 ---
@@ -337,20 +380,17 @@ This repository includes internal maintenance and workflow documents that should
 
 - **`MAINTAINERS_GUIDE.md`**  
   Architectural overview, extracted-module history, fragile zones, and recommended future refactor priorities.
-
 - **`PROJECT_WORKFLOW_CHARTER.md`**  
   Working rules for bounded passes, fragile-zone preflights, source-of-truth discipline, and delivery expectations.
-
 - **`CHANGELOG.md`**  
   Record of completed implementation/refactor milestones.
-
 - **`CONTROL_PANEL_DEPENDENCY_MAP.md`**  
   Dependency and render-path documentation for the left control panel.
-
 - **`VIEWPORT_TIMELINE_AUDIT.md`**  
   Notes specific to viewport/timeline coupling and deferred cleanup goals.
 
 ### Maintainer recommendation
+
 Before structural edits, read at least:
 
 1. `MAINTAINERS_GUIDE.md`
@@ -375,15 +415,17 @@ This list is descriptive rather than exhaustive; consult the maintainer docs for
 ## 14. License / Author / Acknowledgments
 
 ### Author / Maintainer
+
 Repository owner: **Haley R. P.** (per current GitHub repository ownership)
 
 ### License
-Add the project’s chosen license here if/when one is finalized.
 
-If this project is intended primarily as a research prototype rather than a general-purpose public package, that should be stated explicitly in this section.
+Add the project’s chosen license here if/when one is finalized. If this project is intended primarily as a research prototype rather than a general-purpose public package, that should be stated explicitly in this section.
 
 ### Acknowledgments
+
 This project sits at the intersection of:
+
 - historical correspondence research
 - network analysis
 - geographic visualization

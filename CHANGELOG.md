@@ -1,5 +1,24 @@
 # Changelog
 
+## `ffb5a30` — Hide map backdrop in force-directed person view
+- Removed the geographic map backdrop from the force-directed person view
+- Kept the themed stage background visible in force mode
+- Left geographic routes and geographic-anchor person mode unchanged
+
+## `225c7e4` — Wire person force layout into App graph builder
+- Wired the new person force-layout helper into `src/App.jsx`
+- Replaced the old radial placeholder branch in the person force mode
+- Kept the geographic-anchor person layout separate
+
+## `3480858` — Add pre-settled d3-force person network layout
+- Added `src/personForceLayoutHelpers.js`
+- Introduced a bounded pre-settled `d3-force` layout helper for person-network force mode
+- Kept the simulation as a layout step rather than a live continuously ticking scene
+
+## `81a75d0` — Add d3-force dependency for person-network layout work
+- Added `d3-force` to project dependencies
+- Verified the project still installed and built cleanly before runtime wiring
+
 ## `c3f856f` — Add maintainer guide and project workflow charter
 - Added `MAINTAINERS_GUIDE.md`
 - Added `PROJECT_WORKFLOW_CHARTER.md`
@@ -98,3 +117,7 @@
 ## Completed export behavior goals
 - Fix PNG export color rendering so raster output preserves the intended map colors.
 - Reflect the visible date subset in export metadata rather than only the broader selected date window.
+
+## Completed person-network behavior goals
+- Replace the old radial placeholder in person force mode with a true pre-settled `d3-force` layout.
+- Render force-directed person mode on a clean theme-driven background rather than over the geographic map.

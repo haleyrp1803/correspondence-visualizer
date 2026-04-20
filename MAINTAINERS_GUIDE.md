@@ -2,9 +2,7 @@
 
 ## Purpose
 
-This document is the architectural reference for the correspondence visualizer app. It should stay aligned with the committed source of truth in the repository and with the workflow rules in `PROJECT_WORKFLOW_CHARTER.md`.
-
-This guide is updated on committed architectural changes. It is not meant to track every temporary experiment or failed checkpoint.
+This document is the architectural reference for the correspondence visualizer app. It should stay aligned with the committed source of truth in the repository and with the workflow rules in `PROJECT_WORKFLOW_CHARTER.md`. This guide is updated on committed architectural changes. It is not meant to track every temporary experiment or failed checkpoint.
 
 ---
 
@@ -25,6 +23,7 @@ Extracted support modules now present in `src/`:
 - `src/timelinePlaybackHelpers.js`
 - `src/timelinePlaybackComponents.jsx`
 - `src/exportHelpers.js`
+- `src/personForceLayoutHelpers.js`
 
 Maintainer/workflow documents at repo root:
 
@@ -56,33 +55,65 @@ The app includes:
 
 The main maintenance challenge remains structural concentration in `src/App.jsx`, but that concentration has been reduced in bounded passes.
 
+The current person view now supports two distinct layout strategies:
+
+- **Geographic anchor**: person nodes are placed by each person’s most-used mappable location
+- **Force-directed**: person nodes are placed by a pre-settled `d3-force` simulation
+
+The force-directed person view is intentionally rendered on a **clean theme-driven background** rather than on top of the geographic map backdrop. Geographic views and geographic-anchor person mode still retain the map backdrop.
+
 ---
 
 ## Current module responsibilities
 
 ### `src/App.jsx`
+
 Still the main orchestration file. It owns top-level state, derived data wiring, high-level prop passing, workspace composition, and some export metadata assembly.
 
 ### `src/mapLayoutHelpers.js`
+
 Pure map/layout helper logic extracted from `App.jsx`.
 
 ### `src/mapStageComponents.jsx`
+
 Map-stage-adjacent UI/chrome components extracted from `App.jsx`.
 
 ### `src/interactionHelpers.js`
+
 Pure interaction-resolution helpers extracted from `App.jsx`.
 
 ### `src/mapInteractionHandlers.js`
+
 Top-level map interaction handlers extracted from `App.jsx`.
 
 ### `src/timelinePlaybackHelpers.js`
+
 Pure timeline/playback derivation helpers extracted from `App.jsx`.
 
 ### `src/timelinePlaybackComponents.jsx`
-Timeline/playback panel UI boundary extracted from `App.jsx`. This file now also includes the behavior-level end-date constraint fix.
+
+Timeline/playback panel UI boundary extracted from `App.jsx`.
+
+This file now also includes the behavior-level end-date constraint fix.
 
 ### `src/exportHelpers.js`
-Pure export utilities and export row-builder helpers extracted from `App.jsx`. This file now also handles CSS-variable inlining for SVG-to-PNG export so rasterized PNG output preserves the intended map colors.
+
+Pure export utilities and export row-builder helpers extracted from `App.jsx`.
+
+This file now also handles CSS-variable inlining for SVG-to-PNG export so rasterized PNG output preserves the intended map colors.
+
+### `src/personForceLayoutHelpers.js`
+
+Pure helper logic for the pre-settled force-directed person-network layout.
+
+This module is responsible for:
+
+- stable initial node seeding
+- stopped/manual-tick `d3-force` simulation setup
+- link, charge, collision, and centering forces
+- returning final settled coordinates to `App.jsx`
+
+This helper is intentionally used as a **layout engine**, not as a live continuously ticking React scene.
 
 ---
 
@@ -104,6 +135,7 @@ Committed results:
 - `145cfc2` — Extract map interaction handlers from App
 
 ### Architectural effect
+
 Map-related responsibilities are now less concentrated in `App.jsx`. The subsystem is still interaction-heavy and fragile, but the code is clearer and easier to navigate than before Step 1.
 
 ---
@@ -123,16 +155,23 @@ Committed structural results:
 - `383ecc0` — Extract timeline playback panel from App
 
 ### Deferred structural substep
-**Step 2C** was attempted and rolled back after repeated instability at the render/handler boundary. It remains intentionally deferred for later, narrower, purpose-driven work.
+
+**Step 2C** was attempted and rolled back after repeated instability at the render/handler boundary.
+
+It remains intentionally deferred for later, narrower, purpose-driven work.
 
 ### Completed behavior follow-ups
+
 Two important timeline behaviors were later completed successfully **without** crossing the fragile panel-extraction boundary:
 
 - `6c41fce` — Constrain timeline end date to selected start date
 - `1b2655e` — Preserve viewport during timeline playback interactions
 
 ### Architectural effect
-Timeline/playback logic is now partly decomposed, but the remaining render/handler boundary is fragile and should not be casually reworked. However, purpose-driven behavior changes inside the existing working boundary have proven safe.
+
+Timeline/playback logic is now partly decomposed, but the remaining render/handler boundary is fragile and should not be casually reworked.
+
+However, purpose-driven behavior changes inside the existing working boundary have proven safe.
 
 ---
 
@@ -149,25 +188,67 @@ Committed structural result:
 - `5bbdad8` — Extract export helpers from App
 
 ### Deferred structural substep
-**Step 3B** was attempted and rolled back after triggering the same control-panel white-screen failure pattern seen in other fragile panel extractions. It is intentionally deferred for later work.
+
+**Step 3B** was attempted and rolled back after triggering the same control-panel white-screen failure pattern seen in other fragile panel extractions.
+
+It is intentionally deferred for later work.
 
 ### Completed behavior follow-ups
+
 Two important export behaviors were later completed successfully **without** crossing the fragile panel-extraction boundary:
 
 - `c9f010e` — Fix PNG export color rendering
 - `5575007` — Reflect visible date range in export metadata
 
 ### Architectural effect
-Export-related utility logic and export row builders are now less concentrated in `App.jsx`, while runtime export handlers and export panel rendering remain in the main orchestration file. The PNG rasterization pipeline now renders the intended map colors, and export metadata better reflects the map state actually visible at export time.
+
+Export-related utility logic and export row builders are now less concentrated in `App.jsx`, while runtime export handlers and export panel rendering remain in the main orchestration file.
+
+The PNG rasterization pipeline now renders the intended map colors, and export metadata better reflects the map state actually visible at export time.
+
+---
+
+## What was accomplished in Step 4 so far
+
+### Issue 4: person-network layout correction
+
+Completed through bounded behavior and visual passes:
+
+1. dependency addition for `d3-force`
+2. pure force-layout helper extraction
+3. wiring the force-layout helper into the person graph builder
+4. suppressing the geographic map backdrop in force-directed person mode
+
+Committed results:
+
+- `81a75d0` — Add `d3-force` dependency for person-network layout work
+- `3480858` — Add pre-settled `d3-force` person network layout
+- `225c7e4` — Wire person force layout into App graph builder
+- `ffb5a30` — Hide map backdrop in force-directed person view
+
+### Architectural effect
+
+The person view now has a real distinction between its two layout modes:
+
+- **Geographic anchor** remains geographically positioned and map-backed
+- **Force-directed** is now a true network layout backed by a pre-settled `d3-force` simulation and rendered on a clean theme-driven stage
+
+This was implemented without turning the person network into a live ticking simulation, which keeps the result more stable for selection, filtering, export, and general React integration.
+
+### Maintainer caution
+
+Future work on the person force layout should preserve the **pre-settled** approach unless there is a deliberate architectural decision to accept the risks of a live simulation model.
 
 ---
 
 ## Maintainer-facing audit artifacts
 
 ### `CONTROL_PANEL_DEPENDENCY_MAP.md`
+
 Maps the control-panel render path, dependency surface, fragility patterns, and safer future strategy. This should be consulted before any future panel-boundary refactor.
 
 ### `VIEWPORT_TIMELINE_AUDIT.md`
+
 Documents the likely cause of the timeline-triggered viewport reset behavior and the reasoning behind the eventual narrow fix that preserved the current map position during playback interaction.
 
 ---
@@ -197,6 +278,18 @@ These were previously deferred and are now implemented:
 2. **Make export metadata reflect the visible map state**
    - Exported PNG/SVG header metadata now reflects the effective visible date subset at export time rather than only the broader selected control window.
    - This is especially important when exporting during paused or partial playback progression.
+
+---
+
+## Completed person-network behavior goals
+
+1. **Replace the fake force layout**
+   - The old radial placeholder for person force mode has been replaced by a true pre-settled `d3-force` layout.
+   - The simulation is run as a bounded layout step rather than a live continuously ticking scene.
+
+2. **Separate force mode from the geographic backdrop**
+   - Force-directed person view now renders on a clean theme-driven background.
+   - Geographic routes and geographic-anchor person mode still retain the map backdrop.
 
 ---
 
@@ -234,6 +327,7 @@ Additional notes:
 - the timeline/playback render/handler boundary is a known fragile zone because Step 2C failed twice and was rolled back
 - export panel extraction is a known fragile zone because Step 3B triggered the same white-screen panel failure pattern and was rolled back
 - purpose-driven behavior changes inside the existing working control-panel boundary have been safer than structural extraction across that boundary
+- person force layout is now safer than before, but future live-simulation experimentation would raise new stability risks
 
 ---
 
