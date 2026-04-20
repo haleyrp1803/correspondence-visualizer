@@ -72,15 +72,29 @@
 - Narrowed the viewport reset trigger so ordinary playback progression no longer recenters the map unexpectedly
 - Kept the fix inside the existing working panel boundary without structural panel refactoring
 
+## `248833a` — Document completed timeline behavior fixes
+- Updated maintainer-facing docs to record the completed timeline behavior fixes
+- Preserved the distinction between completed behavior work and deferred Step 2C structural cleanup
+
+## `c9f010e` — Fix PNG export color rendering
+- Updated the export rasterization pipeline so PNG output preserves the intended map colors
+- Inlined computed CSS-variable values into the serialized export SVG before rasterization
+
+## `5575007` — Reflect visible date range in export metadata
+- Updated export metadata so the header reflects the effective visible date subset at export time
+- Improved export accuracy for paused or partial playback states
+
 ## Deferred work note: timeline/playback
 - Step 2C (deeper timeline/playback render/handler boundary cleanup) was attempted and rolled back.
 - It remains deferred for later, purpose-driven work rather than routine structural cleanup.
 
 ## Deferred work note: export
-- PNG download currently renders the map as a blacked-out image.
-- Investigate the SVG-to-raster export pipeline later, especially SVG serialization, background handling, and canvas/image rendering behavior.
 - Step 3B (export panel extraction) was attempted and rolled back after triggering the same control-panel white-screen failure pattern seen in other fragile panel-boundary changes.
 
 ## Completed timeline behavior goals
 - Preserve the user's current map zoom/pan position during timeline playback interactions.
 - Prevent selection of an end date earlier than the selected start date.
+
+## Completed export behavior goals
+- Fix PNG export color rendering so raster output preserves the intended map colors.
+- Reflect the visible date subset in export metadata rather than only the broader selected date window.

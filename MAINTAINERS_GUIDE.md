@@ -61,7 +61,7 @@ The main maintenance challenge remains structural concentration in `src/App.jsx`
 ## Current module responsibilities
 
 ### `src/App.jsx`
-Still the main orchestration file. It owns top-level state, derived data wiring, high-level prop passing, and workspace composition.
+Still the main orchestration file. It owns top-level state, derived data wiring, high-level prop passing, workspace composition, and some export metadata assembly.
 
 ### `src/mapLayoutHelpers.js`
 Pure map/layout helper logic extracted from `App.jsx`.
@@ -82,7 +82,7 @@ Pure timeline/playback derivation helpers extracted from `App.jsx`.
 Timeline/playback panel UI boundary extracted from `App.jsx`. This file now also includes the behavior-level end-date constraint fix.
 
 ### `src/exportHelpers.js`
-Pure export utilities and export row-builder helpers extracted from `App.jsx`.
+Pure export utilities and export row-builder helpers extracted from `App.jsx`. This file now also handles CSS-variable inlining for SVG-to-PNG export so rasterized PNG output preserves the intended map colors.
 
 ---
 
@@ -140,19 +140,25 @@ Timeline/playback logic is now partly decomposed, but the remaining render/handl
 
 ### Issue 3: export subsystem separation
 
-Completed through:
+Completed structurally through:
 
 1. pure export helper extraction
 
-Committed result:
+Committed structural result:
 
 - `5bbdad8` — Extract export helpers from App
 
 ### Deferred structural substep
 **Step 3B** was attempted and rolled back after triggering the same control-panel white-screen failure pattern seen in other fragile panel extractions. It is intentionally deferred for later work.
 
+### Completed behavior follow-ups
+Two important export behaviors were later completed successfully **without** crossing the fragile panel-extraction boundary:
+
+- `c9f010e` — Fix PNG export color rendering
+- `5575007` — Reflect visible date range in export metadata
+
 ### Architectural effect
-Export-related utility logic and export row builders are now less concentrated in `App.jsx`, while runtime export handlers and export panel rendering remain in the main orchestration file.
+Export-related utility logic and export row builders are now less concentrated in `App.jsx`, while runtime export handlers and export panel rendering remain in the main orchestration file. The PNG rasterization pipeline now renders the intended map colors, and export metadata better reflects the map state actually visible at export time.
 
 ---
 
@@ -180,6 +186,20 @@ These were previously deferred and are now implemented:
 
 ---
 
+## Completed export behavior goals
+
+These were previously deferred and are now implemented:
+
+1. **Fix black PNG export rendering**
+   - PNG export now preserves the intended map colors instead of rasterizing as a blacked-out image.
+   - This was resolved by inlining computed CSS-variable values into the serialized export SVG before rasterization.
+
+2. **Make export metadata reflect the visible map state**
+   - Exported PNG/SVG header metadata now reflects the effective visible date subset at export time rather than only the broader selected control window.
+   - This is especially important when exporting during paused or partial playback progression.
+
+---
+
 ## Deferred timeline work
 
 1. **Revisit Step 2C later, but only narrowly**
@@ -190,11 +210,7 @@ These were previously deferred and are now implemented:
 
 ## Deferred export work
 
-1. **PNG export renders as a blacked-out image**
-   - PNG download currently renders the map as a blacked-out image.
-   - Investigate the SVG-to-raster export pipeline later, especially SVG serialization, background handling, and canvas/image rendering behavior.
-
-2. **Revisit Step 3B later, but only narrowly**
+1. **Revisit Step 3B later, but only narrowly**
    - Export panel extraction triggered the same control-panel white-screen failure pattern seen in other fragile panel-boundary changes.
    - Do not resume Step 3B as casual cleanup.
    - Return only when there is a concrete bug, feature need, or a much narrower target than the failed extraction.
@@ -216,7 +232,6 @@ These areas should still be treated as high-risk:
 Additional notes:
 
 - the timeline/playback render/handler boundary is a known fragile zone because Step 2C failed twice and was rolled back
-- the PNG export pipeline is a known fragile zone because raster output is rendering as a blacked-out image
 - export panel extraction is a known fragile zone because Step 3B triggered the same white-screen panel failure pattern and was rolled back
 - purpose-driven behavior changes inside the existing working control-panel boundary have been safer than structural extraction across that boundary
 
@@ -226,9 +241,9 @@ Additional notes:
 
 The safest next directions are:
 
-1. purpose-driven export bug work
-2. broader `App.jsx` bottleneck reduction using only clearly safe extraction targets
-3. future structural revisits to deferred panel boundaries only when a concrete purpose justifies them
+1. broader `App.jsx` bottleneck reduction using only clearly safe extraction targets
+2. future structural revisits to deferred panel boundaries only when a concrete purpose justifies them
+3. additional purpose-driven behavior work as new concrete needs emerge
 
 Timeline/playback Step 2C and export Step 3B should come later, and only with concrete purpose and narrower scope.
 
