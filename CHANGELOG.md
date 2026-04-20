@@ -36,9 +36,21 @@
 - Added `src/timelinePlaybackComponents.jsx`
 - Moved the timeline/playback panel UI boundary out of `src/App.jsx`
 
-## Deferred work note
+## `897e06a` — Document step 2 timeline work and deferred follow-ups
+- Updated maintainer-facing docs to record that Step 2 is complete through 2B
+- Recorded deferred timeline goals and the decision to defer Step 2C
+
+## `5bbdad8` — Extract export helpers from App
+- Added `src/exportHelpers.js`
+- Moved pure export utilities and export row-builder helpers out of `src/App.jsx`
+
+## Deferred work note: timeline/playback
 - Step 2C (deeper timeline/playback render/handler boundary cleanup) was attempted and rolled back.
 - It remains deferred for later, purpose-driven work rather than routine structural cleanup.
+
+## Deferred work note: export
+- PNG download currently renders the map as a blacked-out image.
+- Investigate the SVG-to-raster export pipeline later, especially SVG serialization, background handling, and canvas/image rendering behavior.
 
 ## Explicit future timeline goals
 - Preserve the user's current map zoom/pan position when interacting with timeline playback controls.

@@ -24,6 +24,7 @@ Extracted support modules now present in `src/`:
 - `src/mapInteractionHandlers.js`
 - `src/timelinePlaybackHelpers.js`
 - `src/timelinePlaybackComponents.jsx`
+- `src/exportHelpers.js`
 
 Maintainer/workflow documents at repo root:
 
@@ -78,6 +79,9 @@ Pure timeline/playback derivation helpers extracted from `App.jsx`.
 ### `src/timelinePlaybackComponents.jsx`
 Timeline/playback panel UI boundary extracted from `App.jsx`.
 
+### `src/exportHelpers.js`
+Pure export utilities and export row-builder helpers extracted from `App.jsx`.
+
 ---
 
 ## What was accomplished in Step 1
@@ -124,6 +128,23 @@ Timeline/playback logic is now partly decomposed, but the remaining render/handl
 
 ---
 
+## What was accomplished in Step 3 so far
+
+### Issue 3: export subsystem separation
+
+Completed through:
+
+1. pure export helper extraction
+
+Committed result:
+
+- `5bbdad8` — Extract export helpers from App
+
+### Architectural effect
+Export-related utility logic and export row builders are now less concentrated in `App.jsx`, while runtime export handlers still remain in the main orchestration file.
+
+---
+
 ## Deferred timeline work
 
 These items should be treated as explicit future goals, not forgotten ideas:
@@ -141,6 +162,14 @@ These items should be treated as explicit future goals, not forgotten ideas:
 
 ---
 
+## Deferred export work
+
+1. **PNG export renders as a blacked-out image**
+   - PNG download currently renders the map as a blacked-out image.
+   - Investigate the SVG-to-raster export pipeline later, especially SVG serialization, background handling, and canvas/image rendering behavior.
+
+---
+
 ## Current fragile zones
 
 These areas should still be treated as high-risk:
@@ -152,8 +181,9 @@ These areas should still be treated as high-risk:
 - export rendering/state coupling
 - broad orchestration work in `src/App.jsx`
 
-Additional note:
+Additional notes:
 - the timeline/playback render/handler boundary is now a known fragile zone because Step 2C failed twice and was rolled back.
+- the PNG export pipeline is now a known fragile zone because raster output is rendering as a blacked-out image.
 
 ---
 
@@ -161,7 +191,7 @@ Additional note:
 
 The next safest architectural target is:
 
-1. **Issue 3: export subsystem separation**
+1. **Issue 3: export panel / handler boundary cleanup**
 2. **Issue 4: broader `App.jsx` bottleneck reduction**
 
 Timeline/playback Step 2C should come later, and only with a concrete purpose and narrower scope.
