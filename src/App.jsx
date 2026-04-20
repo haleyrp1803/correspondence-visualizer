@@ -1528,6 +1528,15 @@ function buildMapStageProps(args) {
   };
 }
 
+// CONTROL PANEL PROP STAGING AREA
+// This function is the main bundling boundary for the left control panel.
+// Why it matters:
+// - It gathers top-level app state and setters into grouped prop buckets.
+// - The LeftControlPanel subtree depends on this shape staying consistent.
+// - Extraction attempts tend to fail when a child component expects a value
+//   that was available in App.jsx scope but was not forwarded through here.
+// Maintenance rule: when moving anything out of App.jsx, audit this function
+// first and treat it as the authoritative contract for the control panel.
 function buildLeftControlPanelProps(args) {
   return {
     sidebarState: {
@@ -2451,6 +2460,12 @@ function MapAppearancePanelContent({
   );
 }
 
+// EXPORT PANEL SECTION
+// This section is render-time only until the control panel is open. That makes
+// it easy to underestimate its dependencies during refactors.
+// Safe edits here are mostly local presentation tweaks. Moving this section
+// across files is riskier because it depends on shared helpers and export
+// handlers supplied by the parent panel tree.
 function ExportPanelContent({
   showExportPanel,
   setShowExportPanel,
@@ -2553,6 +2568,11 @@ function MapStage({
   );
 }
 
+// DISPLAY CONTROLS SECTION
+// This subsection is relatively self-contained, but it still depends on
+// shared helper components and several top-level setters. It is safer than the
+// timeline/export sections, but it is still part of the control-panel render
+// boundary that only activates once the cog opens the sidebar.
 function DisplayControlsPanelContent({
   showDisplayControlsPanel,
   setShowDisplayControlsPanel,
@@ -2611,6 +2631,9 @@ function DisplayControlsPanelContent({
   );
 }
 
+// DATA INPUTS GROUP
+// This group is mostly presentation plus upload wiring. It is one of the safer
+// panel sections because the heavy parsing logic lives elsewhere.
 function DataInputsGroup({
   setGeographyCsv,
   setLettersCsv,
@@ -2652,6 +2675,16 @@ function DataInputsGroup({
   );
 }
 
+// DISPLAY/FILTERING GROUP
+// This is the densest part of the left control panel. It nests summary,
+// display, timeline, theme, and export sections, and it forwards a large prop
+// surface into those children.
+// Why this is fragile:
+// - It is the highest fan-out point in the control panel.
+// - If a child is extracted and even one dependency is omitted or renamed, the
+//   app can still boot normally but fail the moment the control panel renders.
+// - This group is a better candidate for careful dependency mapping than for
+//   casual component extraction.
 function DisplayFilteringGroup({
   showSummaryPanel,
   setShowSummaryPanel,
@@ -2732,6 +2765,12 @@ function DisplayFilteringGroup({
         setTimelineMode={setTimelineMode}
       />
 
+      {/*
+        TIMELINE PANEL HANDOFF
+        This is one of the known fragile boundaries. Earlier cleanup attempts
+        proved that the timeline panel is sensitive to render-time dependency
+        changes, even when the surrounding app still boots normally.
+      */}
       <TimelinePanelContent
         showTimelinePanel={showTimelinePanel}
         setShowTimelinePanel={setShowTimelinePanel}
@@ -2765,6 +2804,12 @@ function DisplayFilteringGroup({
         resetTheme={resetTheme}
       />
 
+      {/*
+        EXPORT PANEL HANDOFF
+        This is another known fragile boundary. The export panel can look like a
+        simple button section, but it depends on shared helpers, status state,
+        and export handlers supplied by the parent panel tree.
+      */}
       <ExportPanelContent
         showExportPanel={showExportPanel}
         setShowExportPanel={setShowExportPanel}
@@ -2783,6 +2828,12 @@ function DisplayFilteringGroup({
   );
 }
 
+// LEFT CONTROL PANEL SHELL
+// This component is the actual subtree behind the cog button. The app may look
+// healthy until this component renders, because the heavy inner tree is gated
+// behind `showLeftSidebar`.
+// This is the key reason repeated refactor failures show up only after opening
+// the control panel: dormant render-time dependencies live below this shell.
 function LeftControlPanel({
   sidebarState,
   dataInputState,
@@ -2868,6 +2919,14 @@ function LeftControlPanel({
 
   return (
     <aside className={`${sidebarSurfaceClassName()} border-r xl:absolute xl:left-0 xl:top-0 xl:h-full xl:z-30 ${showLeftSidebar ? 'w-[420px]' : 'w-16'}`}>
+      {/*
+        PANEL GATING BEHAVIOR
+        The `showLeftSidebar ? (...) : null` block below is crucial. The app can
+        appear normal while closed because the inner control-panel content is
+        not mounted yet. Opening the cog causes that dormant subtree to render.
+        That is why missing props/helper mismatches often surface only at the
+        moment the panel opens.
+      */}
       <SidebarToggle side="left" open={showLeftSidebar} onToggle={() => setShowLeftSidebar((v) => !v)} />
       {showLeftSidebar ? (
         <div className="h-full overflow-auto p-5 pr-20">
@@ -3186,11 +3245,19 @@ export default function EuropeNetworkMapApp() {
   const [personLayoutMode, setPersonLayoutMode] = useState('force');
 
   
+  // CONTROL PANEL OPEN/CLOSED STATE FOR INDIVIDUAL SECTIONS
+  // These booleans control whether each accordion-like section renders its body.
+  // They are separate from `showLeftSidebar`, which controls whether the entire
+  // left panel subtree renders at all.
   const [showDisplayControlsPanel, setShowDisplayControlsPanel] = useState(false);
   const [showTimelinePanel, setShowTimelinePanel] = useState(false);
   const [showExportPanel, setShowExportPanel] = useState(false);
   const [showSummaryPanel, setShowSummaryPanel] = useState(false);
   const [showThemePanel, setShowThemePanel] = useState(false);
+  // MASTER LEFT PANEL VISIBILITY STATE
+  // This is the state flipped by the cog button. When false, most of the left
+  // control-panel tree does not render. When true, React mounts the control
+  // panel subtree and all of its nested dependencies are exercised.
   const [showLeftSidebar, setShowLeftSidebar] = useState(false);
   const [showRightSidebar, setShowRightSidebar] = useState(false);
   const [showInspectorInfo, setShowInspectorInfo] = useState(false);
@@ -3661,6 +3728,10 @@ export default function EuropeNetworkMapApp() {
     hoverCard,
             });
 
+  // PREPARE THE FULL LEFT PANEL PROP CONTRACT
+  // This object is the handoff from App.jsx orchestration into the control
+  // panel subtree. If the panel ever whites out when opened, inspect this
+  // contract and the receiving child props before attempting new extraction.
   const leftControlPanelProps = buildLeftControlPanelProps({
     showLeftSidebar,
     setShowLeftSidebar,
@@ -3744,6 +3815,13 @@ export default function EuropeNetworkMapApp() {
   return (
     <div className={museumShellClassName()} style={themeStyleVars}>
       <div className="relative h-full">
+        {/*
+          CONTROL PANEL MOUNT POINT
+          This is where the entire left control-panel subtree enters the app.
+          If the app loads but fails when the cog is clicked, the problem is
+          usually somewhere inside the props consumed below this mount point,
+          not in the top-level workspace shell itself.
+        */}
         <LeftControlPanel {...leftControlPanelProps} />
 
         <AppMainWorkspace
