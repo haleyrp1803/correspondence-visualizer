@@ -33,6 +33,7 @@ import {
   makeDownloadUrl,
   revokeObjectUrl,
 } from './exportHelpers';
+import { buildForcePersonPositions } from './personForceLayoutHelpers';
 
 
 // ============================================================
@@ -836,7 +837,7 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
 
   let people = Array.from(personMap.values())
     .filter((person) => peopleInUse.has(person.id))
-    .map((person, index, arr) => {
+    .map((person) => {
       let x = width / 2;
       let y = height / 2;
       let anchorLabel = '';
@@ -853,11 +854,6 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
           y = projected.y;
           anchorLabel = label;
         }
-      } else {
-        const angle = (index / Math.max(arr.length, 1)) * Math.PI * 2;
-        const ring = 210 + (index % 5) * 24;
-        x = width / 2 + Math.cos(angle) * ring;
-        y = height / 2 + Math.sin(angle) * ring;
       }
 
       return {
@@ -875,15 +871,52 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
     people = people.filter((person) => person.isMappable);
   }
 
-  const personById = new Map(people.map((p) => [p.id, p]));
+  let personById = new Map(people.map((p) => [p.id, p]));
+
+  filteredEdgeRecords.forEach((edge) => {
+    const source = personById.get(edge.source);
+    const target = personById.get(edge.target);
+    if (!source || !target) return;
+    source.degree += edge.count;
+    target.degree += edge.count;
+  });
+
+  people.forEach((p) => {
+    p.radius = computePersonNodeRadius(p.degree);
+  });
+
+  if (layoutMode === 'force') {
+    const settledPositions = buildForcePersonPositions({
+      nodes: people,
+      links: filteredEdgeRecords.map((edge) => ({
+        source: edge.source,
+        target: edge.target,
+        count: edge.count,
+      })),
+      width,
+      height,
+    });
+
+    const settledById = new Map(settledPositions.map((node) => [node.id, node]));
+
+    people = people.map((person) => {
+      const settled = settledById.get(person.id);
+      if (!settled) return person;
+      return {
+        ...person,
+        x: settled.x,
+        y: settled.y,
+      };
+    });
+
+    personById = new Map(people.map((p) => [p.id, p]));
+  }
 
   const edges = filteredEdgeRecords
     .map((edge) => {
       const source = personById.get(edge.source);
       const target = personById.get(edge.target);
       if (!source || !target) return null;
-      source.degree += edge.count;
-      target.degree += edge.count;
       return {
         ...edge,
         sourceLabel: source.label,
@@ -898,10 +931,6 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
       };
     })
     .filter(Boolean);
-
-  people.forEach((p) => {
-    p.radius = computePersonNodeRadius(p.degree);
-  });
 
   return { nodes: people, edges };
 }
