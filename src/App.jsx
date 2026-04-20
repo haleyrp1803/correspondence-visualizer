@@ -1549,6 +1549,7 @@ function buildMapStageProps(args) {
     activeAnimationEdgeId: args.activeAnimationEdgeId,
     activeAnimationNodeIds: args.activeAnimationNodeIds,
     viewMode: args.viewMode,
+    personLayoutMode: args.personLayoutMode,
     handleBlankMapClick: args.handleBlankMapClick,
     selectedProps: args.selectedProps,
     zoomTuning: args.zoomTuning,
@@ -1697,6 +1698,7 @@ function SvgMap({
   clusterSingularLabel = 'place',
   clusterPluralLabel = 'places',
   showBasemap = true,
+  showGeographicBackdrop = true,
   onBlankClick,
   selectedFeature,
   zoomTuning = {},
@@ -2108,85 +2110,99 @@ function SvgMap({
           </g>
         </defs>
         <rect x="0" y="0" width={width} height={height} fill="var(--map-canvas-bg)" />
-        <rect x="0" y="0" width={width} height={height} fill="var(--map-texture-sea)" opacity="0.35" filter="url(#map-paper-grain)" />
-        <rect x="0" y="0" width={width} height={height} fill="url(#map-sea-lines)" opacity="0.78" />
+        {showGeographicBackdrop ? (
+          <>
+            <rect x="0" y="0" width={width} height={height} fill="var(--map-texture-sea)" opacity="0.35" filter="url(#map-paper-grain)" />
+            <rect x="0" y="0" width={width} height={height} fill="url(#map-sea-lines)" opacity="0.78" />
+          </>
+        ) : null}
         <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-frame-bg)" stroke="var(--map-frame-border)" strokeWidth="1.4" rx="16" />
-        <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-texture-sea)" opacity="0.26" rx="16" />
-        <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="url(#map-sea-lines)" opacity="0.55" rx="16" />
-        <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-texture-frame-wash)" opacity="0.18" filter="url(#map-paper-grain)" rx="16" />
+        {showGeographicBackdrop ? (
+          <>
+            <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-texture-sea)" opacity="0.26" rx="16" />
+            <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="url(#map-sea-lines)" opacity="0.55" rx="16" />
+            <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-texture-frame-wash)" opacity="0.18" filter="url(#map-paper-grain)" rx="16" />
+          </>
+        ) : (
+          <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} fill="var(--map-texture-frame-wash)" opacity="0.26" filter="url(#map-paper-grain)" rx="16" />
+        )}
         <rect x={frame.x + 8} y={frame.y + 8} width={frame.w - 16} height={frame.h - 16} fill="none" stroke="var(--map-frame-border)" strokeOpacity="0.35" strokeWidth="0.9" rx="12" />
         <g clipPath="url(#map-frame-clip)">
           <g transform={`translate(${view.tx} ${view.ty}) scale(${view.scale})`}>
-            {showBasemap && basemapPaths.length ? basemapPaths.map((featureItem) => (
-              <g key={featureItem.id}>
-                <path
-                  d={featureItem.d}
-                  fill="var(--map-land-fill)"
-                  stroke="var(--map-land-stroke)"
-                  strokeWidth="1"
-                  vectorEffect="non-scaling-stroke"
-                  opacity="0.94"
-                />
-                <path
-                  d={featureItem.d}
-                  fill="url(#map-land-lines)"
-                  opacity="0.42"
-                />
-                <path
-                  d={featureItem.d}
-                  fill="var(--map-texture-land-tint)"
-                  opacity="0.08"
-                  filter="url(#map-paper-grain)"
-                />
-              </g>
-            )) : showBasemap ? (
-              <rect x="24" y="24" width={width - 48} height={height - 48} rx="24" fill="var(--map-land-fill)" opacity="0.55" />
-            ) : null}
-            <g opacity="0.14" stroke="var(--map-grid-stroke)" strokeWidth="1">
-              <line x1="140" y1="120" x2="140" y2="680" />
-              <line x1="260" y1="120" x2="260" y2="680" />
-              <line x1="380" y1="120" x2="380" y2="680" />
-              <line x1="500" y1="120" x2="500" y2="680" />
-              <line x1="620" y1="120" x2="620" y2="680" />
-              <line x1="740" y1="120" x2="740" y2="680" />
-              <line x1="100" y1="180" x2="860" y2="180" />
-              <line x1="100" y1="300" x2="860" y2="300" />
-              <line x1="100" y1="420" x2="860" y2="420" />
-              <line x1="100" y1="540" x2="860" y2="540" />
-              <line x1="100" y1="660" x2="860" y2="660" />
-            </g>
-            <use href="#map-compass-rose" x={frame.x + frame.w - 70} y={frame.y + 72} opacity="0.5" />
-            <g pointerEvents="none" opacity="0.62">
-              {screenWaterLabels.map((item) => {
-                const lines = Array.isArray(item.lines) && item.lines.length ? item.lines : [item.label || ''];
-                const lineStep = item.size * 1.02;
-                const startDy = lines.length > 1 ? -((lines.length - 1) * lineStep) / 2 : 0;
-                return (
-                  <text
-                    key={item.id}
-                    x={item.x}
-                    y={item.y}
-                    fill="var(--map-texture-compass)"
-                    fillOpacity="0.72"
-                    fontSize={item.size}
-                    fontStyle="italic"
-                    fontFamily="var(--map-water-label-font-family)"
-                    textAnchor="middle"
-                    letterSpacing="0.08em"
-                  >
-                    {lines.map((line, index) => (
-                      <tspan
-                        key={`${item.id}-line-${index}`}
+            {showGeographicBackdrop ? (
+              <>
+                {showBasemap && basemapPaths.length ? basemapPaths.map((featureItem) => (
+                  <g key={featureItem.id}>
+                    <path
+                      d={featureItem.d}
+                      fill="var(--map-land-fill)"
+                      stroke="var(--map-land-stroke)"
+                      strokeWidth="1"
+                      vectorEffect="non-scaling-stroke"
+                      opacity="0.94"
+                    />
+                    <path
+                      d={featureItem.d}
+                      fill="url(#map-land-lines)"
+                      opacity="0.42"
+                    />
+                    <path
+                      d={featureItem.d}
+                      fill="var(--map-texture-land-tint)"
+                      opacity="0.08"
+                      filter="url(#map-paper-grain)"
+                    />
+                  </g>
+                )) : showBasemap ? (
+                  <rect x="24" y="24" width={width - 48} height={height - 48} rx="24" fill="var(--map-land-fill)" opacity="0.55" />
+                ) : null}
+                <g opacity="0.14" stroke="var(--map-grid-stroke)" strokeWidth="1">
+                  <line x1="140" y1="120" x2="140" y2="680" />
+                  <line x1="260" y1="120" x2="260" y2="680" />
+                  <line x1="380" y1="120" x2="380" y2="680" />
+                  <line x1="500" y1="120" x2="500" y2="680" />
+                  <line x1="620" y1="120" x2="620" y2="680" />
+                  <line x1="740" y1="120" x2="740" y2="680" />
+                  <line x1="100" y1="180" x2="860" y2="180" />
+                  <line x1="100" y1="300" x2="860" y2="300" />
+                  <line x1="100" y1="420" x2="860" y2="420" />
+                  <line x1="100" y1="540" x2="860" y2="540" />
+                  <line x1="100" y1="660" x2="860" y2="660" />
+                </g>
+                <use href="#map-compass-rose" x={frame.x + frame.w - 70} y={frame.y + 72} opacity="0.5" />
+                <g pointerEvents="none" opacity="0.62">
+                  {screenWaterLabels.map((item) => {
+                    const lines = Array.isArray(item.lines) && item.lines.length ? item.lines : [item.label || ''];
+                    const lineStep = item.size * 1.02;
+                    const startDy = lines.length > 1 ? -((lines.length - 1) * lineStep) / 2 : 0;
+                    return (
+                      <text
+                        key={item.id}
                         x={item.x}
-                        dy={index === 0 ? startDy : lineStep}
+                        y={item.y}
+                        fill="var(--map-texture-compass)"
+                        fillOpacity="0.72"
+                        fontSize={item.size}
+                        fontStyle="italic"
+                        fontFamily="var(--map-water-label-font-family)"
+                        textAnchor="middle"
+                        letterSpacing="0.08em"
                       >
-                        {line}
-                      </tspan>
-                    ))}
-                  </text>
-                );
-              })}
-            </g>
+                        {lines.map((line, index) => (
+                          <tspan
+                            key={`${item.id}-line-${index}`}
+                            x={item.x}
+                            dy={index === 0 ? startDy : lineStep}
+                          >
+                            {line}
+                          </tspan>
+                        ))}
+                      </text>
+                    );
+                  })}
+                </g>
+              </>
+            ) : null}
             <g>
               {screenEdges.map((edge) => {
                 const isAnimated = edge.id === activeAnimationEdgeId;
@@ -2559,6 +2575,7 @@ function MapStage({
   activeAnimationEdgeId,
   activeAnimationNodeIds,
   viewMode,
+  personLayoutMode,
   handleBlankMapClick,
   selectedProps,
   zoomTuning,
@@ -2584,6 +2601,8 @@ function MapStage({
           activeAnimationNodeIds={activeAnimationNodeIds}
           clusterSingularLabel={viewMode === 'geographic' ? 'place' : 'person'}
           clusterPluralLabel={viewMode === 'geographic' ? 'places' : 'people'}
+          showBasemap={viewMode === 'geographic' || personLayoutMode === 'geographic'}
+          showGeographicBackdrop={viewMode === 'geographic' || personLayoutMode === 'geographic'}
           onBlankClick={handleBlankMapClick}
           selectedFeature={selectedProps}
           zoomTuning={zoomTuning}
@@ -3778,7 +3797,8 @@ export default function EuropeNetworkMapApp() {
     zoomTuning,
     viewResetKey,
     hoverCard,
-            });
+    personLayoutMode,
+  });
 
   // PREPARE THE FULL LEFT PANEL PROP CONTRACT
   // This object is the handoff from App.jsx orchestration into the control
