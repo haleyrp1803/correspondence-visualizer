@@ -32,8 +32,74 @@ export function rowsToCsv(rows) {
   return lines.join(String.fromCharCode(10));
 }
 
+function resolveCssVariables(text, computedStyle, fallbackStyle) {
+  if (typeof text !== 'string' || !text.includes('var(')) return text;
+
+  return text.replace(/var\((--[^)\s,]+)(?:,[^)]+)?\)/g, (_, variableName) => {
+    const resolved =
+      computedStyle?.getPropertyValue(variableName)?.trim() ||
+      fallbackStyle?.getPropertyValue(variableName)?.trim() ||
+      '';
+    return resolved || 'transparent';
+  });
+}
+
+function inlineSvgVariables(originalNode, cloneNode, fallbackStyle) {
+  if (!originalNode || !cloneNode || originalNode.nodeType !== 1 || cloneNode.nodeType !== 1) {
+    return;
+  }
+
+  const computedStyle = window.getComputedStyle(originalNode);
+
+  for (const attr of Array.from(cloneNode.attributes || [])) {
+    const nextValue = resolveCssVariables(attr.value, computedStyle, fallbackStyle);
+    if (nextValue !== attr.value) {
+      cloneNode.setAttribute(attr.name, nextValue);
+    }
+  }
+
+  const styleText = cloneNode.getAttribute('style');
+  if (styleText) {
+    const nextStyleText = resolveCssVariables(styleText, computedStyle, fallbackStyle);
+    if (nextStyleText !== styleText) {
+      cloneNode.setAttribute('style', nextStyleText);
+    }
+  }
+
+  const cssBackedAttributes = [
+    ['fill', 'fill'],
+    ['stroke', 'stroke'],
+    ['stop-color', 'stopColor'],
+    ['color', 'color'],
+    ['font-family', 'fontFamily'],
+    ['font-style', 'fontStyle'],
+    ['font-weight', 'fontWeight'],
+  ];
+
+  cssBackedAttributes.forEach(([attrName, styleName]) => {
+    const attrValue = cloneNode.getAttribute(attrName);
+    if (attrValue && attrValue !== 'none' && !attrValue.includes('var(')) return;
+
+    const computedValue = computedStyle?.[styleName];
+    if (computedValue && computedValue !== 'none') {
+      cloneNode.setAttribute(attrName, computedValue);
+    }
+  });
+
+  const originalChildren = Array.from(originalNode.children || []);
+  const cloneChildren = Array.from(cloneNode.children || []);
+  const childCount = Math.min(originalChildren.length, cloneChildren.length);
+
+  for (let index = 0; index < childCount; index += 1) {
+    inlineSvgVariables(originalChildren[index], cloneChildren[index], fallbackStyle);
+  }
+}
+
 export function serializeSvgForExport(svgElement, options = {}) {
   const clone = svgElement.cloneNode(true);
+  const rootComputedStyle = window.getComputedStyle(svgElement);
+  inlineSvgVariables(svgElement, clone, rootComputedStyle);
+
   const viewBox = svgElement.viewBox?.baseVal;
   const baseWidth = Math.max(1, Math.round(viewBox?.width || svgElement.clientWidth || 1100));
   const baseHeight = Math.max(1, Math.round(viewBox?.height || svgElement.clientHeight || 760));
