@@ -3489,14 +3489,37 @@ export default function EuropeNetworkMapApp() {
     };
   }, [normalizedRows, filteredRowsByTime, graph.edges, graph.nodes, normalizedLetters.length, normalizedPersonMetadata.length, geographyRows.length, timelineMonths.length, personMetadataByName]);
 
+  const exportVisibleDateLabel = useMemo(() => {
+    const knownDateRows = filteredRowsByTime.filter((row) => row.parsedDate?.isKnown && row.date);
+    if (!knownDateRows.length) {
+      return timelineMode === 'all' ? 'All available dates' : currentRangeLabel;
+    }
+
+    const ordered = [...knownDateRows].sort((a, b) => {
+      const aTime = a.parsedDate?.sortTime ?? 0;
+      const bTime = b.parsedDate?.sortTime ?? 0;
+      return aTime - bTime;
+    });
+
+    const start = ordered[0]?.date || '—';
+    const end = ordered[ordered.length - 1]?.date || start || '—';
+    const baseRange = start === end ? start : `${start} to ${end}`;
+
+    if (hasActivePlayback) {
+      return `${baseRange} (visible through playback pause)`;
+    }
+
+    return baseRange;
+  }, [filteredRowsByTime, timelineMode, currentRangeLabel, hasActivePlayback]);
+
   const exportSubtitleLines = useMemo(() => {
     return [
       `View: ${viewMode === 'geographic' ? 'Geographic routes' : 'Person network'}`,
       `Search: ${search.trim() || 'None'}`,
       `Minimum weight: ${currentMinCountLabel}`,
-      `Date window: ${currentRangeLabel}`,
+      `Visible dates: ${exportVisibleDateLabel}`,
     ];
-  }, [viewMode, search, currentMinCountLabel, currentRangeLabel]);
+  }, [viewMode, search, currentMinCountLabel, exportVisibleDateLabel]);
 
   const exportEdgesRows = useMemo(() => buildExportEdgeRows(graph.edges), [graph.edges]);
 
