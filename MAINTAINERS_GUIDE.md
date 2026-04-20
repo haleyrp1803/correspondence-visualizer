@@ -32,6 +32,8 @@ Maintainer/workflow documents at repo root:
 - `MAINTAINERS_GUIDE.md`
 - `PROJECT_WORKFLOW_CHARTER.md`
 - `CHANGELOG.md`
+- `CONTROL_PANEL_DEPENDENCY_MAP.md`
+- `VIEWPORT_TIMELINE_AUDIT.md`
 
 ---
 
@@ -77,7 +79,7 @@ Top-level map interaction handlers extracted from `App.jsx`.
 Pure timeline/playback derivation helpers extracted from `App.jsx`.
 
 ### `src/timelinePlaybackComponents.jsx`
-Timeline/playback panel UI boundary extracted from `App.jsx`.
+Timeline/playback panel UI boundary extracted from `App.jsx`. This file now also includes the behavior-level end-date constraint fix.
 
 ### `src/exportHelpers.js`
 Pure export utilities and export row-builder helpers extracted from `App.jsx`.
@@ -110,21 +112,27 @@ Map-related responsibilities are now less concentrated in `App.jsx`. The subsyst
 
 ### Issue 2: timeline/playback risk reduction
 
-Completed through:
+Completed structurally through:
 
 1. pure timeline/playback helper extraction
 2. timeline/playback panel UI boundary cleanup
 
-Committed results:
+Committed structural results:
 
 - `b2dbe35` — Extract timeline playback helpers from App
 - `383ecc0` — Extract timeline playback panel from App
 
-### Deferred substep
-**Step 2C** was attempted and rolled back after repeated instability at the render/handler boundary. It is intentionally deferred for later work.
+### Deferred structural substep
+**Step 2C** was attempted and rolled back after repeated instability at the render/handler boundary. It remains intentionally deferred for later, narrower, purpose-driven work.
+
+### Completed behavior follow-ups
+Two important timeline behaviors were later completed successfully **without** crossing the fragile panel-extraction boundary:
+
+- `6c41fce` — Constrain timeline end date to selected start date
+- `1b2655e` — Preserve viewport during timeline playback interactions
 
 ### Architectural effect
-Timeline/playback logic is now partly decomposed, but the remaining render/handler boundary is fragile and should not be casually reworked.
+Timeline/playback logic is now partly decomposed, but the remaining render/handler boundary is fragile and should not be casually reworked. However, purpose-driven behavior changes inside the existing working boundary have proven safe.
 
 ---
 
@@ -140,26 +148,41 @@ Committed result:
 
 - `5bbdad8` — Extract export helpers from App
 
-### Deferred substep
+### Deferred structural substep
 **Step 3B** was attempted and rolled back after triggering the same control-panel white-screen failure pattern seen in other fragile panel extractions. It is intentionally deferred for later work.
 
 ### Architectural effect
-Export-related utility logic and export row builders are now less concentrated in `App.jsx`, while runtime export handlers and panel rendering remain in the main orchestration file.
+Export-related utility logic and export row builders are now less concentrated in `App.jsx`, while runtime export handlers and export panel rendering remain in the main orchestration file.
+
+---
+
+## Maintainer-facing audit artifacts
+
+### `CONTROL_PANEL_DEPENDENCY_MAP.md`
+Maps the control-panel render path, dependency surface, fragility patterns, and safer future strategy. This should be consulted before any future panel-boundary refactor.
+
+### `VIEWPORT_TIMELINE_AUDIT.md`
+Documents the likely cause of the timeline-triggered viewport reset behavior and the reasoning behind the eventual narrow fix that preserved the current map position during playback interaction.
+
+---
+
+## Completed timeline behavior goals
+
+These were previously deferred and are now implemented:
+
+1. **Preserve user map position during timeline interaction**
+   - Timeline actions such as play/pause/progression no longer unexpectedly recenter the map.
+   - This was resolved by narrowing the reset-trigger logic rather than restructuring panel code.
+
+2. **Constrain timeline date selection**
+   - The end date can no longer be selected earlier than the current start date.
+   - If the start date is moved past the current end date, the end date is pulled forward to match.
 
 ---
 
 ## Deferred timeline work
 
-These items should be treated as explicit future goals, not forgotten ideas:
-
-1. **Preserve user map position during timeline interaction**
-   - Timeline actions such as play/pause should not unexpectedly reset the current zoom/pan view.
-   - Example failure mode already observed: when the user moves around the map during playback and then pauses, the map snaps back to an earlier/original view.
-
-2. **Constrain timeline date selection**
-   - The end date should never be selectable earlier than the currently selected start date.
-
-3. **Revisit Step 2C later, but only narrowly**
+1. **Revisit Step 2C later, but only narrowly**
    - Return only when there is a concrete bug, feature need, or a much narrower safe target than the failed attempts.
    - Do not resume Step 2C as casual cleanup.
 
@@ -191,19 +214,21 @@ These areas should still be treated as high-risk:
 - control-panel render boundaries when extracting subsystem panels
 
 Additional notes:
-- the timeline/playback render/handler boundary is now a known fragile zone because Step 2C failed twice and was rolled back.
-- the PNG export pipeline is now a known fragile zone because raster output is rendering as a blacked-out image.
-- export panel extraction is now a known fragile zone because Step 3B triggered the same white-screen panel failure pattern and was rolled back.
+
+- the timeline/playback render/handler boundary is a known fragile zone because Step 2C failed twice and was rolled back
+- the PNG export pipeline is a known fragile zone because raster output is rendering as a blacked-out image
+- export panel extraction is a known fragile zone because Step 3B triggered the same white-screen panel failure pattern and was rolled back
+- purpose-driven behavior changes inside the existing working control-panel boundary have been safer than structural extraction across that boundary
 
 ---
 
 ## Recommended next subsystem order
 
-The next safest architectural target is:
+The safest next directions are:
 
-1. a revised planning/audit pass for future work
-2. a purpose-driven bug/behavior pass
-3. broader `App.jsx` bottleneck reduction using only clearly safe extraction targets
+1. purpose-driven export bug work
+2. broader `App.jsx` bottleneck reduction using only clearly safe extraction targets
+3. future structural revisits to deferred panel boundaries only when a concrete purpose justifies them
 
 Timeline/playback Step 2C and export Step 3B should come later, and only with concrete purpose and narrower scope.
 

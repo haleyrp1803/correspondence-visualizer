@@ -48,6 +48,30 @@
 - Updated maintainer-facing docs to record the deferred PNG export issue
 - Recorded the PNG export problem as a later purpose-driven export bug pass
 
+## `c526e6c` — Document deferred export panel extraction
+- Updated maintainer-facing docs to record that Step 3B was attempted and rolled back
+- Recorded export panel extraction as a deferred narrow future target rather than routine cleanup
+
+## `a53ccbf` — Add maintainer comments for control panel architecture
+- Added maintainer-facing comments to `src/App.jsx`
+- Marked fragile control-panel boundaries and dependency hubs directly in code comments
+
+## `099882a` — Add control panel dependency map
+- Added `CONTROL_PANEL_DEPENDENCY_MAP.md`
+- Recorded the control-panel render path, fragility analysis, and safer future strategy
+
+## `fd0d77a` — Add viewport timeline reset audit
+- Added `VIEWPORT_TIMELINE_AUDIT.md`
+- Recorded the likely viewport reset trigger and the safest fix strategy
+
+## `6c41fce` — Constrain timeline end date to selected start date
+- Prevented the end date from being selected earlier than the current start date
+- Pulled the end date forward automatically when the start date moves past it
+
+## `1b2655e` — Preserve viewport during timeline playback interactions
+- Narrowed the viewport reset trigger so ordinary playback progression no longer recenters the map unexpectedly
+- Kept the fix inside the existing working panel boundary without structural panel refactoring
+
 ## Deferred work note: timeline/playback
 - Step 2C (deeper timeline/playback render/handler boundary cleanup) was attempted and rolled back.
 - It remains deferred for later, purpose-driven work rather than routine structural cleanup.
@@ -57,6 +81,6 @@
 - Investigate the SVG-to-raster export pipeline later, especially SVG serialization, background handling, and canvas/image rendering behavior.
 - Step 3B (export panel extraction) was attempted and rolled back after triggering the same control-panel white-screen failure pattern seen in other fragile panel-boundary changes.
 
-## Explicit future timeline goals
-- Preserve the user's current map zoom/pan position when interacting with timeline playback controls.
+## Completed timeline behavior goals
+- Preserve the user's current map zoom/pan position during timeline playback interactions.
 - Prevent selection of an end date earlier than the selected start date.
