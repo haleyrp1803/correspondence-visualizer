@@ -140,8 +140,11 @@ Committed result:
 
 - `5bbdad8` — Extract export helpers from App
 
+### Deferred substep
+**Step 3B** was attempted and rolled back after triggering the same control-panel white-screen failure pattern seen in other fragile panel extractions. It is intentionally deferred for later work.
+
 ### Architectural effect
-Export-related utility logic and export row builders are now less concentrated in `App.jsx`, while runtime export handlers still remain in the main orchestration file.
+Export-related utility logic and export row builders are now less concentrated in `App.jsx`, while runtime export handlers and panel rendering remain in the main orchestration file.
 
 ---
 
@@ -168,6 +171,11 @@ These items should be treated as explicit future goals, not forgotten ideas:
    - PNG download currently renders the map as a blacked-out image.
    - Investigate the SVG-to-raster export pipeline later, especially SVG serialization, background handling, and canvas/image rendering behavior.
 
+2. **Revisit Step 3B later, but only narrowly**
+   - Export panel extraction triggered the same control-panel white-screen failure pattern seen in other fragile panel-boundary changes.
+   - Do not resume Step 3B as casual cleanup.
+   - Return only when there is a concrete bug, feature need, or a much narrower target than the failed extraction.
+
 ---
 
 ## Current fragile zones
@@ -180,10 +188,12 @@ These areas should still be treated as high-risk:
 - playback/timeline state coupling
 - export rendering/state coupling
 - broad orchestration work in `src/App.jsx`
+- control-panel render boundaries when extracting subsystem panels
 
 Additional notes:
 - the timeline/playback render/handler boundary is now a known fragile zone because Step 2C failed twice and was rolled back.
 - the PNG export pipeline is now a known fragile zone because raster output is rendering as a blacked-out image.
+- export panel extraction is now a known fragile zone because Step 3B triggered the same white-screen panel failure pattern and was rolled back.
 
 ---
 
@@ -191,10 +201,11 @@ Additional notes:
 
 The next safest architectural target is:
 
-1. **Issue 3: export panel / handler boundary cleanup**
-2. **Issue 4: broader `App.jsx` bottleneck reduction**
+1. a revised planning/audit pass for future work
+2. a purpose-driven bug/behavior pass
+3. broader `App.jsx` bottleneck reduction using only clearly safe extraction targets
 
-Timeline/playback Step 2C should come later, and only with a concrete purpose and narrower scope.
+Timeline/playback Step 2C and export Step 3B should come later, and only with concrete purpose and narrower scope.
 
 ---
 

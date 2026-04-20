@@ -44,6 +44,10 @@
 - Added `src/exportHelpers.js`
 - Moved pure export utilities and export row-builder helpers out of `src/App.jsx`
 
+## `4ddf444` — Document deferred PNG export issue
+- Updated maintainer-facing docs to record the deferred PNG export issue
+- Recorded the PNG export problem as a later purpose-driven export bug pass
+
 ## Deferred work note: timeline/playback
 - Step 2C (deeper timeline/playback render/handler boundary cleanup) was attempted and rolled back.
 - It remains deferred for later, purpose-driven work rather than routine structural cleanup.
@@ -51,6 +55,7 @@
 ## Deferred work note: export
 - PNG download currently renders the map as a blacked-out image.
 - Investigate the SVG-to-raster export pipeline later, especially SVG serialization, background handling, and canvas/image rendering behavior.
+- Step 3B (export panel extraction) was attempted and rolled back after triggering the same control-panel white-screen failure pattern seen in other fragile panel-boundary changes.
 
 ## Explicit future timeline goals
 - Preserve the user's current map zoom/pan position when interacting with timeline playback controls.
