@@ -3420,8 +3420,8 @@ export default function EuropeNetworkMapApp() {
   const graph = viewMode === 'geographic' ? geographicGraph : personGraph;
   const viewResetKey = useMemo(() => {
     const layoutKey = viewMode === 'person' ? `${viewMode}:${personLayoutMode}` : viewMode;
-    return `${layoutKey}:${filteredRowsByTime.length}:${graph.nodes.length}:${graph.edges.length}`;
-  }, [viewMode, personLayoutMode, filteredRowsByTime.length, graph.nodes.length, graph.edges.length]);
+    return `${layoutKey}:${timelineMode}:${rangeStart}:${rangeEnd}`;
+  }, [viewMode, personLayoutMode, timelineMode, rangeStart, rangeEnd]);
 
   // ------------------------------------------------------------
   // Selection and inspector derivations
