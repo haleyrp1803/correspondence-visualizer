@@ -1025,7 +1025,8 @@ const THEME_DEFAULTS = {
   mapNode: '#93ad7d',
   mapNodeCluster: '#ae977a',
   mapNodeAnimated: '#7c9962',
-  mapNodeSelected: '#556944',
+  mapNodeHover: '#556944',
+  mapNodeSelected: '#3f5136',
   mapNodeStroke: '#fff9ed',
   mapLabelText: '#4a4636',
   mapLabelHalo: 'transparent',
@@ -1099,7 +1100,8 @@ const MAP_STYLE_PRESETS = {
     mapNode: '#728679',
     mapNodeCluster: '#b56c5d',
     mapNodeAnimated: '#86523b',
-    mapNodeSelected: '#40271a',
+    mapNodeHover: '#40271a',
+    mapNodeSelected: '#8f5953',
     mapNodeStroke: '#fbf5e8',
     mapLabelText: '#4e3923',
     mapLabelHalo: 'transparent',
@@ -1132,7 +1134,8 @@ const MAP_STYLE_PRESETS = {
     mapNode: '#7ea1ba',
     mapNodeCluster: '#b9818f',
     mapNodeAnimated: '#96adbf',
-    mapNodeSelected: '#8e6a73',
+    mapNodeHover: '#8e6a73',
+    mapNodeSelected: '#0d2140',
     mapNodeStroke: '#f6f1e8',
     mapLabelText: '#22364f',
     mapLabelHalo: '#f3ede4',
@@ -2273,14 +2276,14 @@ function SvgMap({
               const nodeFill = isSelected
                 ? 'var(--map-node-selected)'
                 : isHovered
-                  ? 'var(--map-edge-hover)'
+                  ? 'var(--map-node-hover)'
                   : node.isCluster
                     ? 'var(--map-node-cluster)'
                     : isAnimated
                       ? 'var(--map-node-animated)'
                       : 'var(--map-node)';
-              const nodeStroke = isHovered ? 'var(--map-edge-hover)' : 'var(--map-node-stroke)';
-              const nodeStrokeWidth = isSelected ? '3' : isHovered ? (node.isCluster ? '2.6' : '2.2') : isAnimated ? '2.5' : node.isCluster ? '2' : '1.5';
+              const nodeStroke = 'var(--map-node-stroke)';
+              const nodeStrokeWidth = isSelected ? '3.2' : isHovered ? (node.isCluster ? '2.7' : '2.3') : isAnimated ? '2.5' : node.isCluster ? '2' : '1.5';
               const nodeRadius = isAnimated ? node.screenRadius + 3 : isHovered ? node.screenRadius + 1.5 : node.screenRadius;
 
               return (
