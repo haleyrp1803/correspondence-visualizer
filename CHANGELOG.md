@@ -1,9 +1,74 @@
 # Changelog
 
+## `dd12281` — Normalize summary panel spacing
+- Added matching top spacing above **Summary and Diagnostics**
+- Restored consistent vertical rhythm inside the **OPTIONS** stack of the left control panel
+
+## `4fdaf73` — Rename timeline panel heading
+- Renamed **Timeline and playback** to **Timeline**
+- Kept the existing timeline behavior unchanged
+
+## `db5bb1f` — Tighten left panel organization
+- Reorganized the left control panel
+- Added a new **Visualization Type** section
+- Moved:
+  - Geographic routes
+  - Person network
+  - Force-directed
+  - Geographic anchor
+  into **Visualization Type**
+- Renamed the left-panel grouping heading from **Display and filtering** to **OPTIONS**
+- Made **Data Inputs** collapsible while keeping it open by default
+- Moved the section order toward the current preferred sequence
+- Adjusted title casing for left-panel headings
+
+## `ba746b1` — Simplify theme panel text
+- Renamed **Map appearance** to **Theme**
+- Removed the explanatory text describing Peridot as the default full-app theme
+- Kept theme preset buttons and behavior unchanged
+
+## `c0fc600` — Retune active country fills for peridot and modern maps
+- Retuned Peridot active-country fill toward the chosen mossier direction
+- Retuned Modern active-country fill after comparison against the cluster-node palette
+- Left Early Modern active-country coloring unchanged
+
+## `56f0080` — Highlight countries containing visible nodes
+- Added active-country highlighting for countries containing currently visible nodes
+- Used flexible country/state/nation/region/territory-like hint matching when available
+- Added coordinate-based geographic fallback when explicit country-like data is absent
+- Ensured nodes without usable attribution are skipped gracefully instead of breaking rendering
+
+## `5cbe9c3` — Refine early modern node hover and selected colors
+- Tuned Early Modern hover state toward a richer teal
+- Tuned Early Modern selected state toward a deeper rosy tone
+- Preserved white node outlines for contrast
+
+## `850176f` — Refine hovered and selected node states
+- Made hover state use the earlier selected-node appearance pattern
+- Introduced stronger theme-specific selected-node colors
+- Preserved white outline contrast across themes
+
+## `3e43dc9` — Add hovered node color feedback
+- Added visible hover feedback to nodes
+- Kept selected state visually distinct from hover state
+
+## `919ea5f` — Increase green layering in peridot map theme
+- Pushed the default Peridot map farther toward layered sage/mineral greens
+- Increased contrast between Peridot and Early Modern map appearances
+
+## `c666d29` — Add peridot default app theme
+- Introduced the Peridot-inspired default full-app theme
+- Changed Early Modern and Modern to function as map-only presets
+- Reworked app-shell and map token usage around the new default visual system
+
+## `9be5f4a` — Tighten maintainer docs audit fixes
+- Added missing rollback references to maintainer documentation
+- Repaired the audit pass after earlier documentation compression
+
 ## `43403c3` — Restore detail to maintainer documentation
 - Added back missing detail in `MAINTAINERS_GUIDE.md`
 - Added back missing detail in `CHANGELOG.md`
-- Preserved the current stable inspector-navigation documentation state
+- Preserved the stable inspector-navigation documentation state
 
 ## `02ecb11` — Document inspector navigation feature set
 - Updated `README.md`
@@ -70,3 +135,4 @@
 
 ## Deferred note
 - A visual-only refinement to anchor the inspector Back button directly beneath the close `×` was attempted and intentionally deferred after unstable or unsatisfactory results.
+- A larger pass to add subnational/state/province/territory boundary geometry was discussed and intentionally deferred.
