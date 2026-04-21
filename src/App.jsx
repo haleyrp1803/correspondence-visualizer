@@ -1651,6 +1651,10 @@ function buildLeftControlPanelProps(args) {
     sidebarState: {
       showLeftSidebar: args.showLeftSidebar,
       setShowLeftSidebar: args.setShowLeftSidebar,
+      showDataInputsPanel: args.showDataInputsPanel,
+      setShowDataInputsPanel: args.setShowDataInputsPanel,
+      showVisualizationTypePanel: args.showVisualizationTypePanel,
+      setShowVisualizationTypePanel: args.setShowVisualizationTypePanel,
       showDisplayControlsPanel: args.showDisplayControlsPanel,
       setShowDisplayControlsPanel: args.setShowDisplayControlsPanel,
       showTimelinePanel: args.showTimelinePanel,
@@ -2583,7 +2587,7 @@ function SummaryPanelContent({
 }) {
   return (
     <CollapsiblePanelSection
-      title="Summary and diagnostics"
+      title="Summary and Diagnostics"
       open={showSummaryPanel}
       onToggle={() => setShowSummaryPanel((v) => !v)}
     >
@@ -2758,6 +2762,36 @@ function MapStage({
 // shared helper components and several top-level setters. It is safer than the
 // timeline/export sections, but it is still part of the control-panel render
 // boundary that only activates once the cog opens the sidebar.
+function VisualizationTypePanelContent({
+  showVisualizationTypePanel,
+  setShowVisualizationTypePanel,
+  viewMode,
+  setViewMode,
+  personLayoutMode,
+  setPersonLayoutMode,
+}) {
+  return (
+    <CollapsiblePanelSection
+      title="Visualization Type"
+      open={showVisualizationTypePanel}
+      onToggle={() => setShowVisualizationTypePanel((v) => !v)}
+    >
+      <div className="space-y-4 text-sm text-[var(--panel-card-muted-text)]">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setViewMode('geographic')} className={buttonClassName({ active: viewMode === 'geographic' })}>Geographic routes</button>
+          <button onClick={() => setViewMode('person')} className={buttonClassName({ active: viewMode === 'person' })}>Person network</button>
+        </div>
+        {viewMode === 'person' ? (
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setPersonLayoutMode('force')} className={buttonClassName({ active: personLayoutMode === 'force' })}>Force-directed</button>
+            <button onClick={() => setPersonLayoutMode('geographic')} className={buttonClassName({ active: personLayoutMode === 'geographic' })}>Geographic anchor</button>
+          </div>
+        ) : null}
+      </div>
+    </CollapsiblePanelSection>
+  );
+}
+
 function DisplayControlsPanelContent({
   showDisplayControlsPanel,
   setShowDisplayControlsPanel,
@@ -2778,22 +2812,12 @@ function DisplayControlsPanelContent({
 }) {
   return (
     <CollapsiblePanelSection
-      title="Display controls"
+      title="Display Controls"
       open={showDisplayControlsPanel}
       onToggle={() => setShowDisplayControlsPanel((v) => !v)}
       className="mt-3"
     >
       <div className="space-y-4 text-sm text-[var(--panel-card-muted-text)]">
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setViewMode('geographic')} className={buttonClassName({ active: viewMode === 'geographic' })}>Geographic routes</button>
-          <button onClick={() => setViewMode('person')} className={buttonClassName({ active: viewMode === 'person' })}>Person network</button>
-        </div>
-        {viewMode === 'person' ? (
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => setPersonLayoutMode('force')} className={buttonClassName({ active: personLayoutMode === 'force' })}>Force-directed</button>
-            <button onClick={() => setPersonLayoutMode('geographic')} className={buttonClassName({ active: personLayoutMode === 'geographic' })}>Geographic anchor</button>
-          </div>
-        ) : null}
         <div>
           <label className="mb-1 block font-medium">Search</label>
           <input
@@ -2820,6 +2844,8 @@ function DisplayControlsPanelContent({
 // This group is mostly presentation plus upload wiring. It is one of the safer
 // panel sections because the heavy parsing logic lives elsewhere.
 function DataInputsGroup({
+  showDataInputsPanel,
+  setShowDataInputsPanel,
   setGeographyCsv,
   setLettersCsv,
   setPersonMetadataCsv,
@@ -2833,29 +2859,35 @@ function DataInputsGroup({
 }) {
   return (
     <div className={groupCardClassName()}>
-      <div className={groupHeadingClassName()}>Data inputs</div>
-      <div className="space-y-3">
-        <DataSourceCard
-          title="Geography table"
-          fileInputId="geography-file"
-          onFileChange={uploadSetter(setGeographyCsv, setGeographyFileLabel)}
-          currentSource={geographyFileLabel}
-        />
+      <div className={groupHeadingClassName()}>DATA</div>
+      <CollapsiblePanelSection
+        title="Data Inputs"
+        open={showDataInputsPanel}
+        onToggle={() => setShowDataInputsPanel((v) => !v)}
+      >
+        <div className="space-y-3">
+          <DataSourceCard
+            title="Geography table"
+            fileInputId="geography-file"
+            onFileChange={uploadSetter(setGeographyCsv, setGeographyFileLabel)}
+            currentSource={geographyFileLabel}
+          />
 
-        <DataSourceCard
-          title="Raw data table"
-          fileInputId="letters-file"
-          onFileChange={uploadSetter(setLettersCsv, setLettersFileLabel)}
-          currentSource={lettersFileLabel}
-        />
+          <DataSourceCard
+            title="Raw data table"
+            fileInputId="letters-file"
+            onFileChange={uploadSetter(setLettersCsv, setLettersFileLabel)}
+            currentSource={lettersFileLabel}
+          />
 
-        <DataSourceCard
-          title="Person metadata table"
-          fileInputId="person-metadata-file"
-          onFileChange={uploadSetter(setPersonMetadataCsv, setPersonMetadataFileLabel)}
-          currentSource={personMetadataFileLabel}
-        />
-      </div>
+          <DataSourceCard
+            title="Person metadata table"
+            fileInputId="person-metadata-file"
+            onFileChange={uploadSetter(setPersonMetadataCsv, setPersonMetadataFileLabel)}
+            currentSource={personMetadataFileLabel}
+          />
+        </div>
+      </CollapsiblePanelSection>
     </div>
   );
 }
@@ -2874,6 +2906,8 @@ function DisplayFilteringGroup({
   showSummaryPanel,
   setShowSummaryPanel,
   rowDiagnostics,
+  showVisualizationTypePanel,
+  setShowVisualizationTypePanel,
   showDisplayControlsPanel,
   setShowDisplayControlsPanel,
   showLabels,
@@ -2923,12 +2957,15 @@ function DisplayFilteringGroup({
 }) {
   return (
     <div className={groupCardClassName()}>
-      <div className={groupHeadingClassName()}>Display and filtering</div>
+      <div className={groupHeadingClassName()}>OPTIONS</div>
 
-      <SummaryPanelContent
-        showSummaryPanel={showSummaryPanel}
-        setShowSummaryPanel={setShowSummaryPanel}
-        rowDiagnostics={rowDiagnostics}
+      <VisualizationTypePanelContent
+        showVisualizationTypePanel={showVisualizationTypePanel}
+        setShowVisualizationTypePanel={setShowVisualizationTypePanel}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        personLayoutMode={personLayoutMode}
+        setPersonLayoutMode={setPersonLayoutMode}
       />
 
       <DisplayControlsPanelContent
@@ -3009,6 +3046,12 @@ function DisplayFilteringGroup({
         graph={graph}
         exportStatus={exportStatus}
       />
+
+      <SummaryPanelContent
+        showSummaryPanel={showSummaryPanel}
+        setShowSummaryPanel={setShowSummaryPanel}
+        rowDiagnostics={rowDiagnostics}
+      />
     </div>
   );
 }
@@ -3030,6 +3073,10 @@ function LeftControlPanel({
   const {
     showLeftSidebar,
     setShowLeftSidebar,
+    showDataInputsPanel,
+    setShowDataInputsPanel,
+    showVisualizationTypePanel,
+    setShowVisualizationTypePanel,
     showDisplayControlsPanel,
     setShowDisplayControlsPanel,
     showTimelinePanel,
@@ -3118,6 +3165,8 @@ function LeftControlPanel({
           <h1 className={`${panelHeadingClassName()} ${serifHeadingClassName()}`}>Control Panel</h1>
 
           <DataInputsGroup
+            showDataInputsPanel={showDataInputsPanel}
+            setShowDataInputsPanel={setShowDataInputsPanel}
             setGeographyCsv={setGeographyCsv}
             setLettersCsv={setLettersCsv}
             setPersonMetadataCsv={setPersonMetadataCsv}
@@ -3132,6 +3181,8 @@ function LeftControlPanel({
 
           <DisplayFilteringGroup
             showSummaryPanel={showSummaryPanel}
+            showVisualizationTypePanel={showVisualizationTypePanel}
+            setShowVisualizationTypePanel={setShowVisualizationTypePanel}
             setShowSummaryPanel={setShowSummaryPanel}
             rowDiagnostics={rowDiagnostics}
             showDisplayControlsPanel={showDisplayControlsPanel}
@@ -3508,6 +3559,8 @@ export default function EuropeNetworkMapApp() {
   // These booleans control whether each accordion-like section renders its body.
   // They are separate from `showLeftSidebar`, which controls whether the entire
   // left panel subtree renders at all.
+  const [showDataInputsPanel, setShowDataInputsPanel] = useState(true);
+  const [showVisualizationTypePanel, setShowVisualizationTypePanel] = useState(false);
   const [showDisplayControlsPanel, setShowDisplayControlsPanel] = useState(false);
   const [showTimelinePanel, setShowTimelinePanel] = useState(false);
   const [showExportPanel, setShowExportPanel] = useState(false);
@@ -4031,6 +4084,10 @@ export default function EuropeNetworkMapApp() {
   const leftControlPanelProps = buildLeftControlPanelProps({
     showLeftSidebar,
     setShowLeftSidebar,
+    showDataInputsPanel,
+    setShowDataInputsPanel,
+    showVisualizationTypePanel,
+    setShowVisualizationTypePanel,
     showDisplayControlsPanel,
     setShowDisplayControlsPanel,
     showTimelinePanel,
