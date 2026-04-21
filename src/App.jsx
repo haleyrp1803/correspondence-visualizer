@@ -34,7 +34,9 @@ import {
   revokeObjectUrl,
 } from './exportHelpers';
 import { buildForcePersonPositions } from './personForceLayoutHelpers';
-import { InspectorConnectedCorrespondents } from './InspectorConnectedCorrespondents'; import { InspectorPersonPlaces } from './InspectorPersonPlaces';
+import { InspectorConnectedCorrespondents } from './InspectorConnectedCorrespondents';
+import { InspectorPersonPlaces } from './InspectorPersonPlaces';
+import { InspectorBackButton } from './InspectorBackButton';
 
 
 // ============================================================
@@ -1660,6 +1662,8 @@ function buildRightInspectorPanelProps(args) {
       viewMode: args.viewMode,
       onOpenPersonDetail: args.onOpenPersonDetail,
       onOpenPlaceDetail: args.onOpenPlaceDetail,
+      inspectorHistoryLength: args.inspectorHistoryLength,
+      onBackInspector: args.onBackInspector,
     },
     letterState: {
       linkedLettersToShow: args.linkedLettersToShow,
@@ -3213,6 +3217,8 @@ function RightInspectorPanel({
     viewMode,
     onOpenPersonDetail,
     onOpenPlaceDetail,
+    inspectorHistoryLength,
+    onBackInspector,
   } = inspectorState;
 
   const {
@@ -3231,6 +3237,11 @@ function RightInspectorPanel({
           <InspectorHeader
             showInspectorInfo={showInspectorInfo}
             setShowInspectorInfo={setShowInspectorInfo}
+          />
+
+          <InspectorBackButton
+            canGoBack={inspectorHistoryLength > 0}
+            onBack={onBackInspector}
           />
 
           {!selectedProps ? (
@@ -3302,15 +3313,53 @@ export default function EuropeNetworkMapApp() {
   const [minCount, setMinCount] = useState(1);
   const [search, setSearch] = useState('');
   const [selectedSelection, setSelectedSelection] = useState(null);
+  const [inspectorHistory, setInspectorHistory] = useState([]);
+  const inspectorNavigationRef = useRef(false);
   const [hoveredEdgeId, setHoveredEdgeId] = useState('');
   const [hoverCard, setHoverCard] = useState(null);
 
   const openInspectorPersonDetail = (name) => {
     if (!name) return;
+    if (selectedSelection) {
+      setInspectorHistory((prev) => [...prev, selectedSelection]);
+    }
+    inspectorNavigationRef.current = true;
     setShowRightSidebar(true);
     setSelectedSelection({ kind: 'person-detail', name });
     setShowAllLinkedLetters(false);
   };
+
+  const openInspectorPlaceDetail = (label) => {
+    if (!label) return;
+    if (selectedSelection) {
+      setInspectorHistory((prev) => [...prev, selectedSelection]);
+    }
+    inspectorNavigationRef.current = true;
+    setShowRightSidebar(true);
+    setSelectedSelection({ kind: 'place-detail', label });
+    setShowAllLinkedLetters(false);
+  };
+
+  const goBackInspector = () => {
+    setInspectorHistory((prev) => {
+      if (!prev.length) return prev;
+      const previous = prev[prev.length - 1];
+      inspectorNavigationRef.current = true;
+      setShowRightSidebar(true);
+      setSelectedSelection(previous);
+      setShowAllLinkedLetters(false);
+      return prev.slice(0, -1);
+    });
+  };
+
+  useEffect(() => {
+    if (!inspectorNavigationRef.current) {
+      if (!selectedSelection || ['node', 'edge', 'cluster'].includes(selectedSelection.kind)) {
+        setInspectorHistory([]);
+      }
+    }
+    inspectorNavigationRef.current = false;
+  }, [selectedSelection]);
 
   const [timelineMode, setTimelineMode] = useState('range');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -3625,6 +3674,7 @@ export default function EuropeNetworkMapApp() {
 
   const clearSelection = () => {
     setSelectedSelection(null);
+    setInspectorHistory([]);
     setShowAllLinkedLetters(false);
     setExpandedLetterSections({});
   };
@@ -3908,6 +3958,9 @@ export default function EuropeNetworkMapApp() {
     clearSelection,
     viewMode,
     onOpenPersonDetail: openInspectorPersonDetail,
+    onOpenPlaceDetail: openInspectorPlaceDetail,
+    inspectorHistoryLength: inspectorHistory.length,
+    onBackInspector: goBackInspector,
     linkedLettersToShow,
     selectedLetterMetadata,
     showAllLinkedLetters,
