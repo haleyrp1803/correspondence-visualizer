@@ -2622,15 +2622,12 @@ function MapAppearancePanelContent({
 }) {
   return (
     <CollapsiblePanelSection
-      title="Map appearance"
+      title="Theme"
       open={showThemePanel}
       onToggle={() => setShowThemePanel((v) => !v)}
       className="mt-3"
     >
       <div className="space-y-4 text-sm text-[var(--panel-card-muted-text)]">
-        <div className="rounded-xl bg-[var(--stat-card-bg)] p-3 text-[13px] text-[var(--stat-card-text)]">
-          Peridot is now the default full-app theme. Early modern and modern remain available here as map-only presets.
-        </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => applyThemePreset('preModern')} className={buttonClassName()}>Early modern map</button>
           <button onClick={() => applyThemePreset('modern')} className={buttonClassName()}>Modern map</button>
