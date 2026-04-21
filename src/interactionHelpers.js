@@ -79,12 +79,30 @@ function buildDateBounds(incidentEdges) {
   };
 }
 
+function buildCounterpartDetailsFromEdges(label, incidentEdges) {
+  const counterpartMap = new Map();
+
+  incidentEdges.forEach((edge) => {
+    const counterpartLabel = edge.sourceLabel === label ? edge.targetLabel : edge.sourceLabel;
+    if (!counterpartLabel) return;
+
+    const existing = counterpartMap.get(counterpartLabel) || {
+      label: counterpartLabel,
+      count: 0,
+    };
+
+    existing.count += edge.count || 0;
+    counterpartMap.set(counterpartLabel, existing);
+  });
+
+  return Array.from(counterpartMap.values()).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.label.localeCompare(b.label);
+  });
+}
+
 function buildCounterpartLabelsFromEdges(label, incidentEdges) {
-  return Array.from(
-    new Set(
-      incidentEdges.map((edge) => (edge.sourceLabel === label ? edge.targetLabel : edge.sourceLabel)),
-    ),
-  ).slice(0, 12);
+  return buildCounterpartDetailsFromEdges(label, incidentEdges).map((item) => item.label);
 }
 
 function buildTopPlacesFromLetters(linkedLetters) {
@@ -93,7 +111,7 @@ function buildTopPlacesFromLetters(linkedLetters) {
       linkedLetters
         .flatMap((letter) => [letter.sourceLoc, letter.targetLoc])
         .filter(Boolean)
-        .map((label) => [label, 1]),
+        .map((placeLabel) => [placeLabel, 1]),
     ).entries(),
   )
     .map(([label]) => label)
@@ -117,6 +135,7 @@ export function buildNodeSelection(node, graph, personMetadataByName) {
   const linkedLetters = buildLinkedLettersFromIncidentEdges(incidentEdges);
   const { earliestDate, latestDate } = buildDateBounds(incidentEdges);
   const matchedPersonMetadata = personMetadataByName.get(node.label) || null;
+  const counterpartDetails = buildCounterpartDetailsFromEdges(node.label, incidentEdges);
 
   return {
     ...node,
@@ -124,7 +143,8 @@ export function buildNodeSelection(node, graph, personMetadataByName) {
     incidentEdgeCount: incidentEdges.length,
     linkedLetterCount: linkedLetters.length,
     linkedLetters,
-    counterpartLabels: buildCounterpartLabelsFromEdges(node.label, incidentEdges),
+    counterpartLabels: counterpartDetails.map((item) => item.label),
+    counterpartDetails,
     earliestDate,
     latestDate,
     anchorLabel: node.anchorLabel || '',
@@ -135,13 +155,12 @@ export function buildNodeSelection(node, graph, personMetadataByName) {
 export function buildPersonDetailSelection(name, graph, personMetadataByName) {
   const directNode = graph.nodes.find((item) => item.label === name && !item.isCluster);
   if (directNode) {
+    const nodeSelection = buildNodeSelection(directNode, graph, personMetadataByName);
     return {
-      ...buildNodeSelection(directNode, graph, personMetadataByName),
+      ...nodeSelection,
       __kind: 'person-detail',
       detailLabel: name,
-      detailPlaces: buildTopPlacesFromLetters(
-        buildNodeSelection(directNode, graph, personMetadataByName).linkedLetters || [],
-      ),
+      detailPlaces: buildTopPlacesFromLetters(nodeSelection.linkedLetters || []),
     };
   }
 
@@ -152,6 +171,7 @@ export function buildPersonDetailSelection(name, graph, personMetadataByName) {
 
   const linkedLetters = buildLinkedLettersFromIncidentEdges(incidentEdges);
   const { earliestDate, latestDate } = buildDateBounds(incidentEdges);
+  const counterpartDetails = buildCounterpartDetailsFromEdges(name, incidentEdges);
 
   return {
     id: `person-detail:${name}`,
@@ -162,7 +182,8 @@ export function buildPersonDetailSelection(name, graph, personMetadataByName) {
     incidentEdgeCount: incidentEdges.length,
     linkedLetterCount: linkedLetters.length,
     linkedLetters,
-    counterpartLabels: buildCounterpartLabelsFromEdges(name, incidentEdges),
+    counterpartLabels: counterpartDetails.map((item) => item.label),
+    counterpartDetails,
     earliestDate,
     latestDate,
     anchorLabel: '',
@@ -175,13 +196,12 @@ export function buildPersonDetailSelection(name, graph, personMetadataByName) {
 export function buildPlaceDetailSelection(placeLabel, graph, personMetadataByName) {
   const directNode = graph.nodes.find((item) => item.label === placeLabel && !item.isCluster);
   if (directNode) {
+    const nodeSelection = buildNodeSelection(directNode, graph, personMetadataByName);
     return {
-      ...buildNodeSelection(directNode, graph, personMetadataByName),
+      ...nodeSelection,
       __kind: 'place-detail',
       detailLabel: placeLabel,
-      topPeople: buildTopPeopleFromLetters(
-        buildNodeSelection(directNode, graph, personMetadataByName).linkedLetters || [],
-      ),
+      topPeople: buildTopPeopleFromLetters(nodeSelection.linkedLetters || []),
     };
   }
 
@@ -192,6 +212,7 @@ export function buildPlaceDetailSelection(placeLabel, graph, personMetadataByNam
 
   const linkedLetters = buildLinkedLettersFromIncidentEdges(incidentEdges);
   const { earliestDate, latestDate } = buildDateBounds(incidentEdges);
+  const counterpartDetails = buildCounterpartDetailsFromEdges(placeLabel, incidentEdges);
 
   return {
     id: `place-detail:${placeLabel}`,
@@ -202,7 +223,8 @@ export function buildPlaceDetailSelection(placeLabel, graph, personMetadataByNam
     incidentEdgeCount: incidentEdges.length,
     linkedLetterCount: linkedLetters.length,
     linkedLetters,
-    counterpartLabels: buildCounterpartLabelsFromEdges(placeLabel, incidentEdges),
+    counterpartLabels: counterpartDetails.map((item) => item.label),
+    counterpartDetails,
     earliestDate,
     latestDate,
     anchorLabel: '',
@@ -248,10 +270,10 @@ export function enrichSelectedLetters(selectedProps, personMetadataByName) {
     selectedProps.__kind === 'edge'
       ? selectedProps.letterMetadata || []
       : selectedProps.__kind === 'node' ||
-        selectedProps.__kind === 'person-detail' ||
-        selectedProps.__kind === 'place-detail'
-      ? selectedProps.linkedLetters || []
-      : [];
+          selectedProps.__kind === 'person-detail' ||
+          selectedProps.__kind === 'place-detail'
+        ? selectedProps.linkedLetters || []
+        : [];
 
   return baseLetters.map((letter) => ({
     ...letter,
