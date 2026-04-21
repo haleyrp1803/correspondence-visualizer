@@ -1543,10 +1543,12 @@ function buildMapStageProps(args) {
     mapViewportSize: args.mapViewportSize,
     graph: args.graph,
     hoveredEdgeId: args.hoveredEdgeId,
+    hoveredNodeId: args.hoveredNodeId,
     handleEdgeEnter: args.handleEdgeEnter,
     handleEdgeLeave: args.handleEdgeLeave,
     handleEdgeClick: args.handleEdgeClick,
     handleNodeHover: args.handleNodeHover,
+    handleNodeLeave: args.handleNodeLeave,
     handleNodeClick: args.handleNodeClick,
     showLabels: args.showLabels,
     activeAnimationEdgeId: args.activeAnimationEdgeId,
@@ -1694,10 +1696,12 @@ function SvgMap({
   edges,
   nodes,
   hoveredEdgeId,
+  hoveredNodeId,
   onEdgeEnter,
   onEdgeLeave,
   onEdgeClick,
   onNodeHover,
+  onNodeLeave,
   onNodeClick,
   showLabels,
   activeAnimationEdgeId,
@@ -1971,6 +1975,7 @@ function SvgMap({
   const handleMouseLeave = () => {
     setDragState(null);
     onEdgeLeave();
+    onNodeLeave?.();
   };
 
   const panStep = 4.5;
@@ -2264,21 +2269,25 @@ function SvgMap({
               const inFrame = node.screenX >= frame.x && node.screenX <= frame.x + frame.w && node.screenY >= frame.y && node.screenY <= frame.y + frame.h;
               if (!inFrame) return null;
 
+              const isHovered = node.id === hoveredNodeId;
               const nodeFill = isSelected
                 ? 'var(--map-node-selected)'
-                : node.isCluster
-                  ? 'var(--map-node-cluster)'
-                  : isAnimated
-                    ? 'var(--map-node-animated)'
-                    : 'var(--map-node)';
-              const nodeStroke = 'var(--map-node-stroke)';
-              const nodeStrokeWidth = isSelected ? '3' : isAnimated ? '2.5' : node.isCluster ? '2' : '1.5';
-              const nodeRadius = isAnimated ? node.screenRadius + 3 : node.screenRadius;
+                : isHovered
+                  ? 'var(--map-edge-hover)'
+                  : node.isCluster
+                    ? 'var(--map-node-cluster)'
+                    : isAnimated
+                      ? 'var(--map-node-animated)'
+                      : 'var(--map-node)';
+              const nodeStroke = isHovered ? 'var(--map-edge-hover)' : 'var(--map-node-stroke)';
+              const nodeStrokeWidth = isSelected ? '3' : isHovered ? (node.isCluster ? '2.6' : '2.2') : isAnimated ? '2.5' : node.isCluster ? '2' : '1.5';
+              const nodeRadius = isAnimated ? node.screenRadius + 3 : isHovered ? node.screenRadius + 1.5 : node.screenRadius;
 
               return (
                 <g
                   key={node.id}
                   onMouseEnter={(event) => onNodeHover(node, getPointerPosition(event))}
+                  onMouseLeave={() => onNodeLeave?.()}
                   onClick={(event) => {
                     event.stopPropagation();
                     dispatchSelectionFromPoint(getPointerPosition(event), 'node', node);
@@ -2573,10 +2582,12 @@ function MapStage({
   mapViewportSize,
   graph,
   hoveredEdgeId,
+  hoveredNodeId,
   handleEdgeEnter,
   handleEdgeLeave,
   handleEdgeClick,
   handleNodeHover,
+  handleNodeLeave,
   handleNodeClick,
   showLabels,
   activeAnimationEdgeId,
@@ -2598,10 +2609,12 @@ function MapStage({
           edges={graph.edges}
           nodes={graph.nodes}
           hoveredEdgeId={hoveredEdgeId}
+          hoveredNodeId={hoveredNodeId}
           onEdgeEnter={handleEdgeEnter}
           onEdgeLeave={handleEdgeLeave}
           onEdgeClick={handleEdgeClick}
           onNodeHover={handleNodeHover}
+          onNodeLeave={handleNodeLeave}
           onNodeClick={handleNodeClick}
           showLabels={showLabels}
           activeAnimationEdgeId={activeAnimationEdgeId}
@@ -3316,6 +3329,7 @@ export default function EuropeNetworkMapApp() {
   const [inspectorHistory, setInspectorHistory] = useState([]);
   const inspectorNavigationRef = useRef(false);
   const [hoveredEdgeId, setHoveredEdgeId] = useState('');
+  const [hoveredNodeId, setHoveredNodeId] = useState('');
   const [hoverCard, setHoverCard] = useState(null);
 
   const openInspectorPersonDetail = (name) => {
@@ -3675,6 +3689,7 @@ export default function EuropeNetworkMapApp() {
   const clearSelection = () => {
     setSelectedSelection(null);
     setInspectorHistory([]);
+    setHoveredNodeId('');
     setShowAllLinkedLetters(false);
     setExpandedLetterSections({});
   };
@@ -3810,6 +3825,15 @@ export default function EuropeNetworkMapApp() {
     viewMode,
   });
 
+  const handleNodeHoverWithHighlight = (node, point) => {
+    setHoveredNodeId(node?.id || '');
+    handleNodeHover(node, point);
+  };
+
+  const clearHoveredNodeHighlight = () => {
+    setHoveredNodeId('');
+  };
+
 
   useEffect(() => {
     const element = mapViewportRef.current;
@@ -3864,10 +3888,12 @@ export default function EuropeNetworkMapApp() {
     mapViewportSize,
     graph,
     hoveredEdgeId,
+    hoveredNodeId,
     handleEdgeEnter,
     handleEdgeLeave,
     handleEdgeClick,
-    handleNodeHover,
+    handleNodeHover: handleNodeHoverWithHighlight,
+    handleNodeLeave: clearHoveredNodeHighlight,
     handleNodeClick,
     showLabels,
     activeAnimationEdgeId,
