@@ -77,7 +77,7 @@ export function TimelinePanelContent({
 
   return (
     <CollapsiblePanelSection
-      title="Timeline and playback"
+      title="Timeline"
       open={showTimelinePanel}
       onToggle={() => setShowTimelinePanel((v) => !v)}
       className="mt-3"
