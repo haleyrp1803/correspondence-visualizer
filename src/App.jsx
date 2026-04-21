@@ -34,6 +34,7 @@ import {
   revokeObjectUrl,
 } from './exportHelpers';
 import { buildForcePersonPositions } from './personForceLayoutHelpers';
+import { InspectorConnectedCorrespondents } from './InspectorConnectedCorrespondents';
 
 
 // ============================================================
@@ -1657,6 +1658,7 @@ function buildRightInspectorPanelProps(args) {
       selectedProps: args.selectedProps,
       clearSelection: args.clearSelection,
       viewMode: args.viewMode,
+      onOpenPersonDetail: args.onOpenPersonDetail,
     },
     letterState: {
       linkedLettersToShow: args.linkedLettersToShow,
@@ -3105,6 +3107,7 @@ function InspectorNodeView({
   setShowAllLinkedLetters,
   isLetterSectionExpanded,
   toggleLetterSection,
+  onOpenPersonDetail,
 }) {
   return (
     <div className="space-y-4">
@@ -3124,6 +3127,13 @@ function InspectorNodeView({
           <MissingPersonMetadataCard />
         ) : null}
       </InspectorSummaryCard>
+
+      {viewMode === 'person' ? (
+        <InspectorConnectedCorrespondents
+          names={selectedProps.counterpartLabels || []}
+          onOpenPerson={onOpenPersonDetail}
+        />
+      ) : null}
 
       <InspectorClearSelectionButton onClear={clearSelection} />
 
@@ -3191,6 +3201,7 @@ function RightInspectorPanel({
     selectedProps,
     clearSelection,
     viewMode,
+    onOpenPersonDetail,
   } = inspectorState;
 
   const {
@@ -3215,7 +3226,7 @@ function RightInspectorPanel({
             <InspectorEmptyState />
           ) : selectedProps.__kind === 'cluster' ? (
             <InspectorClusterView selectedProps={selectedProps} clearSelection={clearSelection} />
-          ) : selectedProps.__kind === 'node' ? (
+          ) : selectedProps.__kind === 'node' || selectedProps.__kind === 'person-detail' || selectedProps.__kind === 'place-detail' ? (
             <InspectorNodeView
               selectedProps={selectedProps}
               clearSelection={clearSelection}
@@ -3226,6 +3237,7 @@ function RightInspectorPanel({
               setShowAllLinkedLetters={setShowAllLinkedLetters}
               isLetterSectionExpanded={isLetterSectionExpanded}
               toggleLetterSection={toggleLetterSection}
+              onOpenPersonDetail={onOpenPersonDetail}
             />
           ) : selectedProps.__kind === 'edge' ? (
             <InspectorEdgeView
@@ -3280,6 +3292,13 @@ export default function EuropeNetworkMapApp() {
   const [selectedSelection, setSelectedSelection] = useState(null);
   const [hoveredEdgeId, setHoveredEdgeId] = useState('');
   const [hoverCard, setHoverCard] = useState(null);
+
+  const openInspectorPersonDetail = (name) => {
+    if (!name) return;
+    setShowRightSidebar(true);
+    setSelectedSelection({ kind: 'person-detail', name });
+    setShowAllLinkedLetters(false);
+  };
 
   const [timelineMode, setTimelineMode] = useState('range');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -3876,6 +3895,7 @@ export default function EuropeNetworkMapApp() {
     selectedProps,
     clearSelection,
     viewMode,
+    onOpenPersonDetail: openInspectorPersonDetail,
     linkedLettersToShow,
     selectedLetterMetadata,
     showAllLinkedLetters,
