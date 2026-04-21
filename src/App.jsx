@@ -2590,6 +2590,7 @@ function SummaryPanelContent({
       title="Summary and Diagnostics"
       open={showSummaryPanel}
       onToggle={() => setShowSummaryPanel((v) => !v)}
+      className="mt-3"
     >
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
