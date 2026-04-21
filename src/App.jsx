@@ -34,7 +34,7 @@ import {
   revokeObjectUrl,
 } from './exportHelpers';
 import { buildForcePersonPositions } from './personForceLayoutHelpers';
-import { InspectorConnectedCorrespondents } from './InspectorConnectedCorrespondents';
+import { InspectorConnectedCorrespondents } from './InspectorConnectedCorrespondents'; import { InspectorPersonPlaces } from './InspectorPersonPlaces';
 
 
 // ============================================================
@@ -1659,6 +1659,7 @@ function buildRightInspectorPanelProps(args) {
       clearSelection: args.clearSelection,
       viewMode: args.viewMode,
       onOpenPersonDetail: args.onOpenPersonDetail,
+      onOpenPlaceDetail: args.onOpenPlaceDetail,
     },
     letterState: {
       linkedLettersToShow: args.linkedLettersToShow,
@@ -3108,6 +3109,7 @@ function InspectorNodeView({
   isLetterSectionExpanded,
   toggleLetterSection,
   onOpenPersonDetail,
+  onOpenPlaceDetail,
 }) {
   return (
     <div className="space-y-4">
@@ -3132,6 +3134,14 @@ function InspectorNodeView({
         <InspectorConnectedCorrespondents
           names={selectedProps.counterpartLabels || []}
           onOpenPerson={onOpenPersonDetail}
+        />
+      ) : null}
+
+      {viewMode === 'person' && (selectedProps.__kind === 'person-detail' || selectedProps.__kind === 'node') ? (
+        <InspectorPersonPlaces
+          sentPlaces={selectedProps.sentPlaceLabels || []}
+          receivedPlaces={selectedProps.receivedPlaceLabels || []}
+          onOpenPlace={onOpenPlaceDetail}
         />
       ) : null}
 
@@ -3202,6 +3212,7 @@ function RightInspectorPanel({
     clearSelection,
     viewMode,
     onOpenPersonDetail,
+    onOpenPlaceDetail,
   } = inspectorState;
 
   const {
@@ -3238,6 +3249,7 @@ function RightInspectorPanel({
               isLetterSectionExpanded={isLetterSectionExpanded}
               toggleLetterSection={toggleLetterSection}
               onOpenPersonDetail={onOpenPersonDetail}
+              onOpenPlaceDetail={onOpenPlaceDetail}
             />
           ) : selectedProps.__kind === 'edge' ? (
             <InspectorEdgeView

@@ -67,7 +67,7 @@ function buildLinkedLettersFromIncidentEdges(incidentEdges) {
     const aDate = a.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
     const bDate = b.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
     if (aDate !== bDate) return aDate - bDate;
-    return (a.source || '').localeCompare(b.source || '');
+    return (a.sourcePerson || '').localeCompare(b.sourcePerson || '');
   });
 }
 
@@ -118,11 +118,40 @@ function buildTopPlacesFromLetters(linkedLetters) {
     .slice(0, 12);
 }
 
+function buildPlaceDetailsForPerson(linkedLetters, personLabel, mode) {
+  const placeMap = new Map();
+
+  linkedLetters.forEach((letter) => {
+    const matchesMode =
+      mode === 'sent'
+        ? letter.sourcePerson === personLabel
+        : letter.targetPerson === personLabel;
+
+    if (!matchesMode) return;
+
+    const placeLabel = letter.targetLoc;
+    if (!placeLabel) return;
+
+    const existing = placeMap.get(placeLabel) || {
+      label: placeLabel,
+      count: 0,
+    };
+
+    existing.count += 1;
+    placeMap.set(placeLabel, existing);
+  });
+
+  return Array.from(placeMap.values()).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.label.localeCompare(b.label);
+  });
+}
+
 function buildTopPeopleFromLetters(linkedLetters) {
   return Array.from(
     new Set(
       linkedLetters
-        .flatMap((letter) => [letter.source, letter.target])
+        .flatMap((letter) => [letter.sourcePerson, letter.targetPerson])
         .filter(Boolean),
     ),
   ).slice(0, 12);
@@ -149,6 +178,10 @@ export function buildNodeSelection(node, graph, personMetadataByName) {
     latestDate,
     anchorLabel: node.anchorLabel || '',
     personMetadata: matchedPersonMetadata,
+    sentPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, node.label, 'sent'),
+    sentPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, node.label, 'sent').map((item) => `${item.label} (${item.count})`),
+    receivedPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, node.label, 'received'),
+    receivedPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, node.label, 'received').map((item) => `${item.label} (${item.count})`),
   };
 }
 
@@ -161,6 +194,10 @@ export function buildPersonDetailSelection(name, graph, personMetadataByName) {
       __kind: 'person-detail',
       detailLabel: name,
       detailPlaces: buildTopPlacesFromLetters(nodeSelection.linkedLetters || []),
+      sentPlaceDetails: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], name, 'sent'),
+      sentPlaceLabels: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], name, 'sent').map((item) => `${item.label} (${item.count})`),
+      receivedPlaceDetails: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], name, 'received'),
+      receivedPlaceLabels: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], name, 'received').map((item) => `${item.label} (${item.count})`),
     };
   }
 
@@ -190,6 +227,10 @@ export function buildPersonDetailSelection(name, graph, personMetadataByName) {
     personMetadata: personMetadataByName.get(name) || null,
     detailLabel: name,
     detailPlaces: buildTopPlacesFromLetters(linkedLetters),
+    sentPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, name, 'sent'),
+    sentPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, name, 'sent').map((item) => `${item.label} (${item.count})`),
+    receivedPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, name, 'received'),
+    receivedPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, name, 'received').map((item) => `${item.label} (${item.count})`),
   };
 }
 
