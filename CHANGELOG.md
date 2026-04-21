@@ -1,5 +1,11 @@
 # Changelog
 
+## `02ecb11` — Document inspector navigation feature set
+- Updated `README.md`
+- Updated `MAINTAINERS_GUIDE.md`
+- Updated `CHANGELOG.md`
+- Recorded the stable inspector-navigation feature set and the deferred Back-button anchoring polish
+
 ## `5af819b` — Add inspector back navigation
 - Added a working inspector-internal Back button
 - Added a small history model for inspector-internal navigation only
