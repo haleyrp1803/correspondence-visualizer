@@ -242,4 +242,5 @@ Key recent stable rollback points include:
 - `2b3c265` — documentation updated for force-layout work
 - `5af819b` — working inspector Back button
 - `02ecb11` — documented inspector-navigation feature set
+- `43403c3` — restored detail to maintainer documentation
 - later UI-polish anchoring experiments for the Back button were intentionally not committed

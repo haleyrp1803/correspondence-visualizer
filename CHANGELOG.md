@@ -1,5 +1,10 @@
 # Changelog
 
+## `43403c3` — Restore detail to maintainer documentation
+- Added back missing detail in `MAINTAINERS_GUIDE.md`
+- Added back missing detail in `CHANGELOG.md`
+- Preserved the current stable inspector-navigation documentation state
+
 ## `02ecb11` — Document inspector navigation feature set
 - Updated `README.md`
 - Updated `MAINTAINERS_GUIDE.md`
@@ -64,4 +69,4 @@
 - Verified the project still installed and built cleanly before runtime wiring
 
 ## Deferred note
-- A visual-only refinement to anchor the inspector Back button directly beneath the close `×` was attempted and intentionally deferred after unstable / unsatisfactory results.
+- A visual-only refinement to anchor the inspector Back button directly beneath the close `×` was attempted and intentionally deferred after unstable or unsatisfactory results.
