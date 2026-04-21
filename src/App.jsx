@@ -1,6 +1,6 @@
 // Core React hooks used throughout the app.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { geoNaturalEarth1, geoPath } from 'd3-geo';
+import { geoContains, geoNaturalEarth1, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
 import countries110m from 'world-atlas/countries-110m.json';
 import {
@@ -512,26 +512,39 @@ function normalizeGeographyRows(rows) {
     sourceLat: asNumber(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.sourceLat)),
     sourceLon: asNumber(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.sourceLon)),
     sourcePerson: asText(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.sourcePerson)),
+    sourcePoliticalHint: extractPoliticalHintFromRow(row, 'source'),
     targetPerson: asText(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.targetPerson)),
     targetLoc: asText(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.targetLoc)),
     targetLat: asNumber(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.targetLat)),
     targetLon: asNumber(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.targetLon)),
+    targetPoliticalHint: extractPoliticalHintFromRow(row, 'target'),
   }));
 
   const placeMap = new Map();
 
-  const addPlace = (label, lat, lon, roleHint) => {
+  const addPlace = (label, lat, lon, roleHint, politicalHint = '') => {
     if (!label || !validCoord(lat, lon) || (lat === 0 && lon === 0)) return null;
     const key = makePlaceKey(label, lat, lon);
     if (!placeMap.has(key)) {
-      placeMap.set(key, { id: key, label, lat, lon, type: 'place', roleHint });
+      placeMap.set(key, {
+        id: key,
+        label,
+        lat,
+        lon,
+        type: 'place',
+        roleHint,
+        politicalHints: mergePoliticalHint([], politicalHint),
+      });
+    } else if (politicalHint) {
+      const existing = placeMap.get(key);
+      existing.politicalHints = mergePoliticalHint(existing.politicalHints, politicalHint);
     }
     return key;
   };
 
   const normalizedRows = cleaned.map((row, idx) => {
-    const sourcePlaceId = addPlace(row.sourceLoc, row.sourceLat, row.sourceLon, 'source');
-    const targetPlaceId = addPlace(row.targetLoc, row.targetLat, row.targetLon, 'target');
+    const sourcePlaceId = addPlace(row.sourceLoc, row.sourceLat, row.sourceLon, 'source', row.sourcePoliticalHint);
+    const targetPlaceId = addPlace(row.targetLoc, row.targetLat, row.targetLon, 'target', row.targetPoliticalHint);
     return {
       id: `geo_${idx + 1}`,
       ...row,
@@ -696,6 +709,61 @@ function projectToSvg(lon, lat, width, height) {
   const point = projection([lon, lat]);
   if (!point) return { x: width / 2, y: height / 2 };
   return { x: point[0], y: point[1] };
+}
+
+
+const POLITICAL_HINT_TOKENS = ['country', 'state', 'nation', 'region', 'territory'];
+
+function normalizePoliticalKey(value) {
+  return asText(value)
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function extractPoliticalHintFromRow(row, role) {
+  const roleTokens = role === 'source' ? ['source', 'from', 'sender'] : ['target', 'to', 'recipient'];
+  const otherRoleTokens = role === 'source' ? ['target', 'to', 'recipient'] : ['source', 'from', 'sender'];
+  const exactMatches = [];
+  const genericMatches = [];
+
+  Object.entries(row || {}).forEach(([rawKey, rawValue]) => {
+    const key = String(rawKey || '').toLowerCase();
+    if (!POLITICAL_HINT_TOKENS.some((token) => key.includes(token))) return;
+
+    const value = asText(rawValue);
+    if (!value) return;
+
+    const matchesRole = roleTokens.some((token) => key.includes(token));
+    const matchesOtherRole = otherRoleTokens.some((token) => key.includes(token));
+
+    if (matchesRole) {
+      exactMatches.push(value);
+    } else if (!matchesOtherRole) {
+      genericMatches.push(value);
+    }
+  });
+
+  return exactMatches[0] || genericMatches[0] || '';
+}
+
+function mergePoliticalHint(existingHints, nextHint) {
+  const merged = new Set(existingHints || []);
+  const normalized = normalizePoliticalKey(nextHint);
+  if (normalized) merged.add(normalized);
+  return Array.from(merged);
+}
+
+function extractPoliticalHintsFromNode(node) {
+  const hints = new Set(Array.isArray(node.politicalHints) ? node.politicalHints : []);
+  Object.entries(node || {}).forEach(([key, value]) => {
+    const lower = String(key || '').toLowerCase();
+    if (!POLITICAL_HINT_TOKENS.some((token) => lower.includes(token))) return;
+    const normalized = normalizePoliticalKey(value);
+    if (normalized) hints.add(normalized);
+  });
+  return Array.from(hints);
 }
 
 // Decorative water labels for the historical-map treatment.
@@ -1016,6 +1084,7 @@ const THEME_DEFAULTS = {
   mapFrameBg: '#e6ead8',
   mapFrameBorder: '#7e846c',
   mapLandFill: '#cfd7b8',
+  mapLandActiveFill: '#bac99d',
   mapLandStroke: '#80876a',
   mapGridStroke: '#c5d0c2',
   mapEdge: '#857d5f',
@@ -1091,6 +1160,7 @@ const MAP_STYLE_PRESETS = {
     mapFrameBg: '#efe3c7',
     mapFrameBorder: '#8e7752',
     mapLandFill: '#dfd3a5',
+    mapLandActiveFill: '#d2c087',
     mapLandStroke: '#8f7a5a',
     mapGridStroke: '#a7b8bf',
     mapEdge: '#8a5b34',
@@ -1125,6 +1195,7 @@ const MAP_STYLE_PRESETS = {
     mapFrameBg: '#173154',
     mapFrameBorder: '#3c5678',
     mapLandFill: '#e8ddcb',
+    mapLandActiveFill: '#d9cdb8',
     mapLandStroke: '#9d8f7c',
     mapGridStroke: '#3d5574',
     mapEdge: '#84a8c8',
@@ -1747,24 +1818,70 @@ function SvgMap({
       };
     });
   }, [width, height]);
-  const basemapPaths = useMemo(() => {
+  const basemapFeatures = useMemo(() => {
     try {
       const collection = feature(countries110m, countries110m.objects.countries);
       const features = collection.features || [];
       return features
-        .map((country, index) => ({
-          id: country.id || country.properties?.name || index,
-          d: basemapPathGenerator(country),
-        }))
+        .map((country, index) => {
+          const matchKeys = new Set();
+          [
+            country.properties?.name,
+            country.properties?.NAME,
+            country.properties?.admin,
+            country.properties?.name_long,
+            country.properties?.formal_en,
+            country.properties?.geounit,
+            country.properties?.sovereignt,
+          ].forEach((value) => {
+            const normalized = normalizePoliticalKey(value);
+            if (normalized) matchKeys.add(normalized);
+          });
+
+          return {
+            id: country.id || country.properties?.name || index,
+            d: basemapPathGenerator(country),
+            geometry: country,
+            matchKeys: Array.from(matchKeys),
+          };
+        })
         .filter((country) => country.d);
     } catch (error) {
       return [];
     }
   }, [basemapPathGenerator]);
 
+  const activeCountryIds = useMemo(() => {
+    if (!showGeographicBackdrop || !showBasemap || !basemapFeatures.length || !nodes.length) return new Set();
+
+    const matchedIds = new Set();
+
+    const findCountryByHint = (hint) => {
+      return basemapFeatures.find((featureItem) => featureItem.matchKeys.includes(hint));
+    };
+
+    nodes.forEach((node) => {
+      const hints = extractPoliticalHintsFromNode(node);
+      const hintedCountry = hints.map(findCountryByHint).find(Boolean);
+      if (hintedCountry) {
+        matchedIds.add(hintedCountry.id);
+        return;
+      }
+
+      if (typeof projection.invert !== 'function') return;
+      const lonLat = projection.invert([node.x, node.y]);
+      if (!lonLat || !Number.isFinite(lonLat[0]) || !Number.isFinite(lonLat[1])) return;
+
+      const containingCountry = basemapFeatures.find((featureItem) => geoContains(featureItem.geometry, lonLat));
+      if (containingCountry) matchedIds.add(containingCountry.id);
+    });
+
+    return matchedIds;
+  }, [basemapFeatures, nodes, projection, showBasemap, showGeographicBackdrop]);
+
   useEffect(() => {
-    setBasemapError(basemapPaths.length ? '' : 'Basemap unavailable');
-  }, [basemapPaths.length]);
+    setBasemapError(basemapFeatures.length ? '' : 'Basemap unavailable');
+  }, [basemapFeatures.length]);
 
   useEffect(() => {
     if (!nodes.length || !width || !height) return;
@@ -2146,11 +2263,11 @@ function SvgMap({
           <g transform={`translate(${view.tx} ${view.ty}) scale(${view.scale})`}>
             {showGeographicBackdrop ? (
               <>
-                {showBasemap && basemapPaths.length ? basemapPaths.map((featureItem) => (
+                {showBasemap && basemapFeatures.length ? basemapFeatures.map((featureItem) => (
                   <g key={featureItem.id}>
                     <path
                       d={featureItem.d}
-                      fill="var(--map-land-fill)"
+                      fill={activeCountryIds.has(featureItem.id) ? 'var(--map-land-active-fill)' : 'var(--map-land-fill)'}
                       stroke="var(--map-land-stroke)"
                       strokeWidth="1"
                       vectorEffect="non-scaling-stroke"
