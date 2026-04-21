@@ -56,25 +56,66 @@ export function buildClusterSelection(clusterNode) {
   };
 }
 
-export function buildNodeSelection(node, graph, personMetadataByName) {
-  const incidentEdges = graph.edges.filter(
-    (edge) => edge.sourceLabel === node.label || edge.targetLabel === node.label
-  );
-
-  const linkedLetters = Array.from(
+function buildLinkedLettersFromIncidentEdges(incidentEdges) {
+  return Array.from(
     new Map(
       incidentEdges
         .flatMap((edge) => edge.letterMetadata || [])
-        .map((letter) => [letter.id, letter])
-    ).values()
+        .map((letter) => [letter.id, letter]),
+    ).values(),
   ).sort((a, b) => {
     const aDate = a.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
     const bDate = b.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
     if (aDate !== bDate) return aDate - bDate;
     return (a.source || '').localeCompare(b.source || '');
   });
+}
 
+function buildDateBounds(incidentEdges) {
   const allDates = incidentEdges.flatMap((edge) => edge.dates || []).filter(Boolean).sort();
+  return {
+    earliestDate: allDates[0] || '',
+    latestDate: allDates[allDates.length - 1] || '',
+  };
+}
+
+function buildCounterpartLabelsFromEdges(label, incidentEdges) {
+  return Array.from(
+    new Set(
+      incidentEdges.map((edge) => (edge.sourceLabel === label ? edge.targetLabel : edge.sourceLabel)),
+    ),
+  ).slice(0, 12);
+}
+
+function buildTopPlacesFromLetters(linkedLetters) {
+  return Array.from(
+    new Map(
+      linkedLetters
+        .flatMap((letter) => [letter.sourceLoc, letter.targetLoc])
+        .filter(Boolean)
+        .map((label) => [label, 1]),
+    ).entries(),
+  )
+    .map(([label]) => label)
+    .slice(0, 12);
+}
+
+function buildTopPeopleFromLetters(linkedLetters) {
+  return Array.from(
+    new Set(
+      linkedLetters
+        .flatMap((letter) => [letter.source, letter.target])
+        .filter(Boolean),
+    ),
+  ).slice(0, 12);
+}
+
+export function buildNodeSelection(node, graph, personMetadataByName) {
+  const incidentEdges = graph.edges.filter(
+    (edge) => edge.sourceLabel === node.label || edge.targetLabel === node.label,
+  );
+  const linkedLetters = buildLinkedLettersFromIncidentEdges(incidentEdges);
+  const { earliestDate, latestDate } = buildDateBounds(incidentEdges);
   const matchedPersonMetadata = personMetadataByName.get(node.label) || null;
 
   return {
@@ -83,17 +124,91 @@ export function buildNodeSelection(node, graph, personMetadataByName) {
     incidentEdgeCount: incidentEdges.length,
     linkedLetterCount: linkedLetters.length,
     linkedLetters,
-    counterpartLabels: Array.from(
-      new Set(
-        incidentEdges.map((edge) =>
-          edge.sourceLabel === node.label ? edge.targetLabel : edge.sourceLabel
-        )
-      )
-    ).slice(0, 12),
-    earliestDate: allDates[0] || '',
-    latestDate: allDates[allDates.length - 1] || '',
+    counterpartLabels: buildCounterpartLabelsFromEdges(node.label, incidentEdges),
+    earliestDate,
+    latestDate,
     anchorLabel: node.anchorLabel || '',
     personMetadata: matchedPersonMetadata,
+  };
+}
+
+export function buildPersonDetailSelection(name, graph, personMetadataByName) {
+  const directNode = graph.nodes.find((item) => item.label === name && !item.isCluster);
+  if (directNode) {
+    return {
+      ...buildNodeSelection(directNode, graph, personMetadataByName),
+      __kind: 'person-detail',
+      detailLabel: name,
+      detailPlaces: buildTopPlacesFromLetters(
+        buildNodeSelection(directNode, graph, personMetadataByName).linkedLetters || [],
+      ),
+    };
+  }
+
+  const incidentEdges = graph.edges.filter(
+    (edge) => edge.sourceLabel === name || edge.targetLabel === name,
+  );
+  if (!incidentEdges.length) return null;
+
+  const linkedLetters = buildLinkedLettersFromIncidentEdges(incidentEdges);
+  const { earliestDate, latestDate } = buildDateBounds(incidentEdges);
+
+  return {
+    id: `person-detail:${name}`,
+    label: name,
+    degree: incidentEdges.reduce((sum, edge) => sum + (edge.count || 0), 0),
+    radius: 6,
+    __kind: 'person-detail',
+    incidentEdgeCount: incidentEdges.length,
+    linkedLetterCount: linkedLetters.length,
+    linkedLetters,
+    counterpartLabels: buildCounterpartLabelsFromEdges(name, incidentEdges),
+    earliestDate,
+    latestDate,
+    anchorLabel: '',
+    personMetadata: personMetadataByName.get(name) || null,
+    detailLabel: name,
+    detailPlaces: buildTopPlacesFromLetters(linkedLetters),
+  };
+}
+
+export function buildPlaceDetailSelection(placeLabel, graph, personMetadataByName) {
+  const directNode = graph.nodes.find((item) => item.label === placeLabel && !item.isCluster);
+  if (directNode) {
+    return {
+      ...buildNodeSelection(directNode, graph, personMetadataByName),
+      __kind: 'place-detail',
+      detailLabel: placeLabel,
+      topPeople: buildTopPeopleFromLetters(
+        buildNodeSelection(directNode, graph, personMetadataByName).linkedLetters || [],
+      ),
+    };
+  }
+
+  const incidentEdges = graph.edges.filter(
+    (edge) => edge.sourceLabel === placeLabel || edge.targetLabel === placeLabel,
+  );
+  if (!incidentEdges.length) return null;
+
+  const linkedLetters = buildLinkedLettersFromIncidentEdges(incidentEdges);
+  const { earliestDate, latestDate } = buildDateBounds(incidentEdges);
+
+  return {
+    id: `place-detail:${placeLabel}`,
+    label: placeLabel,
+    degree: incidentEdges.reduce((sum, edge) => sum + (edge.count || 0), 0),
+    radius: 6,
+    __kind: 'place-detail',
+    incidentEdgeCount: incidentEdges.length,
+    linkedLetterCount: linkedLetters.length,
+    linkedLetters,
+    counterpartLabels: buildCounterpartLabelsFromEdges(placeLabel, incidentEdges),
+    earliestDate,
+    latestDate,
+    anchorLabel: '',
+    personMetadata: null,
+    detailLabel: placeLabel,
+    topPeople: buildTopPeopleFromLetters(linkedLetters),
   };
 }
 
@@ -115,6 +230,14 @@ export function resolveSelection(selectedSelection, graph, personMetadataByName)
     return node ? buildNodeSelection(node, graph, personMetadataByName) : null;
   }
 
+  if (selectedSelection.kind === 'person-detail') {
+    return buildPersonDetailSelection(selectedSelection.name, graph, personMetadataByName);
+  }
+
+  if (selectedSelection.kind === 'place-detail') {
+    return buildPlaceDetailSelection(selectedSelection.label, graph, personMetadataByName);
+  }
+
   return null;
 }
 
@@ -124,7 +247,9 @@ export function enrichSelectedLetters(selectedProps, personMetadataByName) {
   const baseLetters =
     selectedProps.__kind === 'edge'
       ? selectedProps.letterMetadata || []
-      : selectedProps.__kind === 'node'
+      : selectedProps.__kind === 'node' ||
+        selectedProps.__kind === 'person-detail' ||
+        selectedProps.__kind === 'place-detail'
       ? selectedProps.linkedLetters || []
       : [];
 
