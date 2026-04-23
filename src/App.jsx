@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { geoContains, geoNaturalEarth1, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
-import countries110m from 'world-atlas/countries-110m.json';
+import countries50m from 'world-atlas/countries-50m.json';
 import {
   buildClusteredNodes,
   buildDefaultMapView,
@@ -1824,7 +1824,7 @@ function SvgMap({
   }, [width, height]);
   const basemapFeatures = useMemo(() => {
     try {
-      const collection = feature(countries110m, countries110m.objects.countries);
+      const collection = feature(countries50m, countries50m.objects.countries);
       const features = collection.features || [];
       return features
         .map((country, index) => {
