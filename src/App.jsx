@@ -85,6 +85,7 @@ import { InspectorEdgeView as InspectorEdgeViewView } from './InspectorEdgeView'
 import { InspectorNodeView as InspectorNodeViewView } from './InspectorNodeView';
 import { PERIDOT_TEMPLATE_COLUMNS } from './peridotCsvSchema.js';
 import { normalizePeridotTemplateRows } from './peridotCsvNormalizer.js';
+import { runAndReportPeridotNormalizationShadowComparison } from './peridotNormalizationShadowAudit.js';
 import { buildPeridotCsvValidationSummary } from './peridotCsvValidation.js';
 import { applyPeridotColumnMapping, buildInitialPeridotColumnMappingState } from './peridotColumnMapping.js';
 import { parsePeridotTableFile, summarizePeridotWorkbook } from './peridotWorkbookParsing.js';
@@ -3913,6 +3914,12 @@ export default function EuropeNetworkMapApp() {
       const normalized = normalizePeridotTemplateRows(parsedRows);
       const fileLabel = file.name || 'Uploaded Peridot CSV';
 
+      runAndReportPeridotNormalizationShadowComparison(parsedRows, {
+        fileLabel,
+        sourceKind: 'public-template-csv',
+        sourceSheet: 'Uploaded table',
+      });
+
       setPeridotNormalizedData(normalized);
 
       setPeridotFileLabel(fileLabel);
@@ -4119,9 +4126,16 @@ export default function EuropeNetworkMapApp() {
         const mappedRows = buildPeridotRowsFromWorkbookMapping(columnMappingStaging.workbookModel, nextWorkbookMapping);
         const finalValidationSummary = buildPeridotCsvValidationSummary(mappedRows, PERIDOT_TEMPLATE_COLUMNS);
         const normalized = normalizePeridotTemplateRows(mappedRows);
+        const fileLabel = `${columnMappingStaging.fileLabel || 'Mapped workbook'} (mapped workbook)`;
+
+        runAndReportPeridotNormalizationShadowComparison(mappedRows, {
+          fileLabel,
+          sourceKind: 'mapped-workbook',
+          sourceSheet: nextWorkbookMapping.primarySheetName || 'Mapped workbook',
+        });
 
         setPeridotNormalizedData(normalized);
-        setPeridotFileLabel(`${columnMappingStaging.fileLabel || 'Mapped workbook'} (mapped workbook)`);
+        setPeridotFileLabel(fileLabel);
         setPeridotValidationSummary(finalValidationSummary);
         setIsPeridotValidationModalOpen(true);
         // A completed mapping import is durable through `peridotValidationSummary`
@@ -4152,9 +4166,16 @@ export default function EuropeNetworkMapApp() {
       });
       const finalValidationSummary = validationSummary || buildPeridotCsvValidationSummary(mappedRows, PERIDOT_TEMPLATE_COLUMNS);
       const normalized = normalizePeridotTemplateRows(mappedRows);
+      const fileLabel = `${columnMappingStaging.fileLabel || 'Mapped table'} (mapped)`;
+
+      runAndReportPeridotNormalizationShadowComparison(mappedRows, {
+        fileLabel,
+        sourceKind: 'mapped-single-table',
+        sourceSheet: columnMappingStaging.mappingState?.sourceSheet || 'Uploaded table',
+      });
 
       setPeridotNormalizedData(normalized);
-      setPeridotFileLabel(`${columnMappingStaging.fileLabel || 'Mapped table'} (mapped)`);
+      setPeridotFileLabel(fileLabel);
       setPeridotValidationSummary(finalValidationSummary);
       setIsPeridotValidationModalOpen(true);
       // A completed mapping import is durable through `peridotValidationSummary`
