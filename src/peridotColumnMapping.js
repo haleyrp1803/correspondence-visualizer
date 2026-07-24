@@ -1159,7 +1159,7 @@ export function validatePeridotColumnMapping(headers = [], mapping = {}) {
 /**
  * Build all initial mapping state needed by a future mapping modal.
  */
-export function buildInitialPeridotColumnMappingState(headers = [], rows = []) {
+export function buildInitialPeridotColumnMappingState(headers = [], rows = [], options = {}) {
   const coreSuggestions = suggestPeridotCoreFieldMappings(headers);
   const coreMapping = Object.fromEntries(
     PERIDOT_CORE_FIELDS.map((field) => [field, coreSuggestions[field]?.sourceColumn || ''])
@@ -1173,6 +1173,7 @@ export function buildInitialPeridotColumnMappingState(headers = [], rows = []) {
   const customFieldSelections = suggestCustomInspectorFieldSelections(headers, rows, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping);
 
   return Object.freeze({
+    datasetProfileId: String(options.datasetProfileId || '').trim() || 'peridot.correspondence-directed-record',
     headers: Object.freeze(getUniqueHeaders(headers)),
     coreFieldDefinitions: PERIDOT_CORE_FIELD_DEFINITIONS,
     temporalFieldDefinitions: PERIDOT_TEMPORAL_FIELD_DEFINITIONS,

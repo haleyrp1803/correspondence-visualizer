@@ -90,6 +90,13 @@ import { applyPeridotColumnMapping, buildInitialPeridotColumnMappingState } from
 import { parsePeridotTableFile, summarizePeridotWorkbook } from './peridotWorkbookParsing.js';
 import { buildInitialPeridotWorkbookMappingState, buildPeridotRowsFromWorkbookMapping, validatePeridotWorkbookMapping } from './peridotWorkbookMapping.js';
 import { PeridotColumnMappingModal } from './PeridotColumnMappingModal.jsx';
+import {
+  DEFAULT_PERIDOT_DATASET_PROFILE_ID,
+  getPeridotDatasetProfile,
+  isPeridotCorrespondenceProfile,
+  PERIDOT_DATASET_PROFILES,
+  resolvePeridotDatasetProfileId,
+} from './peridotDatasetProfiles.js';
 import { PERIDOT_APP_THEME_DEFAULTS, PERIDOT_MAP_STYLE_PRESETS } from './peridotTheme.js';
 import {
   SAMPLE_GEOGRAPHY_CSV,
@@ -3175,6 +3182,9 @@ export default function EuropeNetworkMapApp() {
   const [isPeridotValidationModalOpen, setIsPeridotValidationModalOpen] = useState(false);
   const [peridotNormalizedData, setPeridotNormalizedData] = useState(null);
   const [columnMappingStaging, setColumnMappingStaging] = useState(null);
+  const [selectedDatasetProfileId, setSelectedDatasetProfileId] = useState(
+    DEFAULT_PERIDOT_DATASET_PROFILE_ID
+  );
   const [isColumnMappingModalOpen, setIsColumnMappingModalOpen] = useState(false);
 
   // ------------------------------------------------------------
@@ -3954,6 +3964,8 @@ export default function EuropeNetworkMapApp() {
     if (!file) return;
 
     const fileLabel = file.name || 'Uploaded table';
+    const datasetProfileId = resolvePeridotDatasetProfileId(selectedDatasetProfileId);
+    const datasetProfile = getPeridotDatasetProfile(datasetProfileId);
     const lowerName = fileLabel.toLowerCase();
     const displayFileType = lowerName.endsWith('.tsv')
       ? 'TSV'
@@ -3964,6 +3976,8 @@ export default function EuropeNetworkMapApp() {
     setIsColumnMappingModalOpen(false);
     setColumnMappingStaging({
       status: 'parsing',
+      datasetProfileId,
+      datasetProfile,
       fileLabel,
       fileType: displayFileType,
       rowCount: 0,
@@ -3999,11 +4013,17 @@ export default function EuropeNetworkMapApp() {
 
       const isMultiSheetWorkbook = usableSheets.length > 1;
       const mappingState = canUseCurrentSingleTableMapper
-        ? buildInitialPeridotColumnMappingState(primarySheet.headers || [], primarySheet.rows || [])
-        : buildInitialPeridotWorkbookMappingState(workbookModel);
+        ? buildInitialPeridotColumnMappingState(
+            primarySheet.headers || [],
+            primarySheet.rows || [],
+            { datasetProfileId }
+          )
+        : buildInitialPeridotWorkbookMappingState(workbookModel, { datasetProfileId });
 
       setColumnMappingStaging({
         status: 'ready',
+        datasetProfileId,
+        datasetProfile,
         fileLabel,
         fileType: workbookModel.fileType === 'excel'
           ? 'Excel workbook'
@@ -4034,6 +4054,8 @@ export default function EuropeNetworkMapApp() {
     } catch (error) {
       setColumnMappingStaging({
         status: 'error',
+        datasetProfileId,
+        datasetProfile,
         fileLabel,
         fileType: displayFileType,
         rowCount: 0,
@@ -4055,14 +4077,19 @@ export default function EuropeNetworkMapApp() {
     }
   };
 
-  const handleSaveColumnMappingState = ({ coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary } = {}) => {
+  const handleSaveColumnMappingState = ({ datasetProfileId, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary } = {}) => {
     setColumnMappingStaging((current) => {
       if (!current || current.status !== 'ready') return current;
 
       if (workbookMappingState) {
         return {
           ...current,
-          mappingState: workbookMappingState,
+          datasetProfileId: resolvePeridotDatasetProfileId(datasetProfileId || current.datasetProfileId),
+          datasetProfile: getPeridotDatasetProfile(datasetProfileId || current.datasetProfileId),
+          mappingState: {
+            ...workbookMappingState,
+            datasetProfileId: resolvePeridotDatasetProfileId(datasetProfileId || current.datasetProfileId),
+          },
           workbookMappingValidation: workbookValidation || current.workbookMappingValidation || null,
           workbookMappingSummary: workbookSummary || current.workbookMappingSummary || null,
           savedMappingAt: new Date().toLocaleTimeString(),
@@ -4071,8 +4098,11 @@ export default function EuropeNetworkMapApp() {
 
       return {
         ...current,
+        datasetProfileId: resolvePeridotDatasetProfileId(datasetProfileId || current.datasetProfileId),
+        datasetProfile: getPeridotDatasetProfile(datasetProfileId || current.datasetProfileId),
         mappingState: {
           ...(current.mappingState || {}),
+          datasetProfileId: resolvePeridotDatasetProfileId(datasetProfileId || current.datasetProfileId),
           coreMapping: coreMapping || current.mappingState?.coreMapping || {},
           temporalMapping: temporalMapping || current.mappingState?.temporalMapping || {},
           pointMapping: pointMapping || current.mappingState?.pointMapping || {},
@@ -4085,8 +4115,35 @@ export default function EuropeNetworkMapApp() {
     });
   };
 
-  const handleConfirmColumnMappingImport = ({ coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary } = {}) => {
+  const handleConfirmColumnMappingImport = ({ datasetProfileId, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary } = {}) => {
     if (!columnMappingStaging || columnMappingStaging.status !== 'ready') return;
+    const activeDatasetProfileId = resolvePeridotDatasetProfileId(
+      datasetProfileId
+      || columnMappingStaging.datasetProfileId
+      || columnMappingStaging.mappingState?.datasetProfileId
+    );
+
+    if (!isPeridotCorrespondenceProfile(activeDatasetProfileId)) {
+      setPeridotValidationSummary({
+        popup: {
+          title: 'Genealogy mapping is not active yet',
+          intro: 'Peridot preserved this upload as Genealogy / Person-Centered data, but Pass 3B.1 only establishes profile routing.',
+          capabilityLines: [],
+          warningLines: ['No data was changed.'],
+          closingLines: ['Genealogy-specific mapping roles and validation will be added in Pass 3B.2.'],
+        },
+        summaryLines: ['Genealogy profile routed; import not yet enabled.'],
+        warnings: [],
+        hasWarnings: true,
+        totalRows: columnMappingStaging.rowCount || 0,
+        acceptedRecordCount: 0,
+        unsupportedRowCount: 0,
+        capabilityCounts: {},
+      });
+      setIsPeridotValidationModalOpen(true);
+      return;
+    }
+
     if (!columnMappingStaging.mappingState) {
       setPeridotValidationSummary({
         popup: {
@@ -4691,6 +4748,13 @@ export default function EuropeNetworkMapApp() {
     peridotFileLabel,
     peridotValidationSummary,
     columnMappingStaging,
+    datasetProfiles: PERIDOT_DATASET_PROFILES,
+    selectedDatasetProfileId,
+    onSelectDatasetProfile: (profileId) => {
+      setSelectedDatasetProfileId(resolvePeridotDatasetProfileId(profileId));
+      setColumnMappingStaging(null);
+      setIsColumnMappingModalOpen(false);
+    },
     handleDownloadPeridotTemplate,
     handleColumnMappingTableUpload,
     openColumnMappingModal: () => setIsColumnMappingModalOpen(true),

@@ -18,6 +18,9 @@ export function PeridotDataWorkspace({
   peridotFileLabel,
   peridotValidationSummary,
   columnMappingStaging,
+  datasetProfiles,
+  selectedDatasetProfileId,
+  onSelectDatasetProfile,
   handleDownloadPeridotTemplate,
   handleColumnMappingTableUpload,
   openColumnMappingModal,
@@ -53,6 +56,46 @@ export function PeridotDataWorkspace({
             className="peridot-appear-soft peridot-appear-delay-1 block h-auto w-full select-none object-contain opacity-95 drop-shadow-[0_12px_22px_var(--peridot-role-card-shadow)]"
             draggable="false"
           />
+        </div>
+
+        <div className="mx-auto mb-8 max-w-4xl peridot-cream-card peridot-card-inner">
+          <p className="peridot-section-label">Dataset structure</p>
+          <h2 className="mt-2 text-2xl font-bold text-[var(--peridot-color-hex-26352b)]">
+            What does one row represent?
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-[var(--peridot-color-hex-42533f)]">
+            Choose the profile that matches the primary unit in your uploaded table. This selection travels with the staged file and determines which mapping workflow Peridot opens.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {(datasetProfiles || []).map((profile) => {
+              const selected = profile.id === selectedDatasetProfileId;
+              return (
+                <button
+                  key={profile.id}
+                  type="button"
+                  onClick={() => onSelectDatasetProfile?.(profile.id)}
+                  className={[
+                    'rounded-2xl border px-4 py-4 text-left transition',
+                    selected
+                      ? 'border-[var(--button-primary-active-border)] bg-[var(--button-primary-active-bg)] text-[var(--button-primary-text)] shadow-[0_10px_22px_var(--peridot-role-card-shadow)]'
+                      : 'border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] text-[var(--panel-card-text)] hover:border-[var(--button-primary-border)]',
+                  ].join(' ')}
+                  aria-pressed={selected}
+                >
+                  <span className="block text-xs font-semibold uppercase tracking-[0.12em] opacity-75">
+                    One row = {profile.primaryRowType === 'person' ? 'one person' : 'one record'}
+                  </span>
+                  <span className="mt-1 block text-lg font-bold">{profile.label}</span>
+                  <span className="mt-2 block text-sm leading-6 opacity-85">{profile.description}</span>
+                  {profile.canConfirmImport ? null : (
+                    <span className="mt-3 inline-flex rounded-full border border-current/25 px-2.5 py-1 text-xs font-semibold">
+                      Routing preview — mapping fields follow in Pass 3B.2
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-8">
@@ -109,6 +152,7 @@ export function PeridotDataWorkspace({
                 <h2 className="mt-2 text-2xl font-bold text-[var(--peridot-color-hex-26352b)]">Table staged for mapping</h2>
                 <p className="mt-2 text-sm leading-6 text-[var(--peridot-color-hex-42533f)]">
                   {columnMappingStaging.fileLabel} is staged as {columnMappingStaging.fileType || 'a table'} with {columnMappingStaging.rowCount || 0} rows and {columnMappingStaging.columnCount || 0} columns.
+                  {' '}Profile: {columnMappingStaging.datasetProfile?.label || 'Correspondence / Directed Record'}.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">

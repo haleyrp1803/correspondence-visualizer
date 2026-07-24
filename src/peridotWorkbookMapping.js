@@ -562,7 +562,7 @@ function getMappedCoreSheets(coreMappings = {}, temporalMappings = {}, pointMapp
   );
 }
 
-export function buildInitialPeridotWorkbookMappingState(workbookModel) {
+export function buildInitialPeridotWorkbookMappingState(workbookModel, options = {}) {
   const usableSheets = getUsableWorkbookSheets(workbookModel);
   const primarySuggestions = suggestPrimaryRecordSheets(workbookModel);
   const primarySheetName = primarySuggestions[0]?.sheetName || usableSheets[0]?.sheetName || '';
@@ -601,6 +601,7 @@ export function buildInitialPeridotWorkbookMappingState(workbookModel) {
     : [];
 
   return Object.freeze({
+    datasetProfileId: String(options.datasetProfileId || '').trim() || 'peridot.correspondence-directed-record',
     mode: usableSheets.length <= 1 ? PERIDOT_WORKBOOK_MAPPING_MODES.singleSheet : PERIDOT_WORKBOOK_MAPPING_MODES.multiSheetLetterId,
     primarySheetName,
     primaryLetterIdColumn: letterIdSuggestion?.columnName || '',

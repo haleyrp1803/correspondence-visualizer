@@ -15,6 +15,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PERIDOT_TEMPLATE_COLUMNS } from './peridotCsvSchema.js';
+import { getPeridotDatasetProfile, isPeridotGenealogyProfile } from './peridotDatasetProfiles.js';
 import { buildPeridotCsvValidationSummary } from './peridotCsvValidation.js';
 import {
   applyPeridotColumnMapping,
@@ -1095,6 +1096,10 @@ export function PeridotColumnMappingModal({
   onConfirmImport,
 }) {
   const mappingState = staging?.mappingState || {};
+  const datasetProfile = getPeridotDatasetProfile(
+    staging?.datasetProfileId || mappingState?.datasetProfileId
+  );
+  const isGenealogyProfile = isPeridotGenealogyProfile(datasetProfile.id);
   const isWorkbookMode = staging?.mappingMode === 'workbook' || Boolean(staging?.workbookMappingRequired);
   const workbookModel = staging?.workbookModel || null;
   const workbookSummary = staging?.workbookSummary || null;
@@ -1647,13 +1652,18 @@ export function PeridotColumnMappingModal({
   const buildCurrentMappingPayload = () => {
     if (isWorkbookMode) {
       return {
-        workbookMappingState: stripWorkbookDisplayDateMapping(workbookMapping),
+        datasetProfileId: datasetProfile.id,
+        workbookMappingState: {
+          ...stripWorkbookDisplayDateMapping(workbookMapping),
+          datasetProfileId: datasetProfile.id,
+        },
         workbookValidation,
         workbookSummary: workbookMappingSummary,
       };
     }
 
     return {
+      datasetProfileId: datasetProfile.id,
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
       pointMapping,
@@ -1678,6 +1688,7 @@ export function PeridotColumnMappingModal({
   };
 
   const handleConfirmImport = () => {
+    if (!datasetProfile.canConfirmImport) return;
     if (isWorkbookMode && !workbookValidation?.isValid) return;
     const payload = buildCurrentMappingPayload();
     onSaveMapping?.(payload);
@@ -1694,12 +1705,46 @@ export function PeridotColumnMappingModal({
     moveToStep(stepKeys[nextIndex]);
   };
 
-  const footerHelper = isWorkbookMode
-    ? 'Confirm import replaces the active dataset with assembled workbook rows.'
-    : 'Confirm import replaces the active dataset with this mapped table.';
+  const footerHelper = !datasetProfile.canConfirmImport
+    ? `${datasetProfile.label} is routed correctly. Genealogy-specific field mapping will be added in Pass 3B.2.`
+    : isWorkbookMode
+      ? 'Confirm import replaces the active dataset with assembled workbook rows.'
+      : 'Confirm import replaces the active dataset with this mapped table.';
 
   const renderStepContent = (stepForRender) => (
     <>
+          {isGenealogyProfile ? (
+            <div className="space-y-4">
+              <PreviewSummaryStrip
+                fileLabel={staging.fileLabel}
+                rowCount={staging.rowCount ?? rows.length}
+                columnCount={staging.columnCount ?? headers.length}
+                sheetName={isWorkbookMode ? workbookMapping?.primarySheetName : ''}
+                sheetCount={isWorkbookMode ? staging.sheetCount : undefined}
+              />
+              <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">
+                  Dataset profile
+                </div>
+                <h3 className="mt-2 text-xl font-bold text-[var(--panel-card-text)]">{datasetProfile.label}</h3>
+                <p className="mt-2 text-sm leading-7 text-[var(--panel-card-muted-text)]">
+                  Peridot has preserved this upload as person-centered genealogy data. The correspondence role controls are intentionally unavailable because they would misrepresent parents, partners, births, and deaths as source/target records.
+                </p>
+                <p className="mt-3 text-sm font-semibold leading-7 text-[var(--panel-card-text)]">
+                  Genealogy-specific role definitions and validation will be added in Pass 3B.2. No data can be imported from this profile during Pass 3B.1.
+                </p>
+              </div>
+              <PreviewTable
+                rows={isWorkbookMode ? (workbookModel?.sheets?.find((sheet) => sheet.sheetName === workbookMapping?.primarySheetName)?.rows || previewRows) : rows}
+                headers={isWorkbookMode ? (workbookModel?.sheets?.find((sheet) => sheet.sheetName === workbookMapping?.primarySheetName)?.headers || headers) : headers}
+                totalRows={staging.rowCount ?? rows.length}
+                maxRows={11}
+              />
+            </div>
+          ) : null}
+
+          {!isGenealogyProfile ? (<>
+
           {!isWorkbookMode && stepForRender === 'preview' ? (
             <div className="space-y-3">
               <PreviewSummaryStrip
@@ -1844,6 +1889,7 @@ export function PeridotColumnMappingModal({
               capabilityAudit={workbookCapabilityAudit}
             />
           ) : null}
+          </>) : null}
     </>
   );
 
@@ -1856,7 +1902,11 @@ export function PeridotColumnMappingModal({
               {staging.fileLabel || 'Uploaded data'}
             </div>
             <h2 className="[font-family:Georgia,'Palatino_Linotype','Book_Antiqua',Palatino,serif] text-2xl font-bold leading-tight text-[var(--heading-text)]">
-              {isWorkbookMode ? 'Assign workbook data roles for Peridot' : 'Assign data roles for Peridot'}
+              {isGenealogyProfile
+                ? 'Genealogy import profile'
+                : isWorkbookMode
+                  ? 'Assign workbook data roles for Peridot'
+                  : 'Assign data roles for Peridot'}
             </h2>
           </div>
           <button type="button" onClick={handleRequestCancel} className={buttonClassName({ variant: 'secondary' })}>
@@ -1865,7 +1915,11 @@ export function PeridotColumnMappingModal({
         </div>
 
         <div className="peridot-mapping-progress peridot-mapping-modal-enter-progress border-b border-[var(--panel-card-border)] bg-[var(--section-bg)] px-6 py-3">
-          {stepKeys.map((step, index) => (
+          {isGenealogyProfile ? (
+            <div className="text-sm font-semibold text-[var(--panel-card-text)]">
+              {datasetProfile.label} · profile routing confirmed
+            </div>
+          ) : stepKeys.map((step, index) => (
             <StepButton
               key={step}
               active={activeStep === step}
@@ -1888,30 +1942,38 @@ export function PeridotColumnMappingModal({
         <div className="peridot-mapping-modal-footer peridot-mapping-modal-enter-footer flex flex-wrap items-center justify-between gap-3 border-t border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-6 py-3">
           <p className="max-w-2xl text-sm text-[var(--panel-card-muted-text)]">{footerHelper}</p>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={goBack} disabled={activeStepIndex <= 0} className={buttonClassName({ variant: 'secondary' })}>
-              Back
-            </button>
-            {activeStepIndex < stepKeys.length - 1 ? (
-              <button type="button" onClick={goNext} className={buttonClassName({ variant: 'primary' })}>
-                Next
-              </button>
-            ) : isWorkbookMode ? (
-              <button
-                type="button"
-                onClick={handleConfirmImport}
-                disabled={!workbookValidation?.isValid}
-                className={buttonClassName({ variant: 'primary' })}
-              >
-                Confirm import
+            {isGenealogyProfile ? (
+              <button type="button" onClick={handleRequestCancel} className={buttonClassName({ variant: 'primary' })}>
+                Close profile preview
               </button>
             ) : (
-              <button type="button" onClick={handleConfirmImport} className={buttonClassName({ variant: 'primary' })}>
-                Confirm import
-              </button>
+              <>
+                <button type="button" onClick={goBack} disabled={activeStepIndex <= 0} className={buttonClassName({ variant: 'secondary' })}>
+                  Back
+                </button>
+                {activeStepIndex < stepKeys.length - 1 ? (
+                  <button type="button" onClick={goNext} className={buttonClassName({ variant: 'primary' })}>
+                    Next
+                  </button>
+                ) : isWorkbookMode ? (
+                  <button
+                    type="button"
+                    onClick={handleConfirmImport}
+                    disabled={!workbookValidation?.isValid}
+                    className={buttonClassName({ variant: 'primary' })}
+                  >
+                    Confirm import
+                  </button>
+                ) : (
+                  <button type="button" onClick={handleConfirmImport} className={buttonClassName({ variant: 'primary' })}>
+                    Confirm import
+                  </button>
+                )}
+                <button type="button" onClick={handleRequestCancel} className={buttonClassName({ variant: 'secondary' })}>
+                  Cancel
+                </button>
+              </>
             )}
-            <button type="button" onClick={handleRequestCancel} className={buttonClassName({ variant: 'secondary' })}>
-              Cancel
-            </button>
           </div>
         </div>
       </div>
