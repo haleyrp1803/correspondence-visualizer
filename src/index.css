@@ -1078,3 +1078,49 @@ textarea {
  * containment rules, now lives in `PeridotSearchWorkspace.css`. It is loaded
  * after this shared stylesheet and before the Mapping and Learn More layers.
  */
+
+
+/* Genealogy mapping workflow — Pass 3B.3
+ * Scoped controls for person-centered identity, family, life-event, place,
+ * attribute, and supplemental-row decisions. Keep this layer limited to the
+ * mapping modal; genealogy import remains inactive until Pass 3B.4.
+ */
+.peridot-mapping-modal .peridot-genealogy-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.peridot-mapping-modal .peridot-genealogy-field-control {
+  min-width: 0;
+  border: 1px solid var(--panel-card-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--input-bg) 72%, transparent);
+  padding: 0.75rem;
+}
+
+.peridot-mapping-modal .peridot-genealogy-field-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--panel-card-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.peridot-mapping-modal .peridot-genealogy-field-key {
+  display: block;
+  margin-top: 0.35rem;
+  overflow: hidden;
+  color: var(--panel-card-muted-text);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 780px) {
+  .peridot-mapping-modal .peridot-genealogy-field-grid {
+    grid-template-columns: 1fr;
+  }
+}

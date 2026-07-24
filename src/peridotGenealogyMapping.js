@@ -300,3 +300,147 @@ export function applyPeridotGenealogyWorkbookMapping(workbookModel,mappingState=
   const flat=Object.fromEntries(Object.entries(mappingState.fieldMappings||{}).map(([field,ref])=>[field,ref?.columnName||'']));
   return applyPeridotGenealogyMapping(sheet?.rows||[],flat);
 }
+
+
+export const PERIDOT_GENEALOGY_SUPPLEMENTAL_ROW_ACTIONS = Object.freeze({
+  unresolved: 'unresolved',
+  exclude: 'exclude',
+  attachPrevious: 'attach_previous',
+});
+
+export function getPeridotGenealogySupplementalRows(rows = [], fieldMapping = {}) {
+  const idColumn = asText(fieldMapping?.Person_ID);
+  if (!idColumn) return Object.freeze([]);
+  let previousPersonRowIndex = null;
+  const supplemental = [];
+
+  rows.forEach((row = {}, index) => {
+    const populated = Object.values(row).some((value) => asText(value));
+    if (!populated) return;
+    const personId = asText(row?.[idColumn]);
+    if (personId) {
+      previousPersonRowIndex = index;
+      return;
+    }
+    supplemental.push(Object.freeze({
+      rowIndex: index,
+      rowNumber: index + 2,
+      previousPersonRowIndex,
+      previousPersonRowNumber: previousPersonRowIndex === null ? null : previousPersonRowIndex + 2,
+      values: Object.freeze(Object.fromEntries(
+        Object.entries(row).filter(([, value]) => asText(value))
+      )),
+    }));
+  });
+
+  return Object.freeze(supplemental);
+}
+
+export function applyPeridotGenealogySupplementalRowActions(
+  rows = [],
+  fieldMapping = {},
+  supplementalRowActions = {},
+) {
+  const nextRows = rows.map((row) => ({ ...(row || {}) }));
+  const supplementalRows = getPeridotGenealogySupplementalRows(rows, fieldMapping);
+  const conflicts = [];
+  const unresolved = [];
+  const excluded = [];
+  const attached = [];
+
+  supplementalRows.forEach((item) => {
+    const action = supplementalRowActions?.[item.rowIndex]
+      || PERIDOT_GENEALOGY_SUPPLEMENTAL_ROW_ACTIONS.unresolved;
+
+    if (action === PERIDOT_GENEALOGY_SUPPLEMENTAL_ROW_ACTIONS.exclude) {
+      excluded.push(item.rowIndex);
+      nextRows[item.rowIndex] = null;
+      return;
+    }
+
+    if (action === PERIDOT_GENEALOGY_SUPPLEMENTAL_ROW_ACTIONS.attachPrevious) {
+      if (item.previousPersonRowIndex === null || !nextRows[item.previousPersonRowIndex]) {
+        unresolved.push(item.rowIndex);
+        return;
+      }
+
+      const target = nextRows[item.previousPersonRowIndex];
+      Object.entries(nextRows[item.rowIndex] || {}).forEach(([column, value]) => {
+        const incoming = asText(value);
+        if (!incoming) return;
+        const existing = asText(target?.[column]);
+        if (existing && existing !== incoming) {
+          conflicts.push(Object.freeze({
+            supplementalRowIndex: item.rowIndex,
+            targetRowIndex: item.previousPersonRowIndex,
+            column,
+            existingValue: target[column],
+            incomingValue: value,
+          }));
+          return;
+        }
+        if (!existing) target[column] = value;
+      });
+      attached.push(item.rowIndex);
+      nextRows[item.rowIndex] = null;
+      return;
+    }
+
+    unresolved.push(item.rowIndex);
+  });
+
+  return Object.freeze({
+    rows: Object.freeze(nextRows.filter(Boolean).map((row) => Object.freeze(row))),
+    supplementalRows,
+    unresolvedRowIndexes: Object.freeze(unresolved),
+    excludedRowIndexes: Object.freeze(excluded),
+    attachedRowIndexes: Object.freeze(attached),
+    conflicts: Object.freeze(conflicts),
+    isResolved: unresolved.length === 0 && conflicts.length === 0,
+  });
+}
+
+export function validatePeridotGenealogyMappingWithRowActions(
+  headers = [],
+  rows = [],
+  fieldMapping = {},
+  supplementalRowActions = {},
+) {
+  const resolution = applyPeridotGenealogySupplementalRowActions(
+    rows,
+    fieldMapping,
+    supplementalRowActions,
+  );
+  const validation = validatePeridotGenealogyMapping(headers, resolution.rows, fieldMapping);
+  const supplementalIssues = [];
+
+  resolution.unresolvedRowIndexes.forEach((rowIndex) => {
+    supplementalIssues.push({
+      severity: 'error',
+      code: 'unresolved_genealogy_supplemental_row',
+      rowNumber: rowIndex + 2,
+      message: `Choose whether populated row ${rowIndex + 2} should be excluded or attached to the preceding person.`,
+    });
+  });
+  resolution.conflicts.forEach((conflict) => {
+    supplementalIssues.push({
+      severity: 'error',
+      code: 'genealogy_supplemental_attachment_conflict',
+      rowNumber: conflict.supplementalRowIndex + 2,
+      message: `Row ${conflict.supplementalRowIndex + 2} conflicts with row ${conflict.targetRowIndex + 2} in column “${conflict.column}”; attachment will not overwrite the existing value.`,
+    });
+  });
+
+  const issues = [...validation.issues, ...supplementalIssues];
+  const errorCount = issues.filter((item) => item.severity === 'error').length;
+  const warningCount = issues.filter((item) => item.severity === 'warning').length;
+  return Object.freeze({
+    ...validation,
+    isValid: errorCount === 0,
+    canContinue: errorCount === 0,
+    errorCount,
+    warningCount,
+    issues: Object.freeze(issues.map((item) => Object.freeze(item))),
+    supplementalResolution: resolution,
+  });
+}

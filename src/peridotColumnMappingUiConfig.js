@@ -78,8 +78,10 @@ export function formatCapabilityName(capability) {
 export const GENEALOGY_STEP_KEYS = Object.freeze([
   'genealogy-preview',
   'genealogy-identity',
-  'genealogy-family',
+  'genealogy-parents',
+  'genealogy-partners',
   'genealogy-life-events',
+  'genealogy-places',
   'genealogy-attributes',
   'genealogy-review',
 ]);

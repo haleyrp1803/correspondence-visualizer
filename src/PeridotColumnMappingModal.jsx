@@ -16,7 +16,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PERIDOT_TEMPLATE_COLUMNS } from './peridotCsvSchema.js';
 import { getPeridotDatasetProfile, isPeridotGenealogyProfile } from './peridotDatasetProfiles.js';
-import { PERIDOT_GENEALOGY_FIELD_GROUPS } from './peridotGenealogyMapping.js';
+import {
+  applyPeridotGenealogySupplementalRowActions,
+  buildPeridotGenealogyCapabilitySummary,
+  getPeridotGenealogySupplementalRows,
+  makePeridotGenealogyWorkbookColumnRef,
+  validatePeridotGenealogyMappingWithRowActions,
+} from './peridotGenealogyMapping.js';
 import { buildPeridotCsvValidationSummary } from './peridotCsvValidation.js';
 import {
   applyPeridotColumnMapping,
@@ -48,6 +54,7 @@ import {
   definitionsForFields,
   formatCapabilityName,
   formatRecordShapeName,
+  GENEALOGY_STEP_KEYS,
   SINGLE_TABLE_STEP_KEYS,
   WORKBOOK_STEP_KEYS,
 } from './peridotColumnMappingUiConfig.js';
@@ -61,6 +68,15 @@ import {
   WorkbookSpatialMappingPanel,
   WorkbookTemporalMappingTable,
 } from './PeridotMappingFieldControls.jsx';
+import {
+  GenealogyAttributesStep,
+  GenealogyIdentityStep,
+  GenealogyLifeEventsStep,
+  GenealogyParentsStep,
+  GenealogyPartnersStep,
+  GenealogyPlacesStep,
+  GenealogyReviewPanel,
+} from './PeridotGenealogyMappingControls.jsx';
 import {
   buildWorkbookSelectionLabel,
   getWorkbookSelectionRef,
@@ -1090,79 +1106,6 @@ function stripWorkbookDisplayDateMapping(workbookMapping = {}) {
 }
 
 
-function GenealogySchemaSummary({ mappingState, isWorkbookMode }) {
-  const mapping = isWorkbookMode ? (mappingState.fieldMappings || {}) : (mappingState.fieldMapping || {});
-  const validation = mappingState.validation || {};
-  const capabilitySummary = mappingState.capabilitySummary || {};
-  const mappedFields = Object.entries(mapping).filter(([, value]) => (
-    isWorkbookMode
-      ? Boolean(value?.sheetName && value?.columnName)
-      : Boolean(String(value || '').trim())
-  ));
-  const groupRows = Object.entries(PERIDOT_GENEALOGY_FIELD_GROUPS).map(([group, fields]) => ({
-    group,
-    mapped: fields.filter((field) => {
-      const value = mapping[field];
-      return isWorkbookMode
-        ? Boolean(value?.sheetName && value?.columnName)
-        : Boolean(String(value || '').trim());
-    }).length,
-    total: fields.length,
-  }));
-  const issues = validation.issues || [];
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-3">
-        <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
-          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">Roles detected</div>
-          <div className="mt-1 text-xl font-bold text-[var(--panel-card-text)]">{mappedFields.length}</div>
-        </div>
-        <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
-          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">Validation errors</div>
-          <div className="mt-1 text-xl font-bold text-[var(--panel-card-text)]">{validation.errorCount || 0}</div>
-        </div>
-        <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
-          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">Warnings</div>
-          <div className="mt-1 text-xl font-bold text-[var(--panel-card-text)]">{validation.warningCount || 0}</div>
-        </div>
-      </div>
-
-      <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
-        {groupRows.map((item) => (
-          <div key={item.group} className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 px-3 py-2 text-sm">
-            <div className="font-semibold text-[var(--panel-card-text)]">{item.group.replace(/^\w/, (letter) => letter.toUpperCase())}</div>
-            <div className="mt-1 text-xs text-[var(--panel-card-muted-text)]">{item.mapped} of {item.total} roles detected</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
-        <div className="font-semibold text-[var(--panel-card-text)]">Capability preview</div>
-        <div className="mt-2 grid gap-1 sm:grid-cols-2">
-          {Object.entries(capabilitySummary).map(([key, value]) => (
-            <div key={key}>{key.replace(/([A-Z])/g, ' $1')}: <strong>{typeof value === 'boolean' ? (value ? 'available' : 'not detected') : value}</strong></div>
-          ))}
-        </div>
-      </div>
-
-      {issues.length ? (
-        <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
-          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">Schema validation</div>
-          <div className="mt-2 space-y-2">
-            {issues.slice(0, 12).map((issue, index) => (
-              <div key={`${issue.code}-${index}`} className="text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
-                <span className="font-semibold text-[var(--panel-card-text)]">{issue.severity === 'error' ? 'Error' : 'Warning'}:</span> {issue.message}
-              </div>
-            ))}
-            {issues.length > 12 ? <div className="text-xs text-[var(--panel-card-muted-text)]">Plus {issues.length - 12} additional issue(s).</div> : null}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 export function PeridotColumnMappingModal({
   open,
   staging,
@@ -1183,7 +1126,7 @@ export function PeridotColumnMappingModal({
   const headers = staging?.headers || [];
   const rows = staging?.rows || staging?.rawRows || staging?.previewRows || [];
   const previewRows = staging?.previewRows || rows.slice(0, 5);
-  const stepKeys = isWorkbookMode ? WORKBOOK_STEP_KEYS : SINGLE_TABLE_STEP_KEYS;
+  const stepKeys = isGenealogyProfile ? GENEALOGY_STEP_KEYS : (isWorkbookMode ? WORKBOOK_STEP_KEYS : SINGLE_TABLE_STEP_KEYS);
 
   const [activeStep, setActiveStep] = useState(stepKeys[0]);
   const [coreMapping, setCoreMapping] = useState(mappingState.coreMapping || {});
@@ -1193,6 +1136,14 @@ export function PeridotColumnMappingModal({
   const [relationshipMetadataMapping, setRelationshipMetadataMapping] = useState(normalizeRelationshipMetadataMapping(mappingState.relationshipMetadataMapping || {}));
   const [customFieldSelections, setCustomFieldSelections] = useState(mappingState.customFieldSelections || []);
   const [workbookMapping, setWorkbookMapping] = useState(stripWorkbookDisplayDateMapping(mappingState));
+  const [genealogyFieldMapping, setGenealogyFieldMapping] = useState(
+    isWorkbookMode
+      ? Object.fromEntries(Object.entries(mappingState.fieldMappings || {}).map(([field, ref]) => [field, ref?.columnName || '']))
+      : (mappingState.fieldMapping || {})
+  );
+  const [genealogySupplementalRowActions, setGenealogySupplementalRowActions] = useState(
+    mappingState.supplementalRowActions || {}
+  );
   const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
   const [renderedStep, setRenderedStep] = useState(stepKeys[0]);
   const [stepTransitionPhase, setStepTransitionPhase] = useState('idle');
@@ -1201,7 +1152,7 @@ export function PeridotColumnMappingModal({
   useEffect(() => {
     if (!open || !staging) return;
     const nextIsWorkbookMode = staging?.mappingMode === 'workbook' || Boolean(staging?.workbookMappingRequired);
-    const firstStep = nextIsWorkbookMode ? WORKBOOK_STEP_KEYS[0] : SINGLE_TABLE_STEP_KEYS[0];
+    const firstStep = isGenealogyProfile ? GENEALOGY_STEP_KEYS[0] : (nextIsWorkbookMode ? WORKBOOK_STEP_KEYS[0] : SINGLE_TABLE_STEP_KEYS[0]);
     stepTransitionTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
     stepTransitionTimeoutsRef.current = [];
     setActiveStep(firstStep);
@@ -1211,6 +1162,12 @@ export function PeridotColumnMappingModal({
     setTemporalMapping(stripDisplayDateMapping(mappingState.temporalMapping || {}));
     setRelationshipMetadataMapping(normalizeRelationshipMetadataMapping(mappingState.relationshipMetadataMapping || {}));
     setCustomFieldSelections(mappingState.customFieldSelections || []);
+    setGenealogyFieldMapping(
+      nextIsWorkbookMode
+        ? Object.fromEntries(Object.entries(mappingState.fieldMappings || {}).map(([field, ref]) => [field, ref?.columnName || '']))
+        : (mappingState.fieldMapping || {})
+    );
+    setGenealogySupplementalRowActions(mappingState.supplementalRowActions || {});
     setWorkbookMapping(
       nextIsWorkbookMode && staging?.workbookModel
         ? {
@@ -1321,6 +1278,41 @@ export function PeridotColumnMappingModal({
     }
   }, [activeStep, isWorkbookMode, workbookMappedRowsForAudit]);
 
+
+  const genealogySourceSheet = useMemo(() => (
+    isWorkbookMode
+      ? (workbookModel?.sheets || []).find((sheet) => sheet.sheetName === mappingState.primarySheetName)
+      : null
+  ), [isWorkbookMode, workbookModel, mappingState.primarySheetName]);
+
+  const genealogyHeaders = isWorkbookMode ? (genealogySourceSheet?.headers || []) : headers;
+  const genealogyRows = isWorkbookMode ? (genealogySourceSheet?.rows || []) : rows;
+
+  const genealogySupplementalRows = useMemo(
+    () => getPeridotGenealogySupplementalRows(genealogyRows, genealogyFieldMapping),
+    [genealogyRows, genealogyFieldMapping]
+  );
+
+  const genealogyValidation = useMemo(
+    () => validatePeridotGenealogyMappingWithRowActions(
+      genealogyHeaders,
+      genealogyRows,
+      genealogyFieldMapping,
+      genealogySupplementalRowActions,
+    ),
+    [genealogyHeaders, genealogyRows, genealogyFieldMapping, genealogySupplementalRowActions]
+  );
+
+  const genealogyResolvedRows = genealogyValidation?.supplementalResolution?.rows || genealogyRows;
+  const genealogyCapabilitySummary = useMemo(
+    () => buildPeridotGenealogyCapabilitySummary(
+      genealogyResolvedRows,
+      genealogyFieldMapping,
+      genealogyValidation,
+    ),
+    [genealogyResolvedRows, genealogyFieldMapping, genealogyValidation]
+  );
+
   if (!open || !staging || staging.status !== 'ready') return null;
 
   const singleStepLabels = {
@@ -1342,7 +1334,20 @@ export function PeridotColumnMappingModal({
     'workbook-review': 'Review',
   };
 
-  const stepLabels = isWorkbookMode ? workbookStepLabels : singleStepLabels;
+  const genealogyStepLabels = {
+    'genealogy-preview': 'Preview',
+    'genealogy-identity': 'Identity',
+    'genealogy-parents': 'Parents',
+    'genealogy-partners': 'Partners',
+    'genealogy-life-events': 'Life events',
+    'genealogy-places': 'Places',
+    'genealogy-attributes': 'Attributes',
+    'genealogy-review': 'Review',
+  };
+
+  const stepLabels = isGenealogyProfile
+    ? genealogyStepLabels
+    : (isWorkbookMode ? workbookStepLabels : singleStepLabels);
   const activeStepIndex = stepKeys.indexOf(activeStep);
 
   const moveToStep = (nextStep) => {
@@ -1724,7 +1729,49 @@ export function PeridotColumnMappingModal({
     )));
   };
 
+
+  const handleGenealogyFieldMappingChange = (field, sourceColumn) => {
+    setGenealogyFieldMapping((current) => ({ ...current, [field]: sourceColumn }));
+  };
+
+  const handleGenealogySupplementalActionChange = (rowIndex, action) => {
+    setGenealogySupplementalRowActions((current) => ({ ...current, [rowIndex]: action }));
+  };
+
   const buildCurrentMappingPayload = () => {
+    if (isGenealogyProfile) {
+      const supplementalResolution = applyPeridotGenealogySupplementalRowActions(
+        genealogyRows,
+        genealogyFieldMapping,
+        genealogySupplementalRowActions,
+      );
+      return {
+        datasetProfileId: datasetProfile.id,
+        genealogyMappingState: isWorkbookMode
+          ? {
+              ...mappingState,
+              fieldMappings: Object.fromEntries(
+                Object.entries(genealogyFieldMapping).map(([field, columnName]) => [
+                  field,
+                  columnName
+                    ? makePeridotGenealogyWorkbookColumnRef(mappingState.primarySheetName, columnName)
+                    : makePeridotGenealogyWorkbookColumnRef('', ''),
+                ])
+              ),
+              supplementalRowActions: genealogySupplementalRowActions,
+              validation: genealogyValidation,
+              capabilitySummary: genealogyCapabilitySummary,
+            }
+          : {
+              ...mappingState,
+              fieldMapping: genealogyFieldMapping,
+              supplementalRowActions: genealogySupplementalRowActions,
+              validation: genealogyValidation,
+              capabilitySummary: genealogyCapabilitySummary,
+            },
+        supplementalResolution,
+      };
+    }
     if (isWorkbookMode) {
       return {
         datasetProfileId: datasetProfile.id,
@@ -1780,9 +1827,11 @@ export function PeridotColumnMappingModal({
     moveToStep(stepKeys[nextIndex]);
   };
 
-  const footerHelper = !datasetProfile.canConfirmImport
-    ? `${datasetProfile.label} is routed correctly. Genealogy schema and validation are active; editable controls arrive in Pass 3B.3.`
-    : isWorkbookMode
+  const footerHelper = isGenealogyProfile
+    ? 'Save mapping preserves these genealogy role assignments and supplemental-row decisions. Active import remains disabled until Pass 3B.4.'
+    : !datasetProfile.canConfirmImport
+      ? `${datasetProfile.label} is routed correctly.`
+      : isWorkbookMode
       ? 'Confirm import replaces the active dataset with assembled workbook rows.'
       : 'Confirm import replaces the active dataset with this mapped table.';
 
@@ -1790,32 +1839,41 @@ export function PeridotColumnMappingModal({
     <>
           {isGenealogyProfile ? (
             <div className="space-y-4">
-              <PreviewSummaryStrip
-                fileLabel={staging.fileLabel}
-                rowCount={staging.rowCount ?? rows.length}
-                columnCount={staging.columnCount ?? headers.length}
-                sheetName={isWorkbookMode ? workbookMapping?.primarySheetName : ''}
-                sheetCount={isWorkbookMode ? staging.sheetCount : undefined}
-              />
-              <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
-                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">
-                  Dataset profile
-                </div>
-                <h3 className="mt-2 text-xl font-bold text-[var(--panel-card-text)]">{datasetProfile.label}</h3>
-                <p className="mt-2 text-sm leading-7 text-[var(--panel-card-muted-text)]">
-                  Peridot has preserved this upload as person-centered genealogy data. The correspondence role controls are intentionally unavailable because they would misrepresent parents, partners, births, and deaths as source/target records.
-                </p>
-                <p className="mt-3 text-sm font-semibold leading-7 text-[var(--panel-card-text)]">
-                  Genealogy-specific role definitions and validation are now active. The detected schema is previewed below; editable grouped controls and import activation remain intentionally deferred to Passes 3B.3 and 3B.4.
-                </p>
-              </div>
-              <GenealogySchemaSummary mappingState={mappingState} isWorkbookMode={isWorkbookMode} />
-              <PreviewTable
-                rows={isWorkbookMode ? (workbookModel?.sheets?.find((sheet) => sheet.sheetName === workbookMapping?.primarySheetName)?.rows || previewRows) : rows}
-                headers={isWorkbookMode ? (workbookModel?.sheets?.find((sheet) => sheet.sheetName === workbookMapping?.primarySheetName)?.headers || headers) : headers}
-                totalRows={staging.rowCount ?? rows.length}
-                maxRows={11}
-              />
+              {stepForRender === 'genealogy-preview' ? (
+                <>
+                  <PreviewSummaryStrip
+                    fileLabel={staging.fileLabel}
+                    rowCount={genealogyRows.length}
+                    columnCount={genealogyHeaders.length}
+                    sheetName={isWorkbookMode ? mappingState.primarySheetName : ''}
+                    sheetCount={isWorkbookMode ? staging.sheetCount : undefined}
+                  />
+                  <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
+                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">Genealogy profile</div>
+                    <h3 className="mt-2 text-xl font-bold text-[var(--panel-card-text)]">One row should represent one person.</h3>
+                    <p className="mt-2 text-sm leading-7 text-[var(--panel-card-muted-text)]">
+                      Assign stable person IDs, family references, life events, places, and optional attributes. Birth and death places remain event locations and are never converted into movement routes.
+                    </p>
+                  </div>
+                  <PreviewTable rows={genealogyRows} headers={genealogyHeaders} totalRows={genealogyRows.length} maxRows={11} />
+                </>
+              ) : null}
+
+              {stepForRender === 'genealogy-identity' ? <GenealogyIdentityStep headers={genealogyHeaders} mapping={genealogyFieldMapping} onChange={handleGenealogyFieldMappingChange} /> : null}
+              {stepForRender === 'genealogy-parents' ? <GenealogyParentsStep headers={genealogyHeaders} mapping={genealogyFieldMapping} onChange={handleGenealogyFieldMappingChange} /> : null}
+              {stepForRender === 'genealogy-partners' ? <GenealogyPartnersStep headers={genealogyHeaders} mapping={genealogyFieldMapping} onChange={handleGenealogyFieldMappingChange} /> : null}
+              {stepForRender === 'genealogy-life-events' ? <GenealogyLifeEventsStep headers={genealogyHeaders} mapping={genealogyFieldMapping} onChange={handleGenealogyFieldMappingChange} /> : null}
+              {stepForRender === 'genealogy-places' ? <GenealogyPlacesStep headers={genealogyHeaders} mapping={genealogyFieldMapping} onChange={handleGenealogyFieldMappingChange} /> : null}
+              {stepForRender === 'genealogy-attributes' ? <GenealogyAttributesStep headers={genealogyHeaders} mapping={genealogyFieldMapping} onChange={handleGenealogyFieldMappingChange} /> : null}
+              {stepForRender === 'genealogy-review' ? (
+                <GenealogyReviewPanel
+                  validation={genealogyValidation}
+                  capabilitySummary={genealogyCapabilitySummary}
+                  supplementalRows={genealogySupplementalRows}
+                  actions={genealogySupplementalRowActions}
+                  onActionChange={handleGenealogySupplementalActionChange}
+                />
+              ) : null}
             </div>
           ) : null}
 
@@ -1991,11 +2049,7 @@ export function PeridotColumnMappingModal({
         </div>
 
         <div className="peridot-mapping-progress peridot-mapping-modal-enter-progress border-b border-[var(--panel-card-border)] bg-[var(--section-bg)] px-6 py-3">
-          {isGenealogyProfile ? (
-            <div className="text-sm font-semibold text-[var(--panel-card-text)]">
-              {datasetProfile.label} · profile routing confirmed
-            </div>
-          ) : stepKeys.map((step, index) => (
+          {stepKeys.map((step, index) => (
             <StepButton
               key={step}
               active={activeStep === step}
@@ -2019,9 +2073,21 @@ export function PeridotColumnMappingModal({
           <p className="max-w-2xl text-sm text-[var(--panel-card-muted-text)]">{footerHelper}</p>
           <div className="flex flex-wrap gap-2">
             {isGenealogyProfile ? (
-              <button type="button" onClick={handleRequestCancel} className={buttonClassName({ variant: 'primary' })}>
-                Close profile preview
-              </button>
+              <>
+                <button type="button" onClick={goBack} disabled={activeStepIndex <= 0} className={buttonClassName({ variant: 'secondary' })}>Back</button>
+                {activeStepIndex < stepKeys.length - 1 ? (
+                  <button type="button" onClick={goNext} className={buttonClassName({ variant: 'primary' })}>Next</button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => onSaveMapping?.(buildCurrentMappingPayload())}
+                    className={buttonClassName({ variant: 'primary' })}
+                  >
+                    Save mapping
+                  </button>
+                )}
+                <button type="button" onClick={handleRequestCancel} className={buttonClassName({ variant: 'secondary' })}>Cancel</button>
+              </>
             ) : (
               <>
                 <button type="button" onClick={goBack} disabled={activeStepIndex <= 0} className={buttonClassName({ variant: 'secondary' })}>
