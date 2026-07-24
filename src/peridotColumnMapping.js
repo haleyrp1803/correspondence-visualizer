@@ -55,6 +55,7 @@
  */
 
 import { PERIDOT_TEMPLATE_COLUMNS } from './peridotCsvSchema.js';
+import { buildInitialPeridotGenealogyMappingState } from './peridotGenealogyMapping.js';
 
 export const PERIDOT_CORE_FIELDS = Object.freeze([
   'Date',
@@ -1160,6 +1161,9 @@ export function validatePeridotColumnMapping(headers = [], mapping = {}) {
  * Build all initial mapping state needed by a future mapping modal.
  */
 export function buildInitialPeridotColumnMappingState(headers = [], rows = [], options = {}) {
+  if (String(options.datasetProfileId || '').trim() === 'peridot.genealogy-person-centered') {
+    return buildInitialPeridotGenealogyMappingState(headers, rows, options);
+  }
   const coreSuggestions = suggestPeridotCoreFieldMappings(headers);
   const coreMapping = Object.fromEntries(
     PERIDOT_CORE_FIELDS.map((field) => [field, coreSuggestions[field]?.sourceColumn || ''])

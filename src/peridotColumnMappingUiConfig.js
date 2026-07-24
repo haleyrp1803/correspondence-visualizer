@@ -73,3 +73,22 @@ export function formatRecordShapeName(shape) {
 export function formatCapabilityName(capability) {
   return CAPABILITY_LABELS[capability] || capability;
 }
+
+
+export const GENEALOGY_STEP_KEYS = Object.freeze([
+  'genealogy-preview',
+  'genealogy-identity',
+  'genealogy-family',
+  'genealogy-life-events',
+  'genealogy-attributes',
+  'genealogy-review',
+]);
+
+export const GENEALOGY_FIELD_GROUP_LABELS = Object.freeze({
+  identity: 'Person identity',
+  parents: 'Parents',
+  partners: 'Partners',
+  birth: 'Birth',
+  death: 'Death',
+  attributes: 'Person attributes',
+});

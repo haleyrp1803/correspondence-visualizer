@@ -41,9 +41,10 @@ export const PERIDOT_DATASET_PROFILES = Object.freeze([
     label: 'Genealogy / Person-Centered',
     primaryRowType: 'person',
     description: 'Each row represents one person, with family relationships and life events linked by stable source IDs.',
-    mappingStatus: 'routed',
+    mappingStatus: 'schema-ready',
     canOpenMapping: true,
     canConfirmImport: false,
+    mappingSchemaReady: true,
   }),
 ]);
 

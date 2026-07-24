@@ -56,6 +56,7 @@ import {
   suggestCustomInspectorFieldSelections,
   suggestPeridotCoreFieldMappings,
 } from './peridotColumnMapping.js';
+import { buildInitialPeridotGenealogyWorkbookMappingState } from './peridotGenealogyMapping.js';
 
 export const PERIDOT_WORKBOOK_JOIN_TYPES = Object.freeze({
   letterId: 'letter_id',
@@ -563,6 +564,9 @@ function getMappedCoreSheets(coreMappings = {}, temporalMappings = {}, pointMapp
 }
 
 export function buildInitialPeridotWorkbookMappingState(workbookModel, options = {}) {
+  if (String(options.datasetProfileId || '').trim() === 'peridot.genealogy-person-centered') {
+    return buildInitialPeridotGenealogyWorkbookMappingState(workbookModel, options);
+  }
   const usableSheets = getUsableWorkbookSheets(workbookModel);
   const primarySuggestions = suggestPrimaryRecordSheets(workbookModel);
   const primarySheetName = primarySuggestions[0]?.sheetName || usableSheets[0]?.sheetName || '';

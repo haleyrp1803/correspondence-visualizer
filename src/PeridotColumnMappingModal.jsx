@@ -16,6 +16,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PERIDOT_TEMPLATE_COLUMNS } from './peridotCsvSchema.js';
 import { getPeridotDatasetProfile, isPeridotGenealogyProfile } from './peridotDatasetProfiles.js';
+import { PERIDOT_GENEALOGY_FIELD_GROUPS } from './peridotGenealogyMapping.js';
 import { buildPeridotCsvValidationSummary } from './peridotCsvValidation.js';
 import {
   applyPeridotColumnMapping,
@@ -1088,6 +1089,80 @@ function stripWorkbookDisplayDateMapping(workbookMapping = {}) {
   };
 }
 
+
+function GenealogySchemaSummary({ mappingState, isWorkbookMode }) {
+  const mapping = isWorkbookMode ? (mappingState.fieldMappings || {}) : (mappingState.fieldMapping || {});
+  const validation = mappingState.validation || {};
+  const capabilitySummary = mappingState.capabilitySummary || {};
+  const mappedFields = Object.entries(mapping).filter(([, value]) => (
+    isWorkbookMode
+      ? Boolean(value?.sheetName && value?.columnName)
+      : Boolean(String(value || '').trim())
+  ));
+  const groupRows = Object.entries(PERIDOT_GENEALOGY_FIELD_GROUPS).map(([group, fields]) => ({
+    group,
+    mapped: fields.filter((field) => {
+      const value = mapping[field];
+      return isWorkbookMode
+        ? Boolean(value?.sheetName && value?.columnName)
+        : Boolean(String(value || '').trim());
+    }).length,
+    total: fields.length,
+  }));
+  const issues = validation.issues || [];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">Roles detected</div>
+          <div className="mt-1 text-xl font-bold text-[var(--panel-card-text)]">{mappedFields.length}</div>
+        </div>
+        <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">Validation errors</div>
+          <div className="mt-1 text-xl font-bold text-[var(--panel-card-text)]">{validation.errorCount || 0}</div>
+        </div>
+        <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">Warnings</div>
+          <div className="mt-1 text-xl font-bold text-[var(--panel-card-text)]">{validation.warningCount || 0}</div>
+        </div>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+        {groupRows.map((item) => (
+          <div key={item.group} className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 px-3 py-2 text-sm">
+            <div className="font-semibold text-[var(--panel-card-text)]">{item.group.replace(/^\w/, (letter) => letter.toUpperCase())}</div>
+            <div className="mt-1 text-xs text-[var(--panel-card-muted-text)]">{item.mapped} of {item.total} roles detected</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+        <div className="font-semibold text-[var(--panel-card-text)]">Capability preview</div>
+        <div className="mt-2 grid gap-1 sm:grid-cols-2">
+          {Object.entries(capabilitySummary).map(([key, value]) => (
+            <div key={key}>{key.replace(/([A-Z])/g, ' $1')}: <strong>{typeof value === 'boolean' ? (value ? 'available' : 'not detected') : value}</strong></div>
+          ))}
+        </div>
+      </div>
+
+      {issues.length ? (
+        <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">Schema validation</div>
+          <div className="mt-2 space-y-2">
+            {issues.slice(0, 12).map((issue, index) => (
+              <div key={`${issue.code}-${index}`} className="text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+                <span className="font-semibold text-[var(--panel-card-text)]">{issue.severity === 'error' ? 'Error' : 'Warning'}:</span> {issue.message}
+              </div>
+            ))}
+            {issues.length > 12 ? <div className="text-xs text-[var(--panel-card-muted-text)]">Plus {issues.length - 12} additional issue(s).</div> : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function PeridotColumnMappingModal({
   open,
   staging,
@@ -1706,7 +1781,7 @@ export function PeridotColumnMappingModal({
   };
 
   const footerHelper = !datasetProfile.canConfirmImport
-    ? `${datasetProfile.label} is routed correctly. Genealogy-specific field mapping will be added in Pass 3B.2.`
+    ? `${datasetProfile.label} is routed correctly. Genealogy schema and validation are active; editable controls arrive in Pass 3B.3.`
     : isWorkbookMode
       ? 'Confirm import replaces the active dataset with assembled workbook rows.'
       : 'Confirm import replaces the active dataset with this mapped table.';
@@ -1731,9 +1806,10 @@ export function PeridotColumnMappingModal({
                   Peridot has preserved this upload as person-centered genealogy data. The correspondence role controls are intentionally unavailable because they would misrepresent parents, partners, births, and deaths as source/target records.
                 </p>
                 <p className="mt-3 text-sm font-semibold leading-7 text-[var(--panel-card-text)]">
-                  Genealogy-specific role definitions and validation will be added in Pass 3B.2. No data can be imported from this profile during Pass 3B.1.
+                  Genealogy-specific role definitions and validation are now active. The detected schema is previewed below; editable grouped controls and import activation remain intentionally deferred to Passes 3B.3 and 3B.4.
                 </p>
               </div>
+              <GenealogySchemaSummary mappingState={mappingState} isWorkbookMode={isWorkbookMode} />
               <PreviewTable
                 rows={isWorkbookMode ? (workbookModel?.sheets?.find((sheet) => sheet.sheetName === workbookMapping?.primarySheetName)?.rows || previewRows) : rows}
                 headers={isWorkbookMode ? (workbookModel?.sheets?.find((sheet) => sheet.sheetName === workbookMapping?.primarySheetName)?.headers || headers) : headers}
