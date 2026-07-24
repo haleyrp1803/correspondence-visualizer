@@ -1811,7 +1811,8 @@ export function PeridotColumnMappingModal({
 
   const handleConfirmImport = () => {
     if (!datasetProfile.canConfirmImport) return;
-    if (isWorkbookMode && !workbookValidation?.isValid) return;
+    if (isGenealogyProfile && !genealogyValidation?.isValid) return;
+    if (!isGenealogyProfile && isWorkbookMode && !workbookValidation?.isValid) return;
     const payload = buildCurrentMappingPayload();
     onSaveMapping?.(payload);
     onConfirmImport?.(payload);
@@ -1828,7 +1829,7 @@ export function PeridotColumnMappingModal({
   };
 
   const footerHelper = isGenealogyProfile
-    ? 'Save mapping preserves these genealogy role assignments and supplemental-row decisions. Active import remains disabled until Pass 3B.4.'
+    ? 'Confirm import activates this validated canonical genealogy dataset. Geographic routes remain unavailable unless the source explicitly records routes.'
     : !datasetProfile.canConfirmImport
       ? `${datasetProfile.label} is routed correctly.`
       : isWorkbookMode
@@ -2080,10 +2081,11 @@ export function PeridotColumnMappingModal({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => onSaveMapping?.(buildCurrentMappingPayload())}
+                    onClick={handleConfirmImport}
+                    disabled={!genealogyValidation?.isValid}
                     className={buttonClassName({ variant: 'primary' })}
                   >
-                    Save mapping
+                    Confirm import
                   </button>
                 )}
                 <button type="button" onClick={handleRequestCancel} className={buttonClassName({ variant: 'secondary' })}>Cancel</button>

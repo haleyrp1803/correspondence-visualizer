@@ -85,6 +85,7 @@ import { InspectorEdgeView as InspectorEdgeViewView } from './InspectorEdgeView'
 import { InspectorNodeView as InspectorNodeViewView } from './InspectorNodeView';
 import { PERIDOT_TEMPLATE_COLUMNS } from './peridotCsvSchema.js';
 import { buildPeridotCanonicalRuntimeModel } from './peridotCanonicalRuntimeModel.js';
+import { buildPeridotGenealogyRuntimeModel } from './peridotGenealogyRuntimeModel.js';
 import { buildPeridotCsvValidationSummary } from './peridotCsvValidation.js';
 import { applyPeridotColumnMapping, buildInitialPeridotColumnMappingState } from './peridotColumnMapping.js';
 import { parsePeridotTableFile, summarizePeridotWorkbook } from './peridotWorkbookParsing.js';
@@ -94,6 +95,7 @@ import {
   DEFAULT_PERIDOT_DATASET_PROFILE_ID,
   getPeridotDatasetProfile,
   isPeridotCorrespondenceProfile,
+  isPeridotGenealogyProfile,
   PERIDOT_DATASET_PROFILES,
   resolvePeridotDatasetProfileId,
 } from './peridotDatasetProfiles.js';
@@ -4077,9 +4079,24 @@ export default function EuropeNetworkMapApp() {
     }
   };
 
-  const handleSaveColumnMappingState = ({ datasetProfileId, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary } = {}) => {
+  const handleSaveColumnMappingState = ({ datasetProfileId, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
     setColumnMappingStaging((current) => {
       if (!current || current.status !== 'ready') return current;
+
+      if (genealogyMappingState) {
+        return {
+          ...current,
+          datasetProfileId: resolvePeridotDatasetProfileId(datasetProfileId || current.datasetProfileId),
+          datasetProfile: getPeridotDatasetProfile(datasetProfileId || current.datasetProfileId),
+          mappingState: {
+            ...genealogyMappingState,
+            datasetProfileId: resolvePeridotDatasetProfileId(datasetProfileId || current.datasetProfileId),
+          },
+          genealogySupplementalResolution: supplementalResolution || current.genealogySupplementalResolution || null,
+          genealogyMappingValidation: genealogyMappingState.validation || current.genealogyMappingValidation || null,
+          savedMappingAt: new Date().toLocaleTimeString(),
+        };
+      }
 
       if (workbookMappingState) {
         return {
@@ -4115,7 +4132,7 @@ export default function EuropeNetworkMapApp() {
     });
   };
 
-  const handleConfirmColumnMappingImport = ({ datasetProfileId, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary } = {}) => {
+  const handleConfirmColumnMappingImport = ({ datasetProfileId, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
     if (!columnMappingStaging || columnMappingStaging.status !== 'ready') return;
     const activeDatasetProfileId = resolvePeridotDatasetProfileId(
       datasetProfileId
@@ -4123,16 +4140,82 @@ export default function EuropeNetworkMapApp() {
       || columnMappingStaging.mappingState?.datasetProfileId
     );
 
+    if (isPeridotGenealogyProfile(activeDatasetProfileId)) {
+      try {
+        const nextGenealogyMapping = genealogyMappingState || columnMappingStaging.mappingState;
+        const nextResolution = supplementalResolution
+          || nextGenealogyMapping?.validation?.supplementalResolution
+          || columnMappingStaging.genealogySupplementalResolution;
+
+        if (!nextGenealogyMapping?.validation?.isValid || !nextResolution?.isResolved) {
+          const firstError = nextGenealogyMapping?.validation?.issues?.find((issue) => issue.severity === 'error');
+          throw new Error(firstError?.message || 'Genealogy mapping is not valid.');
+        }
+
+        const sourceRows = Array.isArray(nextResolution.rows) ? nextResolution.rows : [];
+        const isWorkbookImport = Boolean(columnMappingStaging.workbookMappingRequired || columnMappingStaging.mappingMode === 'workbook');
+        const fieldMapping = isWorkbookImport
+          ? Object.fromEntries(
+              Object.entries(nextGenealogyMapping.fieldMappings || {}).map(([field, ref]) => [field, ref?.columnName || ''])
+            )
+          : (nextGenealogyMapping.fieldMapping || {});
+
+        const fileLabel = `${columnMappingStaging.fileLabel || 'Mapped genealogy'} (genealogy)`;
+        const sourceSheet = isWorkbookImport
+          ? (nextGenealogyMapping.primarySheetName || columnMappingStaging.activeSheetName || 'People')
+          : (columnMappingStaging.activeSheetName || 'Uploaded table');
+
+        const normalized = buildPeridotGenealogyRuntimeModel(sourceRows, fieldMapping, {
+          fileLabel,
+          sourceKind: isWorkbookImport ? 'mapped-genealogy-workbook' : 'mapped-genealogy-table',
+          sourceSheet,
+          supplementalResolution: nextResolution,
+        });
+
+        setPeridotNormalizedData(normalized);
+        setPeridotFileLabel(fileLabel);
+        setPeridotValidationSummary(normalized.validationSummary);
+        setIsPeridotValidationModalOpen(true);
+        setColumnMappingStaging(null);
+        setIsColumnMappingModalOpen(false);
+        resetActiveDataInteractionState();
+        setViewMode('person');
+        setPersonLayoutMode('force');
+        setResolvedWorkspaceMode(PERIDOT_WORKSPACE_MODES.VISUALIZATIONS);
+        setIsSidePanelOpen(false);
+        return;
+      } catch (error) {
+        setPeridotValidationSummary({
+          popup: {
+            title: 'Genealogy import failed',
+            intro: `Peridot could not activate the genealogy dataset: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            capabilityLines: [],
+            warningLines: [],
+            closingLines: ['No data was changed.'],
+          },
+          summaryLines: ['Genealogy import failed.'],
+          warnings: [],
+          hasWarnings: true,
+          totalRows: columnMappingStaging.rowCount || 0,
+          acceptedRecordCount: 0,
+          unsupportedRowCount: 0,
+          capabilityCounts: {},
+        });
+        setIsPeridotValidationModalOpen(true);
+        return;
+      }
+    }
+
     if (!isPeridotCorrespondenceProfile(activeDatasetProfileId)) {
       setPeridotValidationSummary({
         popup: {
-          title: 'Genealogy mapping is not active yet',
-          intro: 'Peridot preserved this upload as Genealogy / Person-Centered data, but Pass 3B.1 only establishes profile routing.',
+          title: 'Unsupported dataset profile',
+          intro: 'Peridot could not identify an active import route for this dataset profile.',
           capabilityLines: [],
           warningLines: ['No data was changed.'],
-          closingLines: ['Genealogy-specific mapping roles and validation will be added in Pass 3B.2.'],
+          closingLines: ['Return to Manage Your Data and select a supported profile.'],
         },
-        summaryLines: ['Genealogy profile routed; import not yet enabled.'],
+        summaryLines: ['Unsupported dataset profile.'],
         warnings: [],
         hasWarnings: true,
         totalRows: columnMappingStaging.rowCount || 0,
