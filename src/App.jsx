@@ -84,8 +84,7 @@ import { InspectorClusterView as InspectorClusterViewView } from './InspectorClu
 import { InspectorEdgeView as InspectorEdgeViewView } from './InspectorEdgeView';
 import { InspectorNodeView as InspectorNodeViewView } from './InspectorNodeView';
 import { PERIDOT_TEMPLATE_COLUMNS } from './peridotCsvSchema.js';
-import { normalizePeridotTemplateRows } from './peridotCsvNormalizer.js';
-import { runAndReportPeridotNormalizationShadowComparison } from './peridotNormalizationShadowAudit.js';
+import { buildPeridotCanonicalRuntimeModel } from './peridotCanonicalRuntimeModel.js';
 import { buildPeridotCsvValidationSummary } from './peridotCsvValidation.js';
 import { applyPeridotColumnMapping, buildInitialPeridotColumnMappingState } from './peridotColumnMapping.js';
 import { parsePeridotTableFile, summarizePeridotWorkbook } from './peridotWorkbookParsing.js';
@@ -3911,10 +3910,8 @@ export default function EuropeNetworkMapApp() {
       const parsedRows = parseCsv(text);
       const headers = getCsvHeaders(text);
       const validationSummary = buildPeridotCsvValidationSummary(parsedRows, headers);
-      const normalized = normalizePeridotTemplateRows(parsedRows);
       const fileLabel = file.name || 'Uploaded Peridot CSV';
-
-      runAndReportPeridotNormalizationShadowComparison(parsedRows, {
+      const normalized = buildPeridotCanonicalRuntimeModel(parsedRows, {
         fileLabel,
         sourceKind: 'public-template-csv',
         sourceSheet: 'Uploaded table',
@@ -4125,10 +4122,8 @@ export default function EuropeNetworkMapApp() {
 
         const mappedRows = buildPeridotRowsFromWorkbookMapping(columnMappingStaging.workbookModel, nextWorkbookMapping);
         const finalValidationSummary = buildPeridotCsvValidationSummary(mappedRows, PERIDOT_TEMPLATE_COLUMNS);
-        const normalized = normalizePeridotTemplateRows(mappedRows);
         const fileLabel = `${columnMappingStaging.fileLabel || 'Mapped workbook'} (mapped workbook)`;
-
-        runAndReportPeridotNormalizationShadowComparison(mappedRows, {
+        const normalized = buildPeridotCanonicalRuntimeModel(mappedRows, {
           fileLabel,
           sourceKind: 'mapped-workbook',
           sourceSheet: nextWorkbookMapping.primarySheetName || 'Mapped workbook',
@@ -4165,10 +4160,8 @@ export default function EuropeNetworkMapApp() {
         customFieldSelections: nextCustomFieldSelections,
       });
       const finalValidationSummary = validationSummary || buildPeridotCsvValidationSummary(mappedRows, PERIDOT_TEMPLATE_COLUMNS);
-      const normalized = normalizePeridotTemplateRows(mappedRows);
       const fileLabel = `${columnMappingStaging.fileLabel || 'Mapped table'} (mapped)`;
-
-      runAndReportPeridotNormalizationShadowComparison(mappedRows, {
+      const normalized = buildPeridotCanonicalRuntimeModel(mappedRows, {
         fileLabel,
         sourceKind: 'mapped-single-table',
         sourceSheet: columnMappingStaging.mappingState?.sourceSheet || 'Uploaded table',
