@@ -13,6 +13,7 @@
 
 import React from 'react';
 import dataDividerFiligree from '../assets/Adobe Stock Filigree 3.png';
+import { PeridotUniversalUploadTestHarness } from './PeridotUniversalUploadTestHarness.jsx';
 
 export function PeridotDataWorkspace({
   peridotFileLabel,
@@ -178,6 +179,8 @@ export function PeridotDataWorkspace({
             Current source: <strong className="text-[var(--peridot-color-hex-fbf7ea)]">{peridotFileLabel}</strong>
           </p>
         ) : null}
+
+        <PeridotUniversalUploadTestHarness />
       </div>
     </section>
   );

@@ -1,9 +1,9 @@
 /*
- * Standalone Phase 2.6 universal-upload prototype.
+ * Phase 2.7 universal-upload prototype, mounted only through the experimental test harness.
  *
- * This component is intentionally NOT wired into App.jsx or the active mapping
- * modal. It exists so the complicated interaction model can be tested and
- * simplified before production integration.
+ * This component remains disconnected from App.jsx import commitment and the active mapping
+ * modal. Phase 2.7 mounts it only through a test harness so the interaction model can be
+ * evaluated with real files before production integration.
  */
 
 import React, { useMemo, useState } from 'react';
@@ -539,9 +539,9 @@ export function PeridotUniversalUploadPrototype({ sourceManifest, sourceRowsByTa
   return (
     <div className="rounded-[2rem] border border-[var(--panel-card-border)] bg-[var(--panel-bg)] p-5 shadow-xl">
       <header className="mb-4">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted-text)]">Phase 2.6 prototype</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted-text)]">Phase 2.7 interactive prototype</div>
         <h2 className="mt-1 text-2xl font-bold text-[var(--panel-card-text)]">Describe how your data is organized</h2>
-        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--panel-card-muted-text)]">This deliberately detailed prototype now supports return-and-edit mapping. Review is reversible: earlier choices can be changed, dependent mappings become inactive when an upstream choice makes them ineligible, unrelated work stays active, and paused draft work is preserved for restoration.</p>
+        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--panel-card-muted-text)]">This deliberately detailed prototype is now mounted for hands-on testing with real files. It remains non-production: nothing you do here changes Peridot’s active dataset. Review is reversible, earlier choices can be changed, and dependent draft work is preserved when temporarily inactive.</p>
       </header>
 
       <nav className="mb-5 flex flex-wrap gap-2" aria-label="Universal upload prototype steps">
