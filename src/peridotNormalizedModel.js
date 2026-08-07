@@ -7,8 +7,9 @@
 
 import { makePeridotProvenance } from './peridotNormalizationProvenance.js';
 import { makePeridotTemporalAssertion } from './peridotTemporalAssertions.js';
+import { makePeridotSavedVariables, makePeridotUniversalMappingDefinition } from './peridotUniversalMappingModel.js';
 
-export const PERIDOT_NORMALIZED_SCHEMA_VERSION = '1.0.0-draft';
+export const PERIDOT_NORMALIZED_SCHEMA_VERSION = '1.1.0-draft';
 
 export const PERIDOT_NORMALIZED_COLLECTIONS = Object.freeze([
   'entities',
@@ -274,6 +275,8 @@ export function makePeridotNormalizedDataset({
   importedAt = '',
   sourceManifest = {},
   mappingProfile = {},
+  variableDefinitions = [],
+  universalMapping = {},
   entities = [],
   places = [],
   records = [],
@@ -293,6 +296,8 @@ export function makePeridotNormalizedDataset({
     importedAt: asText(importedAt),
     sourceManifest: asObject(sourceManifest),
     mappingProfile: asObject(mappingProfile),
+    variableDefinitions: makePeridotSavedVariables(variableDefinitions),
+    universalMapping: makePeridotUniversalMappingDefinition(universalMapping),
     ...Object.fromEntries(PERIDOT_NORMALIZED_COLLECTIONS.map((name) => [name, asArray(collections[name])])),
     validation: asObject(validation),
     capabilities: asObject(capabilities),
