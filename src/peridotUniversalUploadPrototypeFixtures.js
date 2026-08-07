@@ -1,4 +1,4 @@
-/* Phase 2.4 fixture definitions for the isolated universal-upload prototype. */
+/* Phase 2.5 fixture definitions for the isolated universal-upload prototype. */
 
 import {
   PERIDOT_GENERATED_VARIABLE_SOURCES,
@@ -28,6 +28,8 @@ import {
   getPrototypeTablesForStep,
   makePeridotUniversalUploadPrototypeState,
   savePrototypeRepeatedHeadingGroup,
+  savePrototypeTableConnection,
+  getPrototypeTableConnectionReport,
   setPrototypeSheetPurpose,
 } from './peridotUniversalUploadPrototype.js';
 import { recognizePeridotUniversalFields } from './peridotUniversalFieldRecognizers.js';
@@ -36,6 +38,10 @@ import {
   PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS,
   buildPeridotRepeatedStructurePreview,
 } from './peridotUniversalRepeatedStructure.js';
+import {
+  PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS,
+  buildPeridotTableConnectionMatchReport,
+} from './peridotUniversalTableConnections.js';
 
 function makeManifest(fileName, sheets) {
   const fileId = makePeridotSourceFileId({ fileName });
@@ -181,9 +187,14 @@ export const mariaPrototypeFixture = (() => {
     [raw.id]: [
       { 'Unique ID': 'MM0001', 'Archival Collection': 'MAP', 'Archival Page (r/v)': '12r', 'PDF Page': 14, 'Date*': '1615-04-12', 'Source Location': 'Firenze', Source: 'Maria Maddalena de Medici', 'Source Title': 'Archduchess', Target: 'Carlo de Medici', 'Target Title': 'Cardinal', Relationship: 'kinship', Topic: 'court', Language: 'Italian', Cipher: 'No', Notes: 'Brief note', Link: 'https://example.org/mm0001', Transcription: 'A longer transcription text intended to be recognized as evidence text rather than a short category.' },
       { 'Unique ID': 'MM0002', 'Archival Collection': 'MAP', 'Archival Page (r/v)': '13v', 'PDF Page': 15, 'Date*': '1615-04-15', 'Source Location': 'Firenze', Source: 'Maria Maddalena de Medici', 'Source Title': 'Archduchess', Target: 'Paolo Giordano Orsini', 'Target Title': 'Duke', Relationship: 'political', Topic: 'patronage', Language: 'Italian', Cipher: 'Yes', Notes: 'Another note', Link: 'https://example.org/mm0002', Transcription: 'Another longer transcription text intended to give the recognizer several textual observations.' },
+      { 'Unique ID': 'MM0003', 'Archival Collection': 'MAP', 'Archival Page (r/v)': '14r', 'PDF Page': 16, 'Date*': '1615-04-17', 'Source Location': 'Firenze', Source: 'Carlo de Medici', 'Source Title': 'Cardinal', Target: 'Maria Maddalena de Medici', 'Target Title': 'Archduchess', Relationship: 'kinship', Topic: 'court', Language: 'Italian', Cipher: 'No', Notes: 'Third note', Link: 'https://example.org/mm0003', Transcription: 'A third transcription row used to exercise a no-match connection case.' },
     ],
     [edges.id]: [{ Source: 'Maria Maddalena de Medici', 'Source Title': 'Archduchess', Type: 'political', Weight: 12 }, { Source: 'Carlo de Medici', 'Source Title': 'Cardinal', Type: 'kinship', Weight: 8 }],
-    [geo.id]: [{ 'Unique ID': 'MM0001', 'Date*': '1615-04-12', 'Source Location': 'Firenze', 'Source Latitude': 43.7696, 'Source Longitude': 11.2558, Source: 'Maria Maddalena de Medici', Target: 'Carlo de Medici', 'Target Location (Inferred)': 'Roma', 'Target Latitude': 41.9028, 'Target Longitude': 12.4964 }],
+    [geo.id]: [
+      { 'Unique ID': 'MM0001', 'Date*': '1615-04-12', 'Source Location': 'Firenze', 'Source Latitude': 43.7696, 'Source Longitude': 11.2558, Source: 'Maria Maddalena de Medici', Target: 'Carlo de Medici', 'Target Location (Inferred)': 'Roma', 'Target Latitude': 41.9028, 'Target Longitude': 12.4964 },
+      { 'Unique ID': 'MM0001', 'Date*': '1615-04-12', 'Source Location': 'Firenze', 'Source Latitude': 43.7696, 'Source Longitude': 11.2558, Source: 'Maria Maddalena de Medici', Target: 'Carlo de Medici', 'Target Location (Inferred)': 'Venezia', 'Target Latitude': 45.4408, 'Target Longitude': 12.3155 },
+      { 'Unique ID': 'MM0002', 'Date*': '1615-04-15', 'Source Location': 'Firenze', 'Source Latitude': 43.7696, 'Source Longitude': 11.2558, Source: 'Maria Maddalena de Medici', Target: 'Paolo Giordano Orsini', 'Target Location (Inferred)': 'Roma', 'Target Latitude': 41.9028, 'Target Longitude': 12.4964 },
+    ],
     [places.id]: [{ 'Source Location': 'Firenze', Latitude: 43.7696, Longitude: 11.2558 }, { 'Source Location': 'Roma', Latitude: 41.9028, Longitude: 12.4964 }],
     [people.id]: [{ Person: 'Maria Maddalena de Medici', Occupation: 'regent', 'Title (Based On Letters)': 'Archduchess', 'Wikipedia Page EN': 'https://en.wikipedia.org/example' }, { Person: 'Carlo de Medici', Occupation: 'cardinal', 'Title (Based On Letters)': 'Cardinal', 'Wikipedia Page EN': 'https://en.wikipedia.org/example2' }],
     [lists.id]: [{ Relationships: 'kinship', Cipher: 'Yes', Topics: 'court', Language: 'Italian', Occupation: 'cardinal' }, { Relationships: 'political', Cipher: 'No', Topics: 'patronage', Language: 'Latin', Occupation: 'regent' }],
@@ -211,7 +222,7 @@ export const mariaPrototypeFixture = (() => {
       makePeridotFieldAssignment({ sourceTableId: raw.id, sourceFieldId: field(raw, 'Target'), sourceFieldName: 'Target', variableId: 'variable:target-person', status: 'active' }),
     ],
     tableConnections: [
-      makePeridotTableConnection({ id: 'connection:raw-to-geography', fromTableId: raw.id, fromFieldId: field(raw, 'Unique ID'), toTableId: geo.id, toFieldId: field(geo, 'Unique ID'), label: 'Raw Data ↔ Geographic Mapping' }),
+      makePeridotTableConnection({ id: 'connection:raw-to-geography', fromTableId: raw.id, fromFieldId: field(raw, 'Unique ID'), toTableId: geo.id, toFieldId: field(geo, 'Unique ID'), label: 'Raw Data ↔ Geographic Mapping', attributes: { multipleMatchesExpectation: PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS.ALLOW_SEVERAL } }),
       makePeridotTableConnection({ id: 'connection:raw-source-to-people', fromTableId: raw.id, fromFieldId: field(raw, 'Source'), toTableId: people.id, toFieldId: field(people, 'Person'), label: 'Source people ↔ People Profiles' }),
       makePeridotTableConnection({ id: 'connection:raw-place-to-places', fromTableId: raw.id, fromFieldId: field(raw, 'Source Location'), toTableId: places.id, toFieldId: field(places, 'Source Location'), label: 'Source places ↔ Place Profiles' }),
     ],
@@ -413,6 +424,45 @@ export function runPeridotUniversalUploadPrototypeSelfAudit() {
       && rawRestoredResult.universalMapping.fieldAssignments.some((item) => item.sourceTableId === rawTable.id),
   };
 
-  const allChecks = Object.freeze({ ...checks, ...suggestionChecks, ...purposeChecks });
+  const rawToGeographyConnection = mariaState.tableConnections.find((item) => item.id === 'connection:raw-to-geography');
+  const rawToGeographyReport = getPrototypeTableConnectionReport(mariaState, rawToGeographyConnection, { maxRows: 10 });
+  const unansweredConnection = {
+    ...rawToGeographyConnection,
+    attributes: { multipleMatchesExpectation: PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS.UNANSWERED },
+  };
+  const unansweredReport = buildPeridotTableConnectionMatchReport({
+    sourceManifest: mariaState.sourceManifest,
+    sourceRowsByTableId: mariaState.sourceRowsByTableId,
+    connection: unansweredConnection,
+  });
+  const expectOneConnection = {
+    ...rawToGeographyConnection,
+    attributes: { multipleMatchesExpectation: PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS.EXPECT_ONE },
+  };
+  const expectOneReport = buildPeridotTableConnectionMatchReport({
+    sourceManifest: mariaState.sourceManifest,
+    sourceRowsByTableId: mariaState.sourceRowsByTableId,
+    connection: expectOneConnection,
+  });
+  const editedConnectionState = savePrototypeTableConnection(mariaState, {
+    ...rawToGeographyConnection,
+    multipleMatchesExpectation: PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS.EXPECT_ONE,
+  });
+  const editedConnection = editedConnectionState.tableConnections.find((item) => item.id === rawToGeographyConnection.id);
+  const connectionChecks = {
+    relatedSheetReportShowsZeroOneSeveral: rawToGeographyReport.summary.noMatchRows === 1
+      && rawToGeographyReport.summary.oneMatchRows === 1
+      && rawToGeographyReport.summary.severalMatchRows === 1,
+    severalMatchesRequireAnswerOnlyWhenObserved: unansweredReport.needsMultipleMatchAnswer === true
+      && rawToGeographyReport.needsMultipleMatchAnswer === false,
+    expectingOneFlagsButPreservesSeveralMatches: expectOneReport.expectationConflict === true
+      && expectOneReport.summary.severalMatchRows === 1
+      && expectOneReport.rows.some((row) => row.matchCount === 2),
+    savedConnectionCanBeEditedWithoutDuplication: editedConnectionState.tableConnections.length === mariaState.tableConnections.length
+      && editedConnection?.attributes?.multipleMatchesExpectation === PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS.EXPECT_ONE,
+    connectionReportDoesNotFlattenRelatedRows: rawToGeographyReport.rows.find((row) => row.sourceValue === 'MM0001')?.matchedRowNumbers.length === 2,
+  };
+
+  const allChecks = Object.freeze({ ...checks, ...suggestionChecks, ...purposeChecks, ...connectionChecks });
   return Object.freeze({ passed: Object.values(allChecks).every(Boolean), checks: allChecks, results: Object.freeze(results), recognizerSuggestions: alaskaSuggestions });
 }

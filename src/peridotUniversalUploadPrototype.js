@@ -33,6 +33,11 @@ import {
   PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS,
   buildPeridotRepeatedStructurePreview,
 } from './peridotUniversalRepeatedStructure.js';
+import {
+  PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS,
+  buildPeridotTableConnectionMatchReport,
+  buildPeridotTableConnectionReview,
+} from './peridotUniversalTableConnections.js';
 
 export const PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_STEPS = Object.freeze([
   'sources',
@@ -310,17 +315,43 @@ export function removePrototypeRepeatedHeadingGroup(state, groupId) {
   });
 }
 
-export function addPrototypeTableConnection(state, { fromTableId, fromFieldId, toTableId, toFieldId, label = '' } = {}) {
+export function savePrototypeTableConnection(state, {
+  id = '',
+  fromTableId,
+  fromFieldId,
+  toTableId,
+  toFieldId,
+  label = '',
+  multipleMatchesExpectation = PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS.UNANSWERED,
+} = {}) {
+  const connectionId = asText(id) || `table-connection:${state.tableConnections.length + 1}`;
   const connection = makePeridotTableConnection({
-    id: `table-connection:${state.tableConnections.length + 1}`,
+    id: connectionId,
     fromTableId,
     fromFieldId,
     toTableId,
     toFieldId,
     connectionType: PERIDOT_TABLE_CONNECTION_TYPES.MATCHING_FIELDS,
     label,
+    attributes: { multipleMatchesExpectation },
   });
-  return replaceState(state, { tableConnections: [...state.tableConnections, connection] });
+  const nextConnections = state.tableConnections.filter((item) => item.id !== connectionId);
+  nextConnections.push(connection);
+  return replaceState(state, { tableConnections: nextConnections });
+}
+
+// Backward-compatible helper retained for earlier prototype fixtures.
+export function addPrototypeTableConnection(state, options = {}) {
+  return savePrototypeTableConnection(state, options);
+}
+
+export function getPrototypeTableConnectionReport(state, connection, { maxRows = 12 } = {}) {
+  return buildPeridotTableConnectionMatchReport({
+    sourceManifest: state.sourceManifest,
+    sourceRowsByTableId: state.sourceRowsByTableId,
+    connection,
+    maxRows,
+  });
 }
 
 export function removePrototypeTableConnection(state, connectionId) {
@@ -368,12 +399,18 @@ export function buildPeridotUniversalUploadPrototypeResult(state) {
       maxRows: 8,
     }),
   }));
+  const tableConnectionReview = buildPeridotTableConnectionReview({
+    sourceManifest: state.sourceManifest,
+    sourceRowsByTableId: state.sourceRowsByTableId,
+    connections: operationalTableConnections,
+  });
 
   return Object.freeze({
     savedVariables: state.savedVariables,
     universalMapping,
     sheetPurposeReview: purposeReview,
     repeatedStructurePreviews: Object.freeze(repeatedStructurePreviews),
+    tableConnectionReview,
     summary: Object.freeze({
       sourceTables: tables.length,
       sourceFields: allFieldIds.length,
@@ -390,6 +427,8 @@ export function buildPeridotUniversalUploadPrototypeResult(state) {
       withheldFields: allFieldIds.length - operationalFieldIds.length,
       repeatedHeadingGroups: operationalRepeatedHeadingGroups.length,
       tableConnections: operationalTableConnections.length,
+      unresolvedConnectionQuestions: tableConnectionReview.unresolvedMultipleMatchQuestions,
+      connectionExpectationConflicts: tableConnectionReview.expectationConflicts,
     }),
   });
 }

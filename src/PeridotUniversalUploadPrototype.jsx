@@ -1,5 +1,5 @@
 /*
- * Standalone Phase 2.4 universal-upload prototype.
+ * Standalone Phase 2.5 universal-upload prototype.
  *
  * This component is intentionally NOT wired into App.jsx or the active mapping
  * modal. It exists so the complicated interaction model can be tested and
@@ -19,7 +19,8 @@ import {
   PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_VARIABLE_KIND_OPTIONS,
   acceptPrototypeFieldSuggestion,
   addPrototypeSavedVariable,
-  addPrototypeTableConnection,
+  getPrototypeTableConnectionReport,
+  savePrototypeTableConnection,
   assignPrototypeField,
   buildPeridotUniversalUploadPrototypeResult,
   dismissPrototypeFieldSuggestion,
@@ -43,6 +44,12 @@ import {
   buildPeridotRepeatedStructurePreview,
   describePeridotRepeatedStructure,
 } from './peridotUniversalRepeatedStructure.js';
+import {
+  PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS,
+  PERIDOT_CONNECTION_MULTIPLE_MATCH_OPTIONS,
+  buildPeridotTableConnectionMatchReport,
+  describePeridotTableConnection,
+} from './peridotUniversalTableConnections.js';
 
 function Select({ value, onChange, children, className = '' }) {
   return (
@@ -363,30 +370,109 @@ function RepeatedHeadingsStep({ state, update }) {
 
 function ConnectionsStep({ state, update }) {
   const tables = getPrototypeTablesForStep(state, 'connections');
+  const [editingConnectionId, setEditingConnectionId] = useState('');
   const [fromTableId, setFromTableId] = useState(tables[0]?.id || '');
   const [toTableId, setToTableId] = useState(tables[1]?.id || tables[0]?.id || '');
   const [fromFieldId, setFromFieldId] = useState('');
   const [toFieldId, setToFieldId] = useState('');
+  const [multipleMatchesExpectation, setMultipleMatchesExpectation] = useState(PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS.UNANSWERED);
   const fromFields = tables.find((item) => item.id === fromTableId)?.fields || [];
   const toFields = tables.find((item) => item.id === toTableId)?.fields || [];
+  const draftConnection = {
+    id: editingConnectionId || 'draft-connection',
+    fromTableId,
+    fromFieldId,
+    toTableId,
+    toFieldId,
+    attributes: { multipleMatchesExpectation },
+  };
+  const draftReport = buildPeridotTableConnectionMatchReport({
+    sourceManifest: state.sourceManifest,
+    sourceRowsByTableId: state.sourceRowsByTableId,
+    connection: draftConnection,
+    maxRows: 10,
+  });
+  const canSave = draftReport.valid && !draftReport.needsMultipleMatchAnswer;
+
+  const resetForm = () => {
+    setEditingConnectionId('');
+    setFromTableId(tables[0]?.id || '');
+    setToTableId(tables[1]?.id || tables[0]?.id || '');
+    setFromFieldId('');
+    setToFieldId('');
+    setMultipleMatchesExpectation(PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS.UNANSWERED);
+  };
+
+  const editConnection = (connection) => {
+    setEditingConnectionId(connection.id);
+    setFromTableId(connection.fromTableId);
+    setToTableId(connection.toTableId);
+    setFromFieldId(connection.fromFieldId);
+    setToFieldId(connection.toFieldId);
+    setMultipleMatchesExpectation(connection.attributes?.multipleMatchesExpectation || PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS.UNANSWERED);
+  };
+
+  const saveConnection = () => {
+    if (!canSave) return;
+    const fromTable = tables.find((item) => item.id === fromTableId);
+    const toTable = tables.find((item) => item.id === toTableId);
+    const fromField = fromFields.find((item) => item.id === fromFieldId);
+    const toField = toFields.find((item) => item.id === toFieldId);
+    update(savePrototypeTableConnection(state, {
+      id: editingConnectionId,
+      fromTableId,
+      fromFieldId,
+      toTableId,
+      toFieldId,
+      multipleMatchesExpectation,
+      label: `${fromTable?.label || fromTable?.sheetName || 'Sheet'}: ${fromField?.name || 'field'} ↔ ${toTable?.label || toTable?.sheetName || 'Sheet'}: ${toField?.name || 'field'}`,
+    }));
+    resetForm();
+  };
 
   return (
     <div className="space-y-4">
       {tables.length < 2 ? <PrototypeCard eyebrow="No connection needed yet" title="At least two eligible data sheets are required"><p className="text-sm text-[var(--panel-card-muted-text)]">Only sheets classified as records, named things, or summary/totals participate in field-to-field connections.</p></PrototypeCard> : null}
       {tables.length >= 2 ? <PrototypeCard eyebrow="Connect sheets" title="Choose fields whose values should match">
-        <p className="mb-3 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">Peridot will later report whether each row has no match, one match, or several matches. This prototype does not assume that several matches are an error.</p>
+        <p className="mb-3 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">Choose the fields yourself. Peridot compares their current values exactly and reports what happens; it does not merge matching rows or decide what the relationship means.</p>
         <div className="grid gap-3 lg:grid-cols-2">
           <div className="space-y-2"><Select value={fromTableId} onChange={(value) => { setFromTableId(value); setFromFieldId(''); }} className="w-full">{tables.map((table) => <option key={table.id} value={table.id}>{table.label || table.sheetName}</option>)}</Select><Select value={fromFieldId} onChange={setFromFieldId} className="w-full"><option value="">Field to match</option>{fromFields.map((field) => <option key={field.id} value={field.id}>{field.name}</option>)}</Select></div>
           <div className="space-y-2"><Select value={toTableId} onChange={(value) => { setToTableId(value); setToFieldId(''); }} className="w-full">{tables.map((table) => <option key={table.id} value={table.id}>{table.label || table.sheetName}</option>)}</Select><Select value={toFieldId} onChange={setToFieldId} className="w-full"><option value="">Field to match</option>{toFields.map((field) => <option key={field.id} value={field.id}>{field.name}</option>)}</Select></div>
         </div>
-        <button type="button" disabled={!fromFieldId || !toFieldId || fromTableId === toTableId} onClick={() => update(addPrototypeTableConnection(state, { fromTableId, fromFieldId, toTableId, toFieldId }))} className="mt-3 rounded-lg border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-2 text-sm font-semibold text-[var(--button-primary-text)] disabled:opacity-50">Save connection</button>
+
+        <div className="mt-4 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--muted-text)]">Match report</div>
+          {!draftReport.valid ? <ul className="mt-2 list-disc pl-5 text-sm text-[var(--panel-card-muted-text)]">{draftReport.problems.map((problem) => <li key={problem}>{problem}</li>)}</ul> : null}
+          {draftReport.valid ? <>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {[['No match', draftReport.summary.noMatchRows], ['One match', draftReport.summary.oneMatchRows], ['Several matches', draftReport.summary.severalMatchRows]].map(([label, value]) => <div key={label} className="rounded-lg border border-[var(--panel-card-border)] bg-[var(--input-bg)] p-3"><div className="text-xs text-[var(--muted-text)]">{label}</div><div className="mt-1 text-xl font-bold text-[var(--panel-card-text)]">{value}</div></div>)}
+            </div>
+            {draftReport.summary.blankSourceRows ? <p className="mt-2 text-xs text-[var(--muted-text)]">{draftReport.summary.blankSourceRows} no-match row(s) have a blank value in the selected source field.</p> : null}
+            {draftReport.rows.length ? <div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-xs text-[var(--panel-card-muted-text)]"><thead><tr><th className="border-b border-[var(--panel-card-border)] px-2 py-1">Row</th><th className="border-b border-[var(--panel-card-border)] px-2 py-1">Value</th><th className="border-b border-[var(--panel-card-border)] px-2 py-1">Result</th></tr></thead><tbody>{draftReport.rows.map((row) => <tr key={`${row.sourceRowNumber}:${String(row.sourceValue)}`}><td className="border-b border-[var(--panel-card-border)] px-2 py-1">{row.sourceRowNumber}</td><td className="border-b border-[var(--panel-card-border)] px-2 py-1">{String(row.sourceValue ?? '')}</td><td className="border-b border-[var(--panel-card-border)] px-2 py-1">{row.outcome}{row.matchCount > 1 ? ` (${row.matchCount})` : ''}</td></tr>)}</tbody></table></div> : null}
+          </> : null}
+        </div>
+
+        {draftReport.valid && draftReport.summary.severalMatchRows > 0 ? <label className="mt-4 block text-sm text-[var(--panel-card-muted-text)]">Some rows have several matches. Is that expected here?<Select value={multipleMatchesExpectation} onChange={setMultipleMatchesExpectation} className="mt-1 w-full">{PERIDOT_CONNECTION_MULTIPLE_MATCH_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></label> : null}
+        {draftReport.expectationConflict ? <p className="mt-2 text-sm text-[var(--panel-card-muted-text)]">The current data contains several matches even though you said you usually expect one. Peridot will preserve those matches and flag the connection for review rather than discarding rows.</p> : null}
+
+        <div className="mt-3 flex gap-2">
+          <button type="button" disabled={!canSave} onClick={saveConnection} className="rounded-lg border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-2 text-sm font-semibold text-[var(--button-primary-text)] disabled:opacity-50">{editingConnectionId ? 'Save changes' : 'Save connection'}</button>
+          {editingConnectionId ? <button type="button" onClick={resetForm} className="rounded-lg border border-[var(--panel-card-border)] px-4 py-2 text-sm font-semibold text-[var(--panel-card-muted-text)]">Cancel edit</button> : null}
+        </div>
       </PrototypeCard> : null}
 
-      {state.tableConnections.map((connection) => (
-        <PrototypeCard key={connection.id} eyebrow="Saved connection" title={connection.label || connection.id}>
-          <div className="flex items-center justify-between gap-3 text-sm text-[var(--panel-card-muted-text)]"><span>{connection.fromTableId} → {connection.toTableId}</span><button type="button" onClick={() => update(removePrototypeTableConnection(state, connection.id))} className="text-xs font-semibold underline">Remove</button></div>
-        </PrototypeCard>
-      ))}
+      {state.tableConnections.map((connection) => {
+        const description = describePeridotTableConnection({ sourceManifest: state.sourceManifest, connection });
+        const report = getPrototypeTableConnectionReport(state, connection, { maxRows: 0 });
+        return (
+          <PrototypeCard key={connection.id} eyebrow="Saved connection" title={connection.label || `${description.fromTableLabel} ↔ ${description.toTableLabel}`}>
+            <p className="text-sm text-[var(--panel-card-muted-text)]">{description.fromTableLabel}: {description.fromFieldName} ↔ {description.toTableLabel}: {description.toFieldName}</p>
+            <p className="mt-1 text-xs text-[var(--muted-text)]">{report.summary.noMatchRows} no match · {report.summary.oneMatchRows} one match · {report.summary.severalMatchRows} several matches</p>
+            {report.summary.severalMatchRows > 0 ? <p className="mt-1 text-xs text-[var(--muted-text)]">Several matches: {description.expectation === PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS.ALLOW_SEVERAL ? 'expected' : description.expectation === PERIDOT_CONNECTION_MULTIPLE_MATCH_EXPECTATIONS.EXPECT_ONE ? 'not usually expected — review flagged' : 'answer still needed'}</p> : null}
+            <div className="mt-3 flex gap-3 text-xs font-semibold"><button type="button" onClick={() => editConnection(connection)} className="underline">Edit</button><button type="button" onClick={() => update(removePrototypeTableConnection(state, connection.id))} className="underline">Remove</button></div>
+          </PrototypeCard>
+        );
+      })}
     </div>
   );
 }
@@ -407,6 +493,7 @@ function ReviewStep({ state }) {
           ['Unassigned fields', summary.unassignedFields],
           ['Repeated-column rules', summary.repeatedHeadingGroups],
           ['Sheet connections', summary.tableConnections],
+          ['Connection questions', summary.unresolvedConnectionQuestions],
         ].map(([label, value]) => <div key={label} className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4"><div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">{label}</div><div className="mt-2 text-2xl font-bold text-[var(--panel-card-text)]">{value}</div></div>)}
       </div>
       <PrototypeCard eyebrow="Sheet-purpose review" title={result.sheetPurposeReview.ready ? 'Every sheet has an operational purpose' : 'Some sheet purposes still need attention'}>
@@ -414,6 +501,11 @@ function ReviewStep({ state }) {
           {result.sheetPurposeReview.rows.map((row) => <div key={row.sourceTableId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-xs text-[var(--panel-card-muted-text)]"><span><strong className="text-[var(--panel-card-text)]">{row.label}</strong> · {row.purposeLabel}{row.namedThingKind ? ` · ${row.namedThingKind}` : ''}</span><span>{row.ready ? row.mappingMode : row.unresolvedPurpose ? 'choose a purpose' : 'choose what kind of named thing'}</span></div>)}
         </div>
       </PrototypeCard>
+      {result.tableConnectionReview.reports.length ? <PrototypeCard eyebrow="Related-sheet review" title={result.tableConnectionReview.unresolvedMultipleMatchQuestions ? 'Some connections still need an answer' : 'Related-sheet connections are described'}>
+        <div className="space-y-2">
+          {result.tableConnectionReview.reports.map((report) => <div key={report.connectionId} className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-xs text-[var(--panel-card-muted-text)]"><strong className="text-[var(--panel-card-text)]">{report.fromTableLabel}: {report.fromFieldName} ↔ {report.toTableLabel}: {report.toFieldName}</strong><div className="mt-1">{report.summary.noMatchRows} no match · {report.summary.oneMatchRows} one match · {report.summary.severalMatchRows} several matches{report.needsMultipleMatchAnswer ? ' · answer whether several matches are expected' : report.expectationConflict ? ' · review: several matches were not expected' : ''}</div></div>)}
+        </div>
+      </PrototypeCard> : null}
       <PrototypeCard eyebrow="Prototype interpretation" title="What Peridot would save">
         <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--panel-card-border)] bg-[var(--input-bg)] p-3 text-xs leading-relaxed text-[var(--panel-card-muted-text)]">{JSON.stringify({ savedVariables: result.savedVariables, universalMapping: result.universalMapping }, null, 2)}</pre>
       </PrototypeCard>
@@ -433,9 +525,9 @@ export function PeridotUniversalUploadPrototype({ sourceManifest, sourceRowsByTa
   return (
     <div className="rounded-[2rem] border border-[var(--panel-card-border)] bg-[var(--panel-bg)] p-5 shadow-xl">
       <header className="mb-4">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted-text)]">Phase 2.3 prototype</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted-text)]">Phase 2.5 prototype</div>
         <h2 className="mt-1 text-2xl font-bold text-[var(--panel-card-text)]">Describe how your data is organized</h2>
-        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--panel-card-muted-text)]">This deliberately detailed prototype now makes sheet purpose operational. Your classifications control which sheets appear in later mapping steps, while Peridot’s conservative field suggestions remain editable and never become mappings until you accept them.</p>
+        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--panel-card-muted-text)]">This deliberately detailed prototype now makes related-sheet connections operational. You choose the matching fields; Peridot reports no, one, or several matches without flattening related rows, and only asks about several matches when they actually occur.</p>
       </header>
 
       <nav className="mb-5 flex flex-wrap gap-2" aria-label="Universal upload prototype steps">
