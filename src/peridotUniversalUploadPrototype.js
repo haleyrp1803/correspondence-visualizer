@@ -29,6 +29,10 @@ import {
   isPeridotUniversalSheetAvailableFor,
   listPeridotUniversalPrototypeTablesFor,
 } from './peridotUniversalSheetPurposePolicy.js';
+import {
+  PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS,
+  buildPeridotRepeatedStructurePreview,
+} from './peridotUniversalRepeatedStructure.js';
 
 export const PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_STEPS = Object.freeze([
   'sources',
@@ -253,19 +257,22 @@ export function acceptPrototypeFieldSuggestion(state, {
   return restorePrototypeFieldSuggestion(next, suggestionId);
 }
 
-export function addPrototypeRepeatedHeadingGroup(state, {
+export function savePrototypeRepeatedHeadingGroup(state, {
+  id = '',
   sourceTableId,
   sourceFieldIds = [],
   headingVariableId,
   cellVariableId,
   attachedFieldIds = [],
-  transposeFirst = false,
+  orientationMode = PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.HEADINGS_REPEAT_ONE_VARIABLE,
+  rowLabelFieldId = '',
+  rowLabelVariableId = '',
   blankHandling = 'preserve',
   textHandling = 'preserve',
 } = {}) {
-  const id = `repeated-heading:${state.repeatedHeadingGroups.length + 1}`;
+  const groupId = asText(id) || `repeated-heading:${state.repeatedHeadingGroups.length + 1}`;
   const group = makePeridotRepeatedHeadingGroup({
-    id,
+    id: groupId,
     sourceTableId,
     sourceFieldIds,
     headingVariableId,
@@ -273,11 +280,28 @@ export function addPrototypeRepeatedHeadingGroup(state, {
     attachedFieldIds,
     blankHandling,
     textHandling,
-    generatedVariableSource: transposeFirst
+    generatedVariableSource: orientationMode === PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.ROW_LABELS_AND_HEADINGS
       ? PERIDOT_GENERATED_VARIABLE_SOURCES.TRANSPOSED_HEADINGS
       : PERIDOT_GENERATED_VARIABLE_SOURCES.REPEATED_HEADINGS,
+    attributes: {
+      orientationMode,
+      rowLabelFieldId: orientationMode === PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.ROW_LABELS_AND_HEADINGS ? rowLabelFieldId : '',
+      rowLabelVariableId: orientationMode === PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.ROW_LABELS_AND_HEADINGS ? rowLabelVariableId : '',
+    },
   });
-  return replaceState(state, { repeatedHeadingGroups: [...state.repeatedHeadingGroups, group] });
+  const nextGroups = state.repeatedHeadingGroups.filter((item) => item.id !== groupId);
+  nextGroups.push(group);
+  return replaceState(state, { repeatedHeadingGroups: nextGroups });
+}
+
+// Backward-compatible prototype helper retained for the earlier Phase 2 fixtures.
+export function addPrototypeRepeatedHeadingGroup(state, options = {}) {
+  return savePrototypeRepeatedHeadingGroup(state, {
+    ...options,
+    orientationMode: options.transposeFirst
+      ? PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.ROW_LABELS_AND_HEADINGS
+      : (options.orientationMode || PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.HEADINGS_REPEAT_ONE_VARIABLE),
+  });
 }
 
 export function removePrototypeRepeatedHeadingGroup(state, groupId) {
@@ -333,11 +357,23 @@ export function buildPeridotUniversalUploadPrototypeResult(state) {
   const ignoredFieldIds = new Set(operationalFieldAssignments.filter((item) => item.status === PERIDOT_FIELD_ASSIGNMENT_STATUS.IGNORED).map((item) => item.sourceFieldId));
   const operationalFieldIds = tables.filter((table) => fieldTableIds.has(table.id)).flatMap((table) => (table.fields || []).map((field) => field.id));
   const allFieldIds = tables.flatMap((table) => (table.fields || []).map((field) => field.id));
+  const repeatedStructurePreviews = operationalRepeatedHeadingGroups.map((group) => Object.freeze({
+    groupId: group.id,
+    ...buildPeridotRepeatedStructurePreview({
+      sourceManifest: state.sourceManifest,
+      sourceRowsByTableId: state.sourceRowsByTableId,
+      savedVariables: state.savedVariables,
+      fieldAssignments: operationalFieldAssignments,
+      group,
+      maxRows: 8,
+    }),
+  }));
 
   return Object.freeze({
     savedVariables: state.savedVariables,
     universalMapping,
     sheetPurposeReview: purposeReview,
+    repeatedStructurePreviews: Object.freeze(repeatedStructurePreviews),
     summary: Object.freeze({
       sourceTables: tables.length,
       sourceFields: allFieldIds.length,

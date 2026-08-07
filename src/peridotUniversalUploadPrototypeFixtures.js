@@ -1,4 +1,4 @@
-/* Phase 2.3 fixture definitions for the isolated universal-upload prototype. */
+/* Phase 2.4 fixture definitions for the isolated universal-upload prototype. */
 
 import {
   PERIDOT_GENERATED_VARIABLE_SOURCES,
@@ -27,10 +27,15 @@ import {
   getPrototypeFieldSuggestions,
   getPrototypeTablesForStep,
   makePeridotUniversalUploadPrototypeState,
+  savePrototypeRepeatedHeadingGroup,
   setPrototypeSheetPurpose,
 } from './peridotUniversalUploadPrototype.js';
 import { recognizePeridotUniversalFields } from './peridotUniversalFieldRecognizers.js';
 import { buildPeridotUniversalSheetPurposeReview } from './peridotUniversalSheetPurposePolicy.js';
+import {
+  PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS,
+  buildPeridotRepeatedStructurePreview,
+} from './peridotUniversalRepeatedStructure.js';
 
 function makeManifest(fileName, sheets) {
   const fileId = makePeridotSourceFileId({ fileName });
@@ -64,16 +69,16 @@ const stockCompanies = ['East India Company', 'Bank of England', 'South Sea Comp
 
 export const stockWidePrototypeFixture = (() => {
   const sourceManifest = makeManifest('Daily High Stock Price for Five Companies in 1714.xlsx', [{
-    name: 'Sheet1', rowCount: 441,
+    name: 'Sheet1', rowCount: 365,
     headers: ['Date', 'Day of the Week', ...stockCompanies, 'Source'],
   }]);
   const table = sourceManifest.sourceTables[0];
   const sourceRowsByTableId = {
     [table.id]: [
-      { Date: '1714/03/24', 'Day of the Week': 'Saturday', 'East India Company': 130, 'Bank of England': 116.5, 'South Sea Company': 88, 'Million Bank': 'Holiday', 'Royal African Company': 41, Source: 'Course of the Exchange' },
-      { Date: '1714/03/25', 'Day of the Week': 'Sunday', 'East India Company': '', 'Bank of England': '', 'South Sea Company': '', 'Million Bank': '', 'Royal African Company': '', Source: 'Course of the Exchange' },
-      { Date: '1714/03/26', 'Day of the Week': 'Monday', 'East India Company': 131, 'Bank of England': 117, 'South Sea Company': 89, 'Million Bank': 62, 'Royal African Company': 42, Source: 'Course of the Exchange' },
-      { Date: '1714/03/27', 'Day of the Week': 'Tuesday', 'East India Company': 132, 'Bank of England': 117.25, 'South Sea Company': 89.5, 'Million Bank': 62.5, 'Royal African Company': 42, Source: 'Course of the Exchange' },
+      { Date: '1714/03/24', 'Day of the Week': 'Wednesday', 'East India Company': 118, 'Bank of England': 118, 'South Sea Company': 84.75, 'Million Bank': 79.5, 'Royal African Company': 40.5, Source: 'Course of the Exchange' },
+      { Date: '1714/03/25', 'Day of the Week': 'Thursday', 'East India Company': 118, 'Bank of England': 118, 'South Sea Company': 84.75, 'Million Bank': 79.5, 'Royal African Company': 40.5, Source: 'Course of the Exchange' },
+      { Date: '1714/03/26', 'Day of the Week': 'Friday', 'East India Company': 'Holiday', 'Bank of England': 'Holiday', 'South Sea Company': 'Holiday', 'Million Bank': 'Holiday', 'Royal African Company': 'Holiday', Source: 'Course of the Exchange' },
+      { Date: '1714/03/28', 'Day of the Week': 'Sunday', 'East India Company': 'No Market ', 'Bank of England': 'No Market ', 'South Sea Company': 'No Market ', 'Million Bank': 'No Market ', 'Royal African Company': 'No Market ', Source: 'Course of the Exchange' },
     ],
   };
   const variables = [
@@ -92,6 +97,7 @@ export const stockWidePrototypeFixture = (() => {
       headingVariableId: 'variable:organization', cellVariableId: 'variable:daily-high-stock-price',
       attachedFieldIds: [field(table, 'Date')],
       blankHandling: 'preserve', textHandling: 'preserve',
+      attributes: { orientationMode: PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.HEADINGS_REPEAT_ONE_VARIABLE },
     })],
   });
   return Object.freeze({ label: 'Wide stock-price table', sourceManifest, sourceRowsByTableId, savedVariables: variables, mapping });
@@ -104,10 +110,11 @@ export const stockTransposedPrototypeFixture = (() => {
   const sourceRowsByTableId = {
     [table.id]: stockCompanies.map((company, index) => ({
       Date: company,
-      '1714/03/24': 80 + index * 10,
-      '1714/03/25': 81 + index * 10,
-      '1714/03/26': 82 + index * 10,
-      '1714/03/27': 83 + index * 10,
+      '1714/03/24': [118,118,84.75,79.5,40.5][index],
+      '1714/03/25': [118,118,84.75,79.5,40.5][index],
+      '1714/03/26': 'Holiday',
+      '1714/03/27': [118.5,118.5,84.25,79.5,40.5][index],
+      '1714/03/28': 'No Market ',
     })),
   };
   const variables = [
@@ -121,10 +128,14 @@ export const stockTransposedPrototypeFixture = (() => {
       id: 'repeated-heading:dates-after-transpose', sourceTableId: table.id,
       sourceFieldIds: dateHeaders.map((name) => field(table, name)),
       headingVariableId: 'variable:date', cellVariableId: 'variable:daily-high-stock-price',
-      attachedFieldIds: [field(table, 'Date')],
+      attachedFieldIds: [],
       generatedVariableSource: PERIDOT_GENERATED_VARIABLE_SOURCES.TRANSPOSED_HEADINGS,
       blankHandling: 'preserve', textHandling: 'preserve',
-      attributes: { rowLabelVariableId: 'variable:organization' },
+      attributes: {
+        orientationMode: PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.ROW_LABELS_AND_HEADINGS,
+        rowLabelFieldId: field(table, 'Date'),
+        rowLabelVariableId: 'variable:organization',
+      },
     })],
   });
   return Object.freeze({ label: 'Transposed stock-price table', sourceManifest, sourceRowsByTableId, savedVariables: variables, mapping });
@@ -225,11 +236,79 @@ export function runPeridotUniversalUploadPrototypeSelfAudit() {
   const transposed = byName.get('Transposed stock-price table');
   const alaska = byName.get('Alaska airfields');
   const maria = byName.get('Maria Maddalena workbook');
+  const wideState = makePeridotUniversalUploadPrototypeState({
+    sourceManifest: stockWidePrototypeFixture.sourceManifest,
+    sourceRowsByTableId: stockWidePrototypeFixture.sourceRowsByTableId,
+    mapping: stockWidePrototypeFixture.mapping,
+    savedVariables: stockWidePrototypeFixture.savedVariables,
+  });
+  const transposedState = makePeridotUniversalUploadPrototypeState({
+    sourceManifest: stockTransposedPrototypeFixture.sourceManifest,
+    sourceRowsByTableId: stockTransposedPrototypeFixture.sourceRowsByTableId,
+    mapping: stockTransposedPrototypeFixture.mapping,
+    savedVariables: stockTransposedPrototypeFixture.savedVariables,
+  });
+  const wideGroup = wideState.repeatedHeadingGroups[0];
+  const transposedGroup = transposedState.repeatedHeadingGroups[0];
+  const widePreview = buildPeridotRepeatedStructurePreview({
+    sourceManifest: wideState.sourceManifest, sourceRowsByTableId: wideState.sourceRowsByTableId,
+    savedVariables: wideState.savedVariables, fieldAssignments: wideState.fieldAssignments, group: wideGroup, maxRows: 200,
+  });
+  const transposedPreview = buildPeridotRepeatedStructurePreview({
+    sourceManifest: transposedState.sourceManifest, sourceRowsByTableId: transposedState.sourceRowsByTableId,
+    savedVariables: transposedState.savedVariables, fieldAssignments: transposedState.fieldAssignments, group: transposedGroup, maxRows: 200,
+  });
+  const firstWideObservation = widePreview.rows.find((row) => row.values['variable:date'] === '1714/03/24' && row.values['variable:organization'] === 'East India Company');
+  const firstTransposedObservation = transposedPreview.rows.find((row) => row.values['variable:date'] === '1714/03/24' && row.values['variable:organization'] === 'East India Company');
+  const incompleteTransposedRule = { ...transposedGroup, attributes: { ...transposedGroup.attributes, rowLabelFieldId: '', rowLabelVariableId: '' } };
+  const incompleteTransposedPreview = buildPeridotRepeatedStructurePreview({
+    sourceManifest: transposedState.sourceManifest, sourceRowsByTableId: transposedState.sourceRowsByTableId,
+    savedVariables: transposedState.savedVariables, fieldAssignments: transposedState.fieldAssignments, group: incompleteTransposedRule, maxRows: 10,
+  });
+  const editedWide = savePrototypeRepeatedHeadingGroup(wideState, {
+    id: wideGroup.id,
+    sourceTableId: wideGroup.sourceTableId,
+    sourceFieldIds: wideGroup.sourceFieldIds.slice(0, 2),
+    headingVariableId: wideGroup.headingVariableId,
+    cellVariableId: wideGroup.cellVariableId,
+    attachedFieldIds: wideGroup.attachedFieldIds,
+    orientationMode: PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.HEADINGS_REPEAT_ONE_VARIABLE,
+  });
+  const restoredWide = savePrototypeRepeatedHeadingGroup(editedWide, {
+    id: wideGroup.id,
+    sourceTableId: wideGroup.sourceTableId,
+    sourceFieldIds: wideGroup.sourceFieldIds,
+    headingVariableId: wideGroup.headingVariableId,
+    cellVariableId: wideGroup.cellVariableId,
+    attachedFieldIds: wideGroup.attachedFieldIds,
+    orientationMode: PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.HEADINGS_REPEAT_ONE_VARIABLE,
+  });
+
   const checks = Object.freeze({
     allFixturesBuild: results.length === 4 && results.every((item) => item.result?.universalMapping),
     stockOrientationsShareVariables: JSON.stringify(wide.savedVariables.map((item) => item.id).sort()) === JSON.stringify(transposed.savedVariables.map((item) => item.id).sort()),
-    wideStockUsesRepeatedHeadings: wide.summary.repeatedHeadingGroups === 1,
-    transposedStockMarksTranspose: transposed.universalMapping.repeatedHeadingGroups[0]?.generatedVariableSource === PERIDOT_GENERATED_VARIABLE_SOURCES.TRANSPOSED_HEADINGS,
+    stockOrientationsProduceSameVariableColumns: JSON.stringify([...widePreview.variableIds].sort()) === JSON.stringify([...transposedPreview.variableIds].sort())
+      && widePreview.variableIds.length === 3,
+    stockOrientationsAgreeOnEquivalentObservation: firstWideObservation?.values['variable:daily-high-stock-price'] === 118
+      && firstTransposedObservation?.values['variable:daily-high-stock-price'] === 118,
+    wideStockUsesRepeatedHeadings: wide.summary.repeatedHeadingGroups === 1
+      && wideGroup.attributes?.orientationMode === PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.HEADINGS_REPEAT_ONE_VARIABLE,
+    transposedStockUsesRowLabelsAndHeadings: transposed.universalMapping.repeatedHeadingGroups[0]?.generatedVariableSource === PERIDOT_GENERATED_VARIABLE_SOURCES.TRANSPOSED_HEADINGS
+      && transposedGroup.attributes?.orientationMode === PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.ROW_LABELS_AND_HEADINGS
+      && Boolean(transposedGroup.attributes?.rowLabelFieldId),
+    transposedRuleRequiresExplicitRowMeaning: incompleteTransposedPreview.validation.valid === false
+      && incompleteTransposedPreview.validation.problems.length >= 2,
+    stockTextStatusesRemainLiteral: widePreview.rows.some((row) => row.values['variable:daily-high-stock-price'] === 'Holiday')
+      && transposedPreview.rows.some((row) => row.values['variable:daily-high-stock-price'] === 'Holiday')
+      && transposedPreview.rows.some((row) => row.values['variable:daily-high-stock-price'] === 'No Market '),
+    repeatedRuleCanBeEditedWithoutDuplication: editedWide.repeatedHeadingGroups.length === 1
+      && editedWide.repeatedHeadingGroups[0].sourceFieldIds.length === 2
+      && restoredWide.repeatedHeadingGroups.length === 1
+      && restoredWide.repeatedHeadingGroups[0].sourceFieldIds.length === stockCompanies.length,
+    recognizersDoNotCreateRepeatedStructure: makePeridotUniversalUploadPrototypeState({
+      sourceManifest: stockWidePrototypeFixture.sourceManifest, sourceRowsByTableId: stockWidePrototypeFixture.sourceRowsByTableId,
+      mapping: { sheetPurposes: stockWidePrototypeFixture.mapping.sheetPurposes }, savedVariables: stockWidePrototypeFixture.savedVariables,
+    }).repeatedHeadingGroups.length === 0,
     alaskaNeedsNoRepeatedHeadingsOrConnections: alaska.summary.repeatedHeadingGroups === 0 && alaska.summary.tableConnections === 0,
     mariaPreservesSixTables: maria.summary.sourceTables === 6,
     mariaPreservesMultipleConnections: maria.summary.tableConnections === 3,

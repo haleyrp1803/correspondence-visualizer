@@ -1,5 +1,5 @@
 /*
- * Standalone Phase 2.2 universal-upload prototype.
+ * Standalone Phase 2.4 universal-upload prototype.
  *
  * This component is intentionally NOT wired into App.jsx or the active mapping
  * modal. It exists so the complicated interaction model can be tested and
@@ -18,7 +18,6 @@ import {
   PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_STEPS,
   PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_VARIABLE_KIND_OPTIONS,
   acceptPrototypeFieldSuggestion,
-  addPrototypeRepeatedHeadingGroup,
   addPrototypeSavedVariable,
   addPrototypeTableConnection,
   assignPrototypeField,
@@ -28,6 +27,7 @@ import {
   getPrototypeTablesForStep,
   makePeridotUniversalUploadPrototypeState,
   removePrototypeRepeatedHeadingGroup,
+  savePrototypeRepeatedHeadingGroup,
   removePrototypeTableConnection,
   setPrototypeFieldIgnored,
   setPrototypeSheetPurpose,
@@ -37,6 +37,12 @@ import {
   buildPeridotUniversalSheetPurposeReview,
   getPeridotUniversalSheetPurposePolicy,
 } from './peridotUniversalSheetPurposePolicy.js';
+import {
+  PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS,
+  PERIDOT_REPEATED_STRUCTURE_ORIENTATION_OPTIONS,
+  buildPeridotRepeatedStructurePreview,
+  describePeridotRepeatedStructure,
+} from './peridotUniversalRepeatedStructure.js';
 
 function Select({ value, onChange, children, className = '' }) {
   return (
@@ -204,39 +210,153 @@ function VariableStep({ state, update }) {
 
 function RepeatedHeadingsStep({ state, update }) {
   const tables = getPrototypeTablesForStep(state, 'repeated-headings');
+  const [editingGroupId, setEditingGroupId] = useState('');
   const [tableId, setTableId] = useState(tables[0]?.id || '');
   const [selected, setSelected] = useState([]);
+  const [attachedFieldIds, setAttachedFieldIds] = useState([]);
   const [headingVariableId, setHeadingVariableId] = useState('');
   const [cellVariableId, setCellVariableId] = useState('');
-  const [transposeFirst, setTransposeFirst] = useState(false);
+  const [orientationMode, setOrientationMode] = useState(PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.HEADINGS_REPEAT_ONE_VARIABLE);
+  const [rowLabelFieldId, setRowLabelFieldId] = useState('');
+  const [rowLabelVariableId, setRowLabelVariableId] = useState('');
   const table = tables.find((item) => item.id === tableId);
 
   const toggleField = (fieldId) => setSelected((current) => current.includes(fieldId) ? current.filter((id) => id !== fieldId) : [...current, fieldId]);
+  const toggleAttachedField = (fieldId) => setAttachedFieldIds((current) => current.includes(fieldId) ? current.filter((id) => id !== fieldId) : [...current, fieldId]);
+  const variableLabel = (variableId) => state.savedVariables.find((variable) => variable.id === variableId)?.label || variableId;
+
+  const resetForm = () => {
+    setEditingGroupId('');
+    setSelected([]);
+    setAttachedFieldIds([]);
+    setHeadingVariableId('');
+    setCellVariableId('');
+    setOrientationMode(PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.HEADINGS_REPEAT_ONE_VARIABLE);
+    setRowLabelFieldId('');
+    setRowLabelVariableId('');
+  };
+
+  const editGroup = (group) => {
+    setEditingGroupId(group.id);
+    setTableId(group.sourceTableId);
+    setSelected([...(group.sourceFieldIds || [])]);
+    setAttachedFieldIds([...(group.attachedFieldIds || [])]);
+    setHeadingVariableId(group.headingVariableId || '');
+    setCellVariableId(group.cellVariableId || '');
+    setOrientationMode(group.attributes?.orientationMode || (group.generatedVariableSource === 'transposed-headings'
+      ? PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.ROW_LABELS_AND_HEADINGS
+      : PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.HEADINGS_REPEAT_ONE_VARIABLE));
+    setRowLabelFieldId(group.attributes?.rowLabelFieldId || '');
+    setRowLabelVariableId(group.attributes?.rowLabelVariableId || '');
+  };
+
+  const draftGroup = {
+    id: editingGroupId || 'draft',
+    sourceTableId: tableId,
+    sourceFieldIds: selected,
+    headingVariableId,
+    cellVariableId,
+    attachedFieldIds,
+    attributes: { orientationMode, rowLabelFieldId, rowLabelVariableId },
+    generatedVariableSource: orientationMode === PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.ROW_LABELS_AND_HEADINGS ? 'transposed-headings' : 'repeated-headings',
+  };
+  const draftPreview = buildPeridotRepeatedStructurePreview({
+    sourceManifest: state.sourceManifest,
+    sourceRowsByTableId: state.sourceRowsByTableId,
+    savedVariables: state.savedVariables,
+    fieldAssignments: state.fieldAssignments,
+    group: draftGroup,
+    maxRows: 8,
+  });
+  const canSave = draftPreview.validation.valid;
+  const rowLabelMode = orientationMode === PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.ROW_LABELS_AND_HEADINGS;
+  const selectableFields = (table?.fields || []).filter((field) => !rowLabelMode || field.id !== rowLabelFieldId);
+
+  const saveRule = () => {
+    if (!canSave) return;
+    update(savePrototypeRepeatedHeadingGroup(state, {
+      id: editingGroupId,
+      sourceTableId: tableId,
+      sourceFieldIds: selected,
+      headingVariableId,
+      cellVariableId,
+      attachedFieldIds: rowLabelMode ? [] : attachedFieldIds,
+      orientationMode,
+      rowLabelFieldId: rowLabelMode ? rowLabelFieldId : '',
+      rowLabelVariableId: rowLabelMode ? rowLabelVariableId : '',
+    }));
+    resetForm();
+  };
 
   return (
     <div className="space-y-4">
       {tables.length === 0 ? <PrototypeCard eyebrow="No eligible sheets" title="Repeated columns are not available yet"><p className="text-sm text-[var(--panel-card-muted-text)]">Classify a data-bearing sheet first. Reference, maintenance, ignored, and unsure sheets do not enter repeated-column setup.</p></PrototypeCard> : null}
-      {tables.length > 0 ? <PrototypeCard eyebrow="Repeated columns" title="Tell Peridot when several headings represent comparable things">
-        <p className="mb-3 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">Example: five company headings can become one Organization variable, while the cells beneath them become one Stock price variable. This prototype asks rather than inferring.</p>
+      {tables.length > 0 ? <PrototypeCard eyebrow="Repeated structure" title="Describe how repeated information is arranged">
+        <p className="mb-3 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">Peridot does not decide that a set of headings belongs together. Select the repeated headings yourself, state what they mean, and review the generated observations before saving the rule.</p>
+
         <div className="grid gap-3 lg:grid-cols-2">
-          <label className="text-sm text-[var(--panel-card-muted-text)]">Table<Select value={tableId} onChange={(value) => { setTableId(value); setSelected([]); }} className="mt-1 w-full">{tables.map((item) => <option key={item.id} value={item.id}>{item.label || item.sheetName}</option>)}</Select></label>
-          <label className="flex items-center gap-2 text-sm text-[var(--panel-card-muted-text)]"><input type="checkbox" checked={transposeFirst} onChange={(event) => setTransposeFirst(event.target.checked)} />The source needs to be turned before interpreting these headings</label>
+          <label className="text-sm text-[var(--panel-card-muted-text)]">Table<Select value={tableId} onChange={(value) => { setTableId(value); setSelected([]); setAttachedFieldIds([]); setRowLabelFieldId(''); }} className="mt-1 w-full">{tables.map((item) => <option key={item.id} value={item.id}>{item.label || item.sheetName}</option>)}</Select></label>
+          <label className="text-sm text-[var(--panel-card-muted-text)]">How is the repeated information arranged?<Select value={orientationMode} onChange={(value) => { setOrientationMode(value); setSelected([]); setAttachedFieldIds([]); setRowLabelFieldId(''); setRowLabelVariableId(''); }} className="mt-1 w-full">{PERIDOT_REPEATED_STRUCTURE_ORIENTATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></label>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {(table?.fields || []).map((field) => <button key={field.id} type="button" onClick={() => toggleField(field.id)} className={`rounded-full border px-3 py-1 text-xs ${selected.includes(field.id) ? 'border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] text-[var(--button-primary-text)]' : 'border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] text-[var(--panel-card-muted-text)]'}`}>{field.name}</button>)}
+
+        <p className="mt-2 text-xs leading-relaxed text-[var(--muted-text)]">{PERIDOT_REPEATED_STRUCTURE_ORIENTATION_OPTIONS.find((option) => option.value === orientationMode)?.description}</p>
+
+        {rowLabelMode ? <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <label className="text-sm text-[var(--panel-card-muted-text)]">Which column contains the row labels?<Select value={rowLabelFieldId} onChange={(value) => { setRowLabelFieldId(value); setSelected((current) => current.filter((id) => id !== value)); }} className="mt-1 w-full"><option value="">Choose a column</option>{(table?.fields || []).map((field) => <option key={field.id} value={field.id}>{field.name}</option>)}</Select></label>
+          <label className="text-sm text-[var(--panel-card-muted-text)]">What do those row labels represent?<Select value={rowLabelVariableId} onChange={setRowLabelVariableId} className="mt-1 w-full"><option value="">Choose a saved variable</option>{state.savedVariables.map((variable) => <option key={variable.id} value={variable.id}>{variable.label}</option>)}</Select></label>
+        </div> : null}
+
+        <div className="mt-4">
+          <div className="text-sm font-semibold text-[var(--panel-card-text)]">Which headings repeat the same kind of information?</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {selectableFields.map((field) => <button key={field.id} type="button" onClick={() => toggleField(field.id)} className={`rounded-full border px-3 py-1 text-xs ${selected.includes(field.id) ? 'border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] text-[var(--button-primary-text)]' : 'border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] text-[var(--panel-card-muted-text)]'}`}>{field.name}</button>)}
+          </div>
         </div>
-        <div className="mt-3 grid gap-2 md:grid-cols-2">
-          <label className="text-sm text-[var(--panel-card-muted-text)]">What do the selected headings represent?<Select value={headingVariableId} onChange={setHeadingVariableId} className="mt-1 w-full"><option value="">Choose a saved variable</option>{state.savedVariables.map((variable) => <option key={variable.id} value={variable.id}>{variable.label}</option>)}</Select></label>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="text-sm text-[var(--panel-card-muted-text)]">What do those headings represent?<Select value={headingVariableId} onChange={setHeadingVariableId} className="mt-1 w-full"><option value="">Choose a saved variable</option>{state.savedVariables.map((variable) => <option key={variable.id} value={variable.id}>{variable.label}</option>)}</Select></label>
           <label className="text-sm text-[var(--panel-card-muted-text)]">What do the cells contain?<Select value={cellVariableId} onChange={setCellVariableId} className="mt-1 w-full"><option value="">Choose a saved variable</option>{state.savedVariables.map((variable) => <option key={variable.id} value={variable.id}>{variable.label}</option>)}</Select></label>
         </div>
-        <button type="button" disabled={!tableId || selected.length < 2 || !headingVariableId || !cellVariableId} onClick={() => { update(addPrototypeRepeatedHeadingGroup(state, { sourceTableId: tableId, sourceFieldIds: selected, headingVariableId, cellVariableId, transposeFirst })); setSelected([]); }} className="mt-3 rounded-lg border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-2 text-sm font-semibold text-[var(--button-primary-text)] disabled:opacity-50">Save repeated-column rule</button>
+
+        {!rowLabelMode ? <div className="mt-4">
+          <div className="text-sm font-semibold text-[var(--panel-card-text)]">Which ordinary columns should stay attached to every generated observation?</div>
+          <p className="mt-1 text-xs text-[var(--muted-text)]">For the wide stock table, Date is attached to every company/price observation. Attached columns should already have a saved variable in the Variables step.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(table?.fields || []).filter((field) => !selected.includes(field.id)).map((field) => <button key={field.id} type="button" onClick={() => toggleAttachedField(field.id)} className={`rounded-full border px-3 py-1 text-xs ${attachedFieldIds.includes(field.id) ? 'border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] text-[var(--button-primary-text)]' : 'border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] text-[var(--panel-card-muted-text)]'}`}>{field.name}</button>)}
+          </div>
+        </div> : null}
+
+        <div className="mt-4 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--muted-text)]">Interpretation preview</div>
+          {!draftPreview.validation.valid ? <ul className="mt-2 list-disc pl-5 text-sm text-[var(--panel-card-muted-text)]">{draftPreview.validation.problems.map((problem) => <li key={problem}>{problem}</li>)}</ul> : null}
+          {draftPreview.validation.valid ? <>
+            <p className="mt-2 text-sm text-[var(--panel-card-muted-text)]">This declaration produces {draftPreview.totalRows} observations in the current preview data. Text statuses and blanks remain unchanged; Peridot does not coerce them into numbers.</p>
+            <div className="mt-3 overflow-x-auto">
+              <table className="min-w-full text-left text-xs text-[var(--panel-card-muted-text)]">
+                <thead><tr>{draftPreview.variableIds.map((id) => <th key={id} className="border-b border-[var(--panel-card-border)] px-2 py-1 font-semibold">{variableLabel(id)}</th>)}</tr></thead>
+                <tbody>{draftPreview.rows.map((row, index) => <tr key={`${row.sourceRowNumber}:${row.sourceHeading}:${index}`}>{draftPreview.variableIds.map((id) => <td key={id} className="border-b border-[var(--panel-card-border)] px-2 py-1">{String(row.values[id] ?? '')}</td>)}</tr>)}</tbody>
+              </table>
+            </div>
+          </> : null}
+        </div>
+
+        <div className="mt-3 flex gap-2">
+          <button type="button" disabled={!canSave} onClick={saveRule} className="rounded-lg border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-2 text-sm font-semibold text-[var(--button-primary-text)] disabled:opacity-50">{editingGroupId ? 'Save changes' : 'Save repeated-data rule'}</button>
+          {editingGroupId ? <button type="button" onClick={resetForm} className="rounded-lg border border-[var(--panel-card-border)] px-4 py-2 text-sm font-semibold text-[var(--panel-card-muted-text)]">Cancel edit</button> : null}
+        </div>
       </PrototypeCard> : null}
 
-      {state.repeatedHeadingGroups.map((group) => (
-        <PrototypeCard key={group.id} eyebrow="Saved rule" title={group.id}>
-          <div className="flex items-center justify-between gap-3 text-sm text-[var(--panel-card-muted-text)]"><span>{group.sourceFieldIds.length} headings · {group.generatedVariableSource}</span><button type="button" onClick={() => update(removePrototypeRepeatedHeadingGroup(state, group.id))} className="text-xs font-semibold underline">Remove</button></div>
-        </PrototypeCard>
-      ))}
+      {state.repeatedHeadingGroups.map((group) => {
+        const description = describePeridotRepeatedStructure({ sourceManifest: state.sourceManifest, savedVariables: state.savedVariables, group });
+        const preview = buildPeridotRepeatedStructurePreview({ sourceManifest: state.sourceManifest, sourceRowsByTableId: state.sourceRowsByTableId, savedVariables: state.savedVariables, fieldAssignments: state.fieldAssignments, group, maxRows: 0 });
+        return (
+          <PrototypeCard key={group.id} eyebrow="Saved repeated-data rule" title={description.tableLabel}>
+            <p className="text-sm text-[var(--panel-card-muted-text)]">{description.orientation === PERIDOT_REPEATED_STRUCTURE_ORIENTATIONS.ROW_LABELS_AND_HEADINGS ? `${description.rowLabelFieldName} → ${description.rowLabelVariableLabel}; headings → ${description.headingVariableLabel}; cells → ${description.cellVariableLabel}` : `Selected headings → ${description.headingVariableLabel}; cells → ${description.cellVariableLabel}`}</p>
+            <p className="mt-1 text-xs text-[var(--muted-text)]">{description.repeatedFieldNames.length} selected headings · {preview.totalRows} generated observations in current preview rows</p>
+            <div className="mt-3 flex gap-3 text-xs font-semibold"><button type="button" onClick={() => editGroup(group)} className="underline">Edit</button><button type="button" onClick={() => update(removePrototypeRepeatedHeadingGroup(state, group.id))} className="underline">Remove</button></div>
+          </PrototypeCard>
+        );
+      })}
     </div>
   );
 }
