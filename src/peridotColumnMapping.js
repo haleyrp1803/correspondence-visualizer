@@ -756,11 +756,13 @@ export function buildInitialPeridotTemporalMapping(headers = [], coreMapping = {
   const singleDate = intervalDetected
     ? exactDateHeader
     : (suggestions.Date?.sourceColumn || coreMapping?.Date || exactDateHeader || '');
+  const startDate = suggestions.Date_Start?.sourceColumn || '';
+  const endDate = suggestions.Date_End?.sourceColumn || '';
 
   return Object.freeze({
     Date: singleDate,
-    Date_Start: suggestions.Date_Start?.sourceColumn || '',
-    Date_End: suggestions.Date_End?.sourceColumn || '',
+    Date_Start: startDate && startDate !== singleDate ? startDate : '',
+    Date_End: endDate && endDate !== singleDate && endDate !== startDate ? endDate : '',
     Date_Display: suggestions.Date_Display?.sourceColumn || '',
   });
 }

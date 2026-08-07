@@ -381,9 +381,9 @@ function IdentifyRecordsStep({ staging, previewRows, headers }) {
   );
 }
 
-function TimeMappingStep({ headers, temporalMapping, onTemporalChange }) {
+function TimeMappingStep({ headers, rows, temporalMapping, onTemporalChange }) {
   return (
-    <TemporalMappingTable headers={headers} temporalMapping={temporalMapping} onChange={onTemporalChange} />
+    <TemporalMappingTable headers={headers} rows={rows} temporalMapping={temporalMapping} onChange={onTemporalChange} />
   );
 }
 
@@ -1976,6 +1976,7 @@ export function PeridotColumnMappingModal({
           {!isWorkbookMode && stepForRender === 'time' ? (
             <TimeMappingStep
               headers={headers}
+              rows={staging?.rawRows || staging?.rows || rows}
               temporalMapping={stripDisplayDateMapping(temporalMapping)}
               onTemporalChange={handleTemporalMappingChange}
             />

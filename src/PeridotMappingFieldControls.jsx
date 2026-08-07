@@ -92,44 +92,114 @@ function RoleCell({ definition }) {
  * on the right. Date_Display is composed automatically from the selected single
  * date or interval and is intentionally not shown.
  */
-export function TemporalMappingTable({ headers, temporalMapping = {}, onChange }) {
+export function getNonBlankExampleValues(rows = [], sourceColumn = '', limit = 3) {
+  if (!sourceColumn) return [];
+  const seen = new Set();
+  const values = [];
+
+  for (const row of rows || []) {
+    const rawValue = row?.[sourceColumn];
+    const text = String(rawValue ?? '').trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    values.push(text);
+    if (values.length >= limit) break;
+  }
+
+  return values;
+}
+
+function TemporalExamples({ values = [] }) {
+  if (!values.length) return null;
   return (
-    <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.85fr)]">
-        <div className="min-w-0">
-          <div className="grid grid-cols-[minmax(9rem,0.8fr)_minmax(14rem,1fr)] gap-4 border-b border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-3 text-sm font-semibold text-[var(--panel-card-text)]">
-            <div>Temporal role</div>
-            <div>Your column</div>
-          </div>
+    <div className="mt-2 break-words text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+      <span className="font-semibold text-[var(--panel-card-text)]">Examples from your data:</span>{' '}
+      {values.map((value, index) => (
+        <React.Fragment key={`${value}-${index}`}>
+          {index ? ' · ' : ''}<span>{value}</span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
 
-          <div className="divide-y divide-[var(--panel-card-border)] rounded-b-xl border-x border-b border-[var(--panel-card-border)] bg-[var(--input-bg)]/35">
-            {VISIBLE_TEMPORAL_FIELD_DEFINITIONS.map((definition) => (
-              <div
-                key={definition.key}
-                className="grid grid-cols-[minmax(9rem,0.8fr)_minmax(14rem,1fr)] gap-4 px-4 py-4 text-sm"
-              >
-                <div className="min-w-0">
-                  <div className="font-semibold text-[var(--panel-card-text)]">{definition.label || definition.key}</div>
-                  <div className="mt-1 text-[11px] font-normal uppercase tracking-[0.08em] text-[var(--panel-card-muted-text)]">{definition.key}</div>
-                </div>
-                <div className="peridot-mapping-choice-cell min-w-0">
-                  <select
-                    value={temporalMapping[definition.key] || ''}
-                    onChange={(event) => onChange(definition.key, event.target.value)}
-                    className={SOURCE_SELECT_CLASS}
+const TEMPORAL_UI_COPY = Object.freeze({
+  Date: Object.freeze({
+    label: 'Date',
+    description: 'A date associated with this row—for example a letter, transaction, observation, event, photograph, or court record.',
+  }),
+  Date_Start: Object.freeze({
+    label: 'Beginning date',
+    description: 'When something begins—for example birth, inception, departure, opening, appointment, construction, or the beginning of a period.',
+  }),
+  Date_End: Object.freeze({
+    label: 'Ending date',
+    description: 'When something ends—for example death, dissolution, arrival, closing, termination, demolition, or the end of a period.',
+  }),
+});
+
+function TemporalIntro() {
+  return (
+    <div className="peridot-mapping-intro-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-sm leading-snug text-[var(--panel-card-muted-text)]">
+      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">Time</div>
+      <div className="mt-1 text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">When does the information in each row take place?</div>
+      <p className="mt-2 text-sm leading-relaxed">
+        Choose any columns that tell Peridot when a record, event, person, place, object, measurement, or other item belongs in time. Your data may use one, several, or none of these.
+      </p>
+      <p className="mt-2 text-sm leading-relaxed">
+        <span className="font-semibold text-[var(--panel-card-text)]">Examples:</span> date on a letter, timeframe of a journey, publication date, lifespans, etc.
+      </p>
+    </div>
+  );
+}
+
+export function TemporalMappingTable({ headers, rows = [], temporalMapping = {}, onChange }) {
+  return (
+    <div className="space-y-3">
+      <TemporalIntro />
+      <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
+        <div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]">
+          <div className="min-w-0">
+            <div className="grid grid-cols-[minmax(13rem,0.9fr)_minmax(16rem,1.1fr)] gap-4 border-b border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-3 text-sm font-semibold text-[var(--panel-card-text)]">
+              <div>When it happens</div>
+              <div>Your column</div>
+            </div>
+
+            <div className="divide-y divide-[var(--panel-card-border)] rounded-b-xl border-x border-b border-[var(--panel-card-border)] bg-[var(--input-bg)]/35">
+              {VISIBLE_TEMPORAL_FIELD_DEFINITIONS.map((definition) => {
+                const uiCopy = TEMPORAL_UI_COPY[definition.key] || { label: definition.label || definition.key, description: definition.description || '' };
+                const selectedColumn = temporalMapping[definition.key] || '';
+                const examples = getNonBlankExampleValues(rows, selectedColumn, 3);
+                return (
+                  <div
+                    key={definition.key}
+                    className="grid grid-cols-[minmax(13rem,0.9fr)_minmax(16rem,1.1fr)] gap-4 px-4 py-4 text-sm"
                   >
-                    <option value="">Unassigned</option>
-                    {headers.map((header) => (
-                      <option key={header} value={header}>{header}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ))}
+                    <div className="min-w-0">
+                      <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">{uiCopy.label}</div>
+                      <p className="mt-2 text-sm font-normal leading-relaxed text-[var(--panel-card-muted-text)]">{uiCopy.description}</p>
+                    </div>
+                    <div className="peridot-mapping-choice-cell min-w-0">
+                      <select
+                        value={selectedColumn}
+                        onChange={(event) => onChange(definition.key, event.target.value)}
+                        className={SOURCE_SELECT_CLASS}
+                      >
+                        <option value="">Unassigned</option>
+                        {headers.map((header) => (
+                          <option key={header} value={header}>{header}</option>
+                        ))}
+                      </select>
+                      <TemporalExamples values={examples} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
 
-        <TemporalUsagePanel />
+          <TemporalUsagePanel />
+        </div>
       </div>
     </div>
   );
@@ -637,40 +707,47 @@ export function WorkbookTemporalMappingTable({ workbookModel, workbookMapping, o
   const temporalMappings = workbookMapping.temporalMappings || {};
 
   return (
-    <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.85fr)]">
-        <div className="min-w-0">
-          <div className="grid grid-cols-[minmax(9rem,0.8fr)_minmax(14rem,1fr)] gap-4 border-b border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-3 text-sm font-semibold text-[var(--panel-card-text)]">
-            <div>Temporal role</div>
-            <div>Your column</div>
+    <div className="space-y-3">
+      <TemporalIntro />
+      <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
+        <div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]">
+          <div className="min-w-0">
+            <div className="grid grid-cols-[minmax(13rem,0.9fr)_minmax(16rem,1.1fr)] gap-4 border-b border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-3 text-sm font-semibold text-[var(--panel-card-text)]">
+              <div>When it happens</div>
+              <div>Your column</div>
+            </div>
+
+            <div className="divide-y divide-[var(--panel-card-border)] rounded-b-xl border-x border-b border-[var(--panel-card-border)] bg-[var(--input-bg)]/35">
+              {VISIBLE_TEMPORAL_FIELD_DEFINITIONS.map((definition) => {
+                const currentRef = temporalMappings[definition.key] || {};
+                const uiCopy = TEMPORAL_UI_COPY[definition.key] || { label: definition.label || definition.key, description: definition.description || '' };
+                const sourceSheet = currentRef?.sheetName ? getWorkbookSheet(workbookModel, currentRef.sheetName) : null;
+                const examples = getNonBlankExampleValues(sourceSheet?.rows || [], currentRef?.columnName || '', 3);
+                return (
+                  <div
+                    key={definition.key}
+                    className="grid grid-cols-[minmax(13rem,0.9fr)_minmax(16rem,1.1fr)] gap-4 px-4 py-4 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">{uiCopy.label}</div>
+                      <p className="mt-2 text-sm font-normal leading-relaxed text-[var(--panel-card-muted-text)]">{uiCopy.description}</p>
+                    </div>
+                    <div className="peridot-mapping-choice-cell min-w-0">
+                      <WorkbookFieldSelect
+                        workbookModel={workbookModel}
+                        currentRef={currentRef}
+                        onChange={(ref) => onChange(definition.key, ref)}
+                      />
+                      <TemporalExamples values={examples} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="divide-y divide-[var(--panel-card-border)] rounded-b-xl border-x border-b border-[var(--panel-card-border)] bg-[var(--input-bg)]/35">
-            {VISIBLE_TEMPORAL_FIELD_DEFINITIONS.map((definition) => {
-              const currentRef = temporalMappings[definition.key] || {};
-              return (
-                <div
-                  key={definition.key}
-                  className="grid grid-cols-[minmax(9rem,0.8fr)_minmax(14rem,1fr)] gap-4 px-4 py-4 text-sm"
-                >
-                  <div className="min-w-0">
-                    <div className="font-semibold text-[var(--panel-card-text)]">{definition.label || definition.key}</div>
-                    <div className="mt-1 text-[11px] font-normal uppercase tracking-[0.08em] text-[var(--panel-card-muted-text)]">{definition.key}</div>
-                  </div>
-                  <div className="peridot-mapping-choice-cell min-w-0">
-                    <WorkbookFieldSelect
-                      workbookModel={workbookModel}
-                      currentRef={currentRef}
-                      onChange={(ref) => onChange(definition.key, ref)}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <TemporalUsagePanel />
         </div>
-
-        <TemporalUsagePanel />
       </div>
     </div>
   );
