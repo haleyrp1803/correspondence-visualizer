@@ -20,34 +20,46 @@ This document owns the detailed checkpoint, milestone chronology, deferred/archi
 ## 1. Current Synchronized Checkpoint
 
 ```text
-619bab0 — Restore stable tutorial attention behavior
+301a1e1 — Add universal runtime compatibility boundary
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
 
-This checkpoint establishes the stable first-time tutorial baseline after a substantial onboarding implementation and refinement sequence:
+This checkpoint closes **Phase 1 of the universal data architecture** on top of the canonical normalization and active genealogy work completed after the prior `619bab0` documentation baseline.
 
-- implemented the complete first-time tutorial framework, including multi-step state, draggable panels, minimize/restore docking, progression, recovery, keyboard accessibility, target anchoring/highlighting, and a Home-page entry;
-- replaced the earlier standalone tutorial Start page with a seven-stage flow beginning directly in Visualizations;
-- accepted the concise dialogue-frame redesign with centered titles, one sentence per frame, footer progress/navigation, and Adobe Stock Filigree 3;
-- added guidance for Visualizations, Timeline, Inspector, Explore, Browse / Apply, Working Set, and Export, including an explicit instruction to close the Inspector before continuing;
-- stabilized target observation/highlighting behavior and restored that stable behavior after rolling back unreliable animation experiments.
+Current architectural significance:
 
-The active stylesheet cascade is:
+- correspondence imports now normalize through the canonical research model and continue into existing application consumers through the legacy compatibility adapter;
+- genealogy/person-centered imports are active, with dedicated mapping, validation, canonical normalization, and genealogy runtime projection;
+- the canonical dataset can represent entities, places, records, events, relationships, participations, evidence sources, assertions, temporal structure, and source/transformation provenance;
+- Phase 1 adds universal saved-variable/mapping definitions, generalized source-file/table/field descriptors, deterministic repeated-heading/transpose/table-connection transforms, and an explicit runtime-compatibility classifier;
+- broader universal datasets are allowed to remain canonical-only rather than being coerced into correspondence or genealogy runtime rows before a downstream consumer supports them;
+- the public universal-upload redesign and universal chart-builder work have **not** yet been implemented; they are the planned Phase 2 and Phase 3 work.
 
-```jsx
-import './index.css';
-import './InspectorPanel.css';
-import './AnalyticsPanel.css';
-import './PeridotSearchWorkspace.css';
-import './PeridotColumnMappingModal.css';
-import './PeridotLearnMoreWorkspace.css';
-import './PeridotFeedbackForm.css';
-```
-
-`index.css` is the shared/global layer. Component stylesheets own their named presentation domains. The restored import commit is a functional-cascade repair, not a change to the intended architecture.
+The active correspondence and genealogy profiles remain compatibility/preset paths. They should be retired or collapsed only after a later universal mapper demonstrates that doing so loses no capability and produces a genuinely simpler architecture.
 
 ## 2. Recent Milestones, Newest First
+
+### Universal mapping/source foundation and runtime compatibility boundary — 2026-08-07
+
+- Completed Phase 1 of the universal data architecture without changing the public upload UI or current chart-builder UI.
+- **`a05130f` — `Add universal mapping schema foundation`** added user-owned saved variables, field assignments, sheet-purpose assignments, repeated-heading groups, and table-connection definitions to the canonical dataset vocabulary.
+- **`eda0b88` — `Add generalized source sheet model`** added stable source-file, source-table, and source-field descriptors plus workbook/source-manifest helpers without duplicating complete workbook content inside each canonical dataset.
+- **`ebcd7d0` — `Add universal transformation helpers`** added deterministic field preservation, repeated-heading conversion, transpose, and non-flattening table-connection operations while retaining provenance.
+- **`301a1e1` — `Add universal runtime compatibility boundary`** proved that correspondence remains on the canonical-through-legacy adapter path, genealogy remains on its direct canonical runtime path, and stock-price/Alaskan-airfield/Maria-style universal structures can remain valid canonical-only datasets rather than being forced into a legacy row shape.
+- The fixtures deliberately use varied real research-data shapes as architecture tests rather than encoding stock prices, Alaska, or Maria Maddalena as special-case domain logic.
+- Phase 2 is reserved for the progressive human-readable universal upload/mapping workflow; Phase 3 is reserved for the direct-variable and structured scholarly-sentence chart builder.
+- Prepared this bounded Phase 1 core-documentation synchronization against `301a1e1`; no source behavior, upload UI, chart behavior, CSS, or runtime wiring is changed by the documentation pass.
+- Recorded the Peridot delivery convention requested during Phase 1: coding and documentation replacements should default to one uniquely versioned ZIP bundle with transparent PowerShell extract/copy commands.
+
+### Canonical normalization, correspondence parity, and active genealogy imports — 2026-07-24
+
+- Implemented the canonical normalized research model planned after `619bab0`, including serializable entities, places, records, events, relationships, participations, evidence sources, assertions, temporal assertions, provenance, validation, and deterministic canonical IDs.
+- Added the correspondence normalization profile and legacy compatibility adapter, then used shadow comparison to verify parity before switching correspondence imports to the canonical source while retaining the established runtime arrays for current consumers.
+- The repository log confirms the canonical-model foundation sequence as **`3aaee49` — `Add normalized data model foundations`** followed by **`d612c3e` — `Add normalized data model foundations`**, then **`1e17596` — `Add correspondence normalization profile`**, **`6c04e84` — `Add normalized model compatibility adapter`**, **`53c1116` — `Add normalization shadow comparison`**, and **`ba844cc` — `Switch imports to canonical normalization source`**. The two foundation commits are preserved separately because Git records them as distinct commits with the same message; this documentation does not collapse or reinterpret them.
+- **`402336f` — `Add genealogy normalization profile`** added person-centered canonical normalization for people, life events, parent/partner relationships, places, attributes, evidence, and provenance without converting life-event locations into false movement routes.
+- **`94b9d46` — `Add dataset profile selection and routing`**, **`1e661da` — `Add genealogy mapping schema and validation`**, **`2ef36a6` — `Add genealogy mapping workflow`**, and **`8f19997` — `Activate canonical genealogy imports`** moved genealogy from schema/profile groundwork to an active import path.
+- Correspondence and Genealogy are now active profiles over the canonical architecture. They remain valuable specialized presets/normalizers and should not be removed merely because broader universal mapping is under development.
 
 ### First-time tutorial framework, flow redesign, and stable attention baseline — 2026-07-14
 
@@ -453,8 +465,27 @@ A responsive panel-sizing experiment attempted to make the shared side panel abs
 
 This is the single authoritative place in the documentation for the cumulative commit trajectory. The table is retained exhaustively, newest first. New rows are appended during synchronized documentation passes.
 
+
+
 | Date | Commit | Message | Branch/tag decoration |
 |---|---|---|---|
+| 2026-08-07 | `301a1e1` | Add universal runtime compatibility boundary | (HEAD -> main, origin/main, origin/HEAD) |
+| 2026-08-07 | `ebcd7d0` | Add universal transformation helpers |  |
+| 2026-08-07 | `eda0b88` | Add generalized source sheet model |  |
+| 2026-08-07 | `a05130f` | Add universal mapping schema foundation |  |
+| 2026-07-24 | `8f19997` | Activate canonical genealogy imports |  |
+| 2026-07-24 | `2ef36a6` | Add genealogy mapping workflow |  |
+| 2026-07-24 | `1e661da` | Add genealogy mapping schema and validation |  |
+| 2026-07-24 | `94b9d46` | Add dataset profile selection and routing |  |
+| 2026-07-24 | `402336f` | Add genealogy normalization profile |  |
+| 2026-07-24 | `ba844cc` | Switch imports to canonical normalization source |  |
+| 2026-07-24 | `53c1116` | Add normalization shadow comparison |  |
+| 2026-07-24 | `6c04e84` | Add normalized model compatibility adapter |  |
+| 2026-07-24 | `1e17596` | Add correspondence normalization profile |  |
+| 2026-07-24 | `d612c3e` | Add normalized data model foundations |  |
+| 2026-07-24 | `3aaee49` | Add normalized data model foundations |  |
+| 2026-07-24 | `805163d` | update changlog |  |
+| 2026-07-24 | `a09716c` | Synchronize documentation for first-time tutorial |  |
 | 2026-07-14 | `619bab0` | Restore stable tutorial attention behavior | (HEAD -> main, origin/main, origin/HEAD) |
 | 2026-07-14 | `d3c3c24` | Refine tutorial presentation and dialogue layout |  |
 | 2026-07-14 | `297430f` | Improve tutorial accessibility and focus handling |  |

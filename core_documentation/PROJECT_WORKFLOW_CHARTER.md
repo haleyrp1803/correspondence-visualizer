@@ -24,7 +24,7 @@ This Charter owns mandatory process rules, source-of-truth continuity, delivery/
 Current synchronized checkpoint:
 
 ```text
-619bab0 — Restore stable tutorial attention behavior
+301a1e1 — Add universal runtime compatibility boundary
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
@@ -86,7 +86,7 @@ Before each coding pass, state:
 - in-scope files/regions
 - out-of-scope files/regions
 - one plain-language acceptance test
-- expected artifact: pasted diff, full file, individual `.txt` replacement, or commit-ready instructions
+- expected artifact: usually a uniquely versioned replacement ZIP bundle plus extract/copy instructions; use pasted diff, isolated file, or commit-ready instructions only when that better fits the bounded pass
 
 Do not mix functional changes, visual redesign, broad refactors, and documentation updates in a single implementation pass unless the user explicitly chooses that scope.
 
@@ -128,7 +128,7 @@ Small targeted replacement blocks are allowed only when all of the following are
 - start from the exact latest local stylesheet or a confirmed commit that contains all accepted interim changes;
 - identify preservation checks for unrelated behaviors that must survive the change;
 - use a narrow, source-verified edit only when its selector/anchor is stable and unambiguous;
-- prefer an individual replacement file over an executable patch script unless the user explicitly requests a script.
+- prefer an ordinary replacement file delivered inside the pass bundle over an executable patch script unless the user explicitly requests a script.
 
 Do not rely on comment markers as the only verification anchor for a generated script. Comment text may be altered by text encoding or prior tooling. Verify stable selector or structural hooks instead.
 
@@ -168,13 +168,14 @@ A **checkpoint** is a tested intermediate state that may still be revised soon. 
 
 ### Delivery format
 
-- Documentation-only passes: provide individual replacement `.txt` or `.md` files generated from the reviewed current documents.
-- Small local edits: use targeted, source-verified blocks only after full-file review.
-- Medium or fragile files: prefer current-source full-file replacements.
-- Default delivery is individual files with exact `Copy-Item` commands from `$HOME\Downloads` into the source-of-truth project folder.
-- For image, brand, screenshot, or other asset passes, include exact copy commands for each asset file as well as for any related source or documentation replacement.
-- Do not use ZIP packages or executable apply scripts unless explicitly requested.
-- Do not use `git add .` while generated artifacts such as `itch_upload/` are untracked.
+- **Default Peridot coding and documentation delivery:** provide one uniquely versioned ZIP bundle per pass containing all new/replacement files for that pass.
+- Always provide exact PowerShell commands to extract the bundle into a uniquely named temporary folder and copy each contained file to its intended path under `C:\Users\haley\OneDrive\Desktop\Peridot\`.
+- Bundle-internal replacement filenames should also be unique/versioned when practical so downloads from different passes cannot be confused. Repository destination filenames remain the canonical project filenames.
+- Avoid separate individual-file downloads unless there is a specific reason to provide one, such as isolated recovery of one file.
+- Do not use executable apply/patch scripts unless explicitly requested. The bundle should contain ordinary source/document/asset files and the chat should provide transparent copy commands.
+- Small local edits may still use targeted, source-verified blocks only after full-file review when that is demonstrably safer than a replacement bundle.
+- For image, brand, screenshot, or other asset passes, include the assets inside the same pass bundle and provide exact copy destinations.
+- Do not use `git add .` while generated artifacts such as `itch_upload/` or unrelated working files are untracked.
 - Use targeted `git add <file>...` commands by default. Use `git add -A src` only when an intentional source-file rename or deletion requires it.
 
 ### Sync ritual
@@ -302,9 +303,11 @@ Future cluster changes should preserve:
 - Back returns to the cluster view
 - cluster sizing remains visually meaningful
 
-### Data import and mapping caution
+### Data import, canonical normalization, and mapping caution
 
-Data import is a fragile boundary. Keep the public direction intact: unified CSV / TSV / XLSX / XLS upload, user-confirmed role-based mapping, explicit workbook unique-ID joins, permissive database-first admission, and no silent standardization. Do not reintroduce the legacy three-file workflow without a specific recovery or compatibility reason.
+Data import is a fragile boundary. Keep the public direction intact: unified CSV / TSV / XLSX / XLS upload, user-confirmed/user-owned mapping, active correspondence and genealogy profiles, permissive database-first admission, and no silent standardization. Correspondence currently passes through the canonical normalized model and a legacy runtime adapter; genealogy uses a direct canonical runtime projection; broader universal structures remain canonical-only until a consumer deliberately adopts them.
+
+Do not create a new profile for every unusual spreadsheet shape as a substitute for the universal mapping work. Conversely, do not retire or collapse the existing Correspondence / Directed Record or Genealogy / Person-Centered profiles until a later universal mapper proves that doing so loses no behavior or scholarly expressiveness and simplifies the architecture rather than relocating complexity. Do not reintroduce the legacy three-file workflow without a specific recovery or compatibility reason.
 
 For the current import/workbook contract and detailed regression checks, see the [Maintainer’s Guide — Data Import and Workbook Contract](MAINTAINERS_GUIDE.md#7-data-import-and-workbook-contract).
 
@@ -331,10 +334,14 @@ Detailed historical decision rationale remains preserved in the archived invento
 
 ### 7.1 Data policy and imports
 
-- Peridot is database-first: accepted records may be incomplete, and coordinates/dates are capability-enabling rather than admission requirements.
-- Peridot does not silently standardize, merge, or enforce controlled vocabularies.
-- Arbitrary tables use explicit user-confirmed mapping; multi-sheet workbooks use user-confirmed unique-ID joins rather than row-order matching.
-- Role-based mapping supports identity, time, places, relationships, evidence/analysis, and capability review; point/site and chart/evidence-first datasets are valid when their mapped fields support them.
+- Peridot is database-first: accepted research items may be incomplete, and coordinates/dates are capability-enabling rather than admission requirements.
+- Peridot does not silently standardize, merge, infer domain meaning, or enforce controlled vocabularies.
+- The canonical normalized model is the consumer-neutral research representation. It preserves entities, places, records, events, relationships, participations, evidence, assertions, temporal structure, and machine-readable provenance.
+- Correspondence / Directed Record and Genealogy / Person-Centered are active mapping/normalization profiles. They remain first-class until a universal mapping workflow demonstrates complete parity and a simpler architecture; do not retire them merely to make the profile list shorter.
+- Arbitrary tables use explicit user-confirmed mapping; current correspondence workbooks use user-confirmed unique-ID joins rather than row-order matching.
+- The Phase 1 universal mapping foundation is deterministic and user-owned: saved variables, field assignments, sheet-purpose assignments, repeated-heading groups, source-table/field descriptors, transformations, and table connections record what the user has told Peridot. Peridot may suggest broad recognizable forms such as dates or coordinates, but the user is ultimately responsible for the accepted mapping.
+- Broader universal datasets must not be forced into correspondence- or genealogy-shaped runtime rows merely because those are the current active consumer projections. Canonical-only preservation is valid until appropriate downstream consumers are implemented.
+- Phase 2 should prototype the complete progressive mapping workflow before targeted simplification. Phase 3 should build chart controls from saved variables, including a structured autocomplete sentence builder that mirrors scholarly questions without implementing unrestricted natural-language prompting.
 
 ### 7.2 Routing and workspace model
 
@@ -524,8 +531,9 @@ Each implementation pass should end with:
 - exact files changed;
 - one acceptance test;
 - whether the result is a checkpoint or commit;
+- a uniquely versioned replacement bundle when files are being delivered;
+- exact PowerShell extract/copy commands for that bundle;
 - exact Git commands;
-- exact copy commands if files are being moved;
 - known residual risks.
 
 ### Fresh-chat handoff

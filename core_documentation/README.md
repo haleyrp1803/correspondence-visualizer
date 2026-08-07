@@ -6,9 +6,9 @@
 
 ## Executive Summary
 
-Peridot is an open, research-oriented web application for exploring humanistic data through maps, networks, timelines, charts, advanced search, exports, and evidence dossiers. Its mature first use case is correspondence data based on the creator's dissertation research, but its role-based import workflow also supports point/site data, chart-first time series, and generic evidence records that do not require person-to-person relationships. 
+Peridot is an open, research-oriented web application for exploring humanistic data through maps, networks, timelines, charts, advanced search, exports, and evidence dossiers. Its mature first use case is correspondence data based on the creator's dissertation research, and its active import system now also includes a person-centered genealogy profile alongside role-based support for point/site data, chart-first time series, and generic evidence records. Underneath those workflows, Peridot now uses a canonical normalized research model and has completed the first internal phase of a broader universal-mapping architecture; the generalized universal-upload interface itself remains future work.
 
-Peridot was created by Haley Price in direct and continuous collaboration with ChatGPT. There is a robust AI disclosure and discussion of AI ethics (and ethical concerns) on the tool's "Learn More About Peridot" page where credit is documented. Please go there for more details. For the purposes of README, it bears mentioning that the reason the documentation is so meticulous (and so robotic) is because Price made ChatGPT record every single decision, commit, redirection, success, and failure throughout Peridot's development so that the full record of labor would be documented and disclosed. This paragraph was written by Price (hi!) but the remainder of the documentation was written by ChatGPT under exacting human direction and quality assurance supervision. 
+Peridot was created by Haley Price in direct and continuous collaboration with ChatGPT. There is a robust AI disclosure and discussion of AI ethics (and ethical concerns) on the tool's "Learn More About Peridot" page where credit is documented. Please go there for more details. For the purposes of README, it bears mentioning that the reason the documentation is so meticulous (and so robotic) is because Price made ChatGPT record every single decision, commit, redirection, success, and failure throughout Peridot's development so that the full record of labor would be documented and disclosed. This paragraph was written by Price (hi!) but the remainder of the documentation was written by ChatGPT under exacting human direction and quality assurance supervision.
 
 This README is the public orientation and workflow guide. It explains what Peridot is, what kinds of work and data it supports, how to run it locally, and how to use the active interface. For current architecture, module ownership, regression contracts, and project-maintenance guidance, use the [Maintainer’s Guide](MAINTAINERS_GUIDE.md), [Project Workflow Charter](PROJECT_WORKFLOW_CHARTER.md), and [Changelog](CHANGELOG.md).
 
@@ -32,7 +32,7 @@ This document owns public orientation, user-facing workflows, installation, data
 Current synchronized checkpoint:
 
 ```text
-619bab0 — Restore stable tutorial attention behavior
+301a1e1 — Add universal runtime compatibility boundary
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
@@ -64,11 +64,13 @@ Peridot is designed for researchers working with humanistic records that may be 
 - Peridot template CSV files.
 - Arbitrary CSV and TSV tables mapped through explicit field roles.
 - XLSX and XLS workbooks, including multi-sheet joins configured by unique ID.
+- **Correspondence / Directed Record** imports for letters, documents, observations, sites, and other directed or evidence records.
+- **Genealogy / Person-Centered** imports in which one row represents one person and mapped stable IDs support parents, partners, life events, places, and optional attributes.
 - Point/site datasets with one location per record.
 - Relationship/route datasets with source and target entities or locations.
 - Chart-first and generic evidence records that may not support mapping or networks.
 
-Peridot follows a **database-first** model: a record may remain useful for search, inspection, evidence preservation, or charts even if it lacks coordinates, a parseable date, or relationship fields.
+Peridot follows a **database-first** model: a record or normalized research item may remain useful for search, inspection, evidence preservation, or charts even if it lacks coordinates, a parseable date, or relationship fields. The canonical model preserves entities, places, records, events, relationships, participations, evidence sources, assertions, and their provenance without requiring every dataset to impersonate correspondence.
 
 ## 3. Current Public Workflow
 
@@ -90,9 +92,11 @@ Tutorial dialogue uses a large centered title, one concise sentence per frame, a
 
 ### 3.2 Load and map data
 
-Manage Your Data provides template download, a unified CSV / TSV / XLSX / XLS upload path, staged file/workbook review, and role-based mapping. The mapping workflow is organized around Preview, Sheets when relevant, Time, Places, Relations, Evidence, and Review.
+Manage Your Data provides template download, a unified CSV / TSV / XLSX / XLS upload path, staged file/workbook review, and profile-aware mapping. The active profile choices are **Correspondence / Directed Record** and **Genealogy / Person-Centered**.
 
-Users explicitly choose mappings; Peridot does not silently normalize names, places, dates, or controlled vocabularies. Workbook imports use user-configured unique-ID joins rather than row-order matching.
+The correspondence/directed-record workflow remains organized around Preview, Sheets when relevant, Time, Places, Relations, Evidence, and Review. The genealogy workflow uses Preview, Identity, Parents, Partners, Life events, Places, Attributes, and Review so one person row can generate canonical entities, life events, and family relationships without inventing movement between places.
+
+Users explicitly choose or accept mappings; Peridot does not silently normalize names, places, dates, relationships, or controlled vocabularies. Workbook correspondence imports continue to use user-configured unique-ID joins rather than row-order matching. The broader universal-mapping foundation now exists internally, but the future progressive universal-upload interface for arbitrary sheet purposes, repeated headings, and editable mappings is not yet the public workflow.
 
 ### 3.3 Visualize
 
@@ -356,7 +360,7 @@ Peridot currently uses React 18, Vite, Tailwind CSS, D3 (`d3-geo` and `d3-force`
 
 
 
-Peridot now treats uploaded data through a standardized one-file CSV template, arbitrary CSV/TSV mapping, workbook-aware Excel mapping/import, and a broader role-based capability model.
+Peridot now treats uploaded data through a standardized one-file CSV template, arbitrary CSV/TSV mapping, workbook-aware Excel mapping/import, active correspondence and genealogy profiles, and a canonical normalized research model beneath the current runtime workflows.
 
 The Data workspace provides:
 
@@ -367,6 +371,13 @@ The Data workspace provides:
 - post-upload validation popup
 - persistent **Latest upload summary** card
 - concise data tips
+
+Before mapping, the user selects the profile that best matches the uploaded table’s current structure:
+
+- **Correspondence / Directed Record** — one row is a letter, document, observation, site, or other directed/evidence record.
+- **Genealogy / Person-Centered** — one row is one person, with stable IDs used to map parent/partner references and life events.
+
+These profiles are active compatibility and convenience paths, not a claim that all humanistic data belongs to one of two ontologies. Peridot’s internal universal-mapping foundation is being developed underneath them. Correspondence or genealogy should be retired or collapsed only if a later universal workflow proves that doing so loses no capability and genuinely simplifies the architecture.
 
 For the standardized correspondence template, each row should represent one letter, document, or correspondence record. For mapped arbitrary tables and workbooks, rows may also represent sites, events, observations, measurements, catalogue entries, or other humanistic records. The public template columns are:
 
@@ -415,7 +426,9 @@ Incomplete records can still remain useful for evidence preservation, Search, or
 
 Peridot does **not** clean or standardize person names, place names, dates, topics, relationships, languages, titles, or other user-entered values. Charts, filters, and labels use uploaded values exactly as entered. Users who want cleaner networks or less fragmented Analytics categories should standardize their data before upload.
 
-For arbitrary tables and workbooks, the mapping workflow now asks users to describe field roles rather than forcing every table into a correspondence schema. Current steps include Preview, workbook Sheets, Time, Places, Relations, Evidence, and final Review. This allows datasets such as point/site tables to map one location per row and render in Place Map even when they have no source-target people and therefore do not populate People Network or Force-Directed views.
+For correspondence/directed-record arbitrary tables and workbooks, the mapping workflow asks users to describe field roles rather than forcing every column to match the public correspondence template. Current steps include Preview, workbook Sheets, Time, Places, Relations, Evidence, and final Review. This allows datasets such as point/site tables to map one location per row and render in Place Map even when they have no source-target people and therefore do not populate People Network or Force-Directed views.
+
+For genealogy/person-centered imports, the specialized mapping path asks for stable person identity, parent references, partner references, birth/death information, places, optional attributes, and final review. Birth and death locations remain life-event places; Peridot does not infer a journey between them. The canonical normalized model preserves these person-centered structures directly rather than flattening them into correspondence rows.
 
 Coordinate-pair fields are interpreted as latitude first, longitude second, including `POINT(latitude longitude)` strings. Route datasets may use separated source/target latitude-longitude columns or combined source/target coordinate-pair columns.
 
@@ -483,6 +496,8 @@ Implemented Advanced Search controls include keyword, person, place, Route Filte
 ## 8. Known User-Facing Limitations
 
 Peridot is an active research prototype. It can preserve and expose useful incomplete records, but not every dataset supports every visualization. Network views require mapped source-target relationships; map views require usable location information; Timeline and chart behavior depend on available temporal and analytic fields.
+
+Phase 1 of the universal data architecture is complete internally: Peridot can describe saved variables, field assignments, sheet purposes, repeated-heading groups, table connections, generalized source tables/fields, deterministic transformations, and runtime compatibility boundaries. The public upload interface has **not** yet been generalized around that foundation. Complex workbooks with repeated headings or multiple sheet purposes may therefore still require the existing profile-specific workflows until Phase 2 is implemented.
 
 Two technical audits remain deferred: Search dataset coverage/scope and Timeline playback × Analytics scope. Until those audits are complete, interface language should distinguish loaded, applied/filtered, timeline-visible, selected, charted, and exported data rather than implying that every surface handles scope identically.
 
