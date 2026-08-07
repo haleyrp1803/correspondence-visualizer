@@ -2,23 +2,14 @@
  * Evidence-field controls for the role-based column/workbook mapping modal.
  *
  * `PeridotColumnMappingModal.jsx` owns mapping state and import behavior. This
- * component file owns the repeated evidence/analysis field UI: Include/Ignore
- * choices, display-label editing, analytics-readiness labels, and workbook
- * sheet grouping. Keeping the evidence controls here makes the large modal
- * easier to read without changing the data model.
- *
- * Maintenance relationship:
- * - Include/Ignore values come from `peridotColumnMapping.js`.
- * - Workbook selections use `makeWorkbookColumnRef` from
- *   `peridotWorkbookMapping.js` so they remain compatible with workbook row
- *   assembly and joined-sheet evidence fields.
- * - All mutations are reported through callback props. This file stores no
- *   local React state and performs no import/application side effects.
+ * component file owns the repeated evidence field UI: Include/Ignore choices,
+ * display-label editing, analytics-readiness labels, source examples, and
+ * workbook sheet grouping.
  */
 
 import React from 'react';
 import { CUSTOM_INSPECTOR_FIELD_DEFAULTS } from './peridotColumnMapping.js';
-import { makeWorkbookColumnRef } from './peridotWorkbookMapping.js';
+import { getWorkbookSheet, makeWorkbookColumnRef } from './peridotWorkbookMapping.js';
 
 function normalizeAction(value) {
   return value === CUSTOM_INSPECTOR_FIELD_DEFAULTS.ignore
@@ -26,11 +17,6 @@ function normalizeAction(value) {
     : CUSTOM_INSPECTOR_FIELD_DEFAULTS.include;
 }
 
-/*
- * Two-checkbox control used instead of a dropdown so researchers can see the
- * Include/Ignore decision directly. The pair is intentionally mutually
- * exclusive: checking Include unchecks Ignore and vice versa.
- */
 function IncludeIgnoreCheckboxPair({ action, disabled = false, onChange }) {
   const resolvedAction = disabled ? CUSTOM_INSPECTOR_FIELD_DEFAULTS.ignore : normalizeAction(action);
   const isIncluded = resolvedAction === CUSTOM_INSPECTOR_FIELD_DEFAULTS.include;
@@ -68,11 +54,6 @@ function IncludeIgnoreCheckboxPair({ action, disabled = false, onChange }) {
   );
 }
 
-/*
- * Stable key helper shared by the modal's workbook evidence-refresh logic.
- * It identifies a candidate evidence column by sheet and column, not by display
- * label, so label edits do not break persistence across workbook step changes.
- */
 export function makeWorkbookSelectionKey(selection = {}) {
   const ref = selection.sourceRef || makeWorkbookColumnRef(selection.sheetName, selection.sourceColumn);
   return `${ref.sheetName || selection.sheetName || ''}::${ref.columnName || selection.sourceColumn || selection.key || selection.label || ''}`;
@@ -86,19 +67,121 @@ export function buildWorkbookSelectionLabel(selection = {}, primarySheetName = '
   return selection.label || selection.sourceColumn || selection.key || selection.sourceRef?.columnName || '';
 }
 
-/*
- * Single-table evidence selector. Core/visualization role columns are shown as
- * automatically ignored so users do not accidentally duplicate a field as both
- * a structural role and a custom Inspector/evidence field.
- */
-export function InspectorFieldsStep({ selections, coreMapping, onActionChange, onLabelChange }) {
-  const mappedCoreColumns = new Set(Object.values(coreMapping || {}).filter(Boolean));
+function collectExamples(rows = [], sourceColumn = '') {
+  if (!sourceColumn) return [];
+  const examples = [];
+  const seen = new Set();
+
+  for (const row of rows || []) {
+    const value = String(row?.[sourceColumn] ?? '').trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    examples.push(value);
+    if (examples.length >= 3) break;
+  }
+
+  return examples;
+}
+
+function EvidenceExamples({ rows = [], sourceColumn = '' }) {
+  const examples = collectExamples(rows, sourceColumn);
+  if (!examples.length) return null;
+
+  return (
+    <div className="mt-2 max-w-[24rem] text-sm font-normal leading-relaxed text-[var(--panel-card-muted-text)]">
+      <span className="font-semibold text-[var(--panel-card-text)]">Examples from your data:</span>{' '}
+      {examples.join(' · ')}
+    </div>
+  );
+}
+
+function EvidenceIntro() {
+  return (
+    <div className="peridot-mapping-intro-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4">
+      <div className="text-lg font-bold leading-tight text-[var(--panel-card-text)]">
+        What other information should Peridot keep with each record?
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+        Choose which remaining columns should stay attached to the record. These can include descriptive information, identifiers, citations, categories, measurements, links, notes, or anything else you want to preserve.
+      </p>
+    </div>
+  );
+}
+
+function singleTableStructuralColumns(coreMapping = {}, placeParts = [], relationshipParts = []) {
+  const columns = new Set(Object.values(coreMapping || {}).filter(Boolean));
+
+  for (const part of placeParts || []) {
+    [
+      part?.placeColumn,
+      part?.roleMode === 'column' ? part?.roleColumn : '',
+      part?.coordinateMode === 'pair' ? part?.coordinatePairColumn : '',
+      part?.coordinateMode === 'separate' ? part?.latitudeColumn : '',
+      part?.coordinateMode === 'separate' ? part?.longitudeColumn : '',
+    ].filter(Boolean).forEach((column) => columns.add(column));
+  }
+
+  for (const part of relationshipParts || []) {
+    [
+      part?.participantColumn,
+      part?.roleMode === 'column' ? part?.roleColumn : '',
+    ].filter(Boolean).forEach((column) => columns.add(column));
+  }
+
+  return columns;
+}
+
+function addWorkbookRef(set, ref) {
+  if (ref?.sheetName && ref?.columnName) {
+    set.add(`${ref.sheetName}::${ref.columnName}`);
+  }
+}
+
+function workbookStructuralRefs(workbookMapping = {}) {
+  const refs = new Set();
+
+  [
+    ...Object.values(workbookMapping.coreMappings || {}),
+    ...Object.values(workbookMapping.temporalMappings || {}),
+    ...Object.values(workbookMapping.pointMappings || {}),
+    ...Object.values(workbookMapping.routeCoordinatePairMappings || {}),
+    ...Object.values(workbookMapping.relationshipMetadataMappings || {}),
+  ].forEach((ref) => addWorkbookRef(refs, ref));
+
+  for (const part of workbookMapping.placeParts || []) {
+    [
+      part?.placeRef,
+      part?.roleMode === 'column' ? part?.roleRef : null,
+      part?.coordinateMode === 'pair' ? part?.coordinatePairRef : null,
+      part?.coordinateMode === 'separate' ? part?.latitudeRef : null,
+      part?.coordinateMode === 'separate' ? part?.longitudeRef : null,
+    ].forEach((ref) => addWorkbookRef(refs, ref));
+  }
+
+  for (const part of workbookMapping.relationshipParts || []) {
+    [
+      part?.participantRef,
+      part?.roleMode === 'column' ? part?.roleRef : null,
+    ].forEach((ref) => addWorkbookRef(refs, ref));
+  }
+
+  return refs;
+}
+
+export function InspectorFieldsStep({
+  selections,
+  coreMapping,
+  rows = [],
+  placeParts = [],
+  relationshipParts = [],
+  onActionChange,
+  onLabelChange,
+}) {
+  const mappedCoreColumns = singleTableStructuralColumns(coreMapping, placeParts, relationshipParts);
 
   return (
     <div className="space-y-4">
-      <div className="peridot-mapping-intro-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
-        Choose extra fields to preserve in dossiers, search, charts, filters, and export. Structural role columns are ignored here to avoid duplicates.
-      </div>
+      <EvidenceIntro />
 
       <div className="peridot-mapping-table-wrap overflow-x-auto rounded-2xl border border-[var(--panel-card-border)]">
         <table className="min-w-full border-collapse text-left text-sm">
@@ -116,18 +199,23 @@ export function InspectorFieldsStep({ selections, coreMapping, onActionChange, o
               const action = isMappedCore ? CUSTOM_INSPECTOR_FIELD_DEFAULTS.ignore : normalizeAction(selection.action);
               return (
                 <tr key={`${selection.sourceColumn}-${index}`} className="border-t border-[var(--panel-card-border)] align-top">
-                  <td className="px-4 py-3 font-semibold text-[var(--panel-card-text)]">
+                  <td className="px-4 py-4 font-semibold text-[var(--panel-card-text)]">
                     {selection.sourceColumn}
-                    {isMappedCore ? <div className="mt-1 text-xs font-normal text-[var(--panel-card-muted-text)]">Already mapped to a visualization role.</div> : null}
+                    {isMappedCore ? (
+                      <div className="mt-1 text-sm font-normal leading-relaxed text-[var(--panel-card-muted-text)]">
+                        Already used on an earlier mapping page.
+                      </div>
+                    ) : null}
+                    <EvidenceExamples rows={rows} sourceColumn={selection.sourceColumn} />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-4">
                     <IncludeIgnoreCheckboxPair
                       action={action}
                       disabled={isMappedCore}
                       onChange={(nextAction) => onActionChange(index, nextAction)}
                     />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-4">
                     <input
                       type="text"
                       value={selection.label || selection.sourceColumn}
@@ -135,35 +223,35 @@ export function InspectorFieldsStep({ selections, coreMapping, onActionChange, o
                       className="peridot-mapping-input w-full min-w-[12rem] rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-[var(--input-text)]"
                     />
                   </td>
-                  <td className="px-4 py-3"><span className={selection.analyticsEligible ? 'peridot-mapping-readiness-badge peridot-mapping-readiness-badge-chart' : 'peridot-mapping-readiness-badge'}>{selection.analyticsEligible ? 'Likely chart/filter field' : 'Evidence only'}</span></td>
+                  <td className="px-4 py-4">
+                    <span className={selection.analyticsEligible ? 'peridot-mapping-readiness-badge peridot-mapping-readiness-badge-chart' : 'peridot-mapping-readiness-badge'}>
+                      {selection.analyticsEligible ? 'Likely chart/filter field' : 'Evidence only'}
+                    </span>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      {!selections.length ? (
+        <div className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+          No additional evidence fields are available.
+        </div>
+      ) : null}
     </div>
   );
 }
 
-/*
- * Workbook evidence selector. Candidates are grouped by sheet because workbook
- * imports may preserve fields from the primary sheet and any joined sheets. This
- * component intentionally does not manage joins; it only renders whatever
- * selections the modal has already computed from the workbook mapping state.
- */
-export function WorkbookInspectorFieldsStep({ workbookMapping, selections, onActionChange, onLabelChange }) {
-  const mappedCoreRefs = new Set(
-    [
-      ...Object.values(workbookMapping.coreMappings || {}),
-      ...Object.values(workbookMapping.temporalMappings || {}),
-      ...Object.values(workbookMapping.pointMappings || {}),
-      ...Object.values(workbookMapping.routeCoordinatePairMappings || {}),
-      ...Object.values(workbookMapping.relationshipMetadataMappings || {}),
-    ]
-      .filter((ref) => ref?.sheetName && ref?.columnName)
-      .map((ref) => `${ref.sheetName}::${ref.columnName}`)
-  );
+export function WorkbookInspectorFieldsStep({
+  workbookModel,
+  workbookMapping,
+  selections,
+  onActionChange,
+  onLabelChange,
+}) {
+  const mappedCoreRefs = workbookStructuralRefs(workbookMapping);
 
   const groupedSelections = selections.reduce((groups, selection, index) => {
     const ref = getWorkbookSelectionRef(selection);
@@ -175,65 +263,80 @@ export function WorkbookInspectorFieldsStep({ workbookMapping, selections, onAct
 
   return (
     <div className="space-y-4">
-      <div className="peridot-mapping-intro-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
-        Choose extra workbook fields to preserve in dossiers, search, charts, filters, and export. Structural role columns are ignored here to avoid duplicates.
-      </div>
+      <EvidenceIntro />
 
-      {Array.from(groupedSelections.entries()).map(([sheetName, sheetSelections]) => (
-        <div key={sheetName} className="peridot-mapping-table-wrap overflow-x-auto rounded-2xl border border-[var(--panel-card-border)]">
-          <div className="border-b border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-3">
-            <div className="font-semibold text-[var(--panel-card-text)]">{sheetName}</div>
-            <div className="mt-1 text-xs text-[var(--panel-card-muted-text)]">
-              {sheetName === workbookMapping.primarySheetName ? 'Primary record sheet' : 'Joined sheet'}
+      {Array.from(groupedSelections.entries()).map(([sheetName, sheetSelections]) => {
+        const sourceSheet = getWorkbookSheet(workbookModel, sheetName);
+        const sourceRows = sourceSheet?.rows || [];
+
+        return (
+          <div key={sheetName} className="peridot-mapping-table-wrap overflow-x-auto rounded-2xl border border-[var(--panel-card-border)]">
+            <div className="border-b border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-4">
+              <div className="text-lg font-bold text-[var(--panel-card-text)]">{sheetName}</div>
+              <div className="mt-1 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+                {sheetName === workbookMapping.primarySheetName ? 'Primary record sheet' : 'Joined sheet'}
+              </div>
             </div>
+
+            <table className="min-w-full border-collapse text-left text-sm">
+              <thead className="bg-[var(--section-bg)] text-[var(--panel-card-text)]">
+                <tr>
+                  <th className="px-4 py-3">Workbook column</th>
+                  <th className="px-4 py-3">Use as evidence?</th>
+                  <th className="px-4 py-3">Display label</th>
+                  <th className="px-4 py-3">Chart/filter readiness</th>
+                </tr>
+              </thead>
+              <tbody className="text-[var(--panel-card-muted-text)]">
+                {sheetSelections.map(({ selection, index, ref }) => {
+                  const refKey = `${ref.sheetName}::${ref.columnName}`;
+                  const isMappedCore = mappedCoreRefs.has(refKey);
+                  const action = isMappedCore ? CUSTOM_INSPECTOR_FIELD_DEFAULTS.ignore : normalizeAction(selection.action);
+                  const sourceColumn = ref.columnName || selection.sourceColumn;
+
+                  return (
+                    <tr key={`${refKey}-${index}`} className="border-t border-[var(--panel-card-border)] align-top">
+                      <td className="px-4 py-4 font-semibold text-[var(--panel-card-text)]">
+                        {sourceColumn}
+                        {isMappedCore ? (
+                          <div className="mt-1 text-sm font-normal leading-relaxed text-[var(--panel-card-muted-text)]">
+                            Already used on an earlier mapping page.
+                          </div>
+                        ) : null}
+                        <EvidenceExamples rows={sourceRows} sourceColumn={sourceColumn} />
+                      </td>
+                      <td className="px-4 py-4">
+                        <IncludeIgnoreCheckboxPair
+                          action={action}
+                          disabled={isMappedCore}
+                          onChange={(nextAction) => onActionChange(index, nextAction)}
+                        />
+                      </td>
+                      <td className="px-4 py-4">
+                        <input
+                          type="text"
+                          value={selection.label || buildWorkbookSelectionLabel(selection, workbookMapping.primarySheetName)}
+                          onChange={(event) => onLabelChange(index, event.target.value)}
+                          className="peridot-mapping-input w-full min-w-[12rem] rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-[var(--input-text)]"
+                        />
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className={selection.analyticsEligible ? 'peridot-mapping-readiness-badge peridot-mapping-readiness-badge-chart' : 'peridot-mapping-readiness-badge'}>
+                          {selection.analyticsEligible ? 'Likely chart/filter field' : 'Evidence only'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-          <table className="min-w-full border-collapse text-left text-sm">
-            <thead className="bg-[var(--section-bg)] text-[var(--panel-card-text)]">
-              <tr>
-                <th className="px-4 py-3">Workbook column</th>
-                <th className="px-4 py-3">Use as evidence?</th>
-                <th className="px-4 py-3">Display label</th>
-                <th className="px-4 py-3">Chart/filter readiness</th>
-              </tr>
-            </thead>
-            <tbody className="text-[var(--panel-card-muted-text)]">
-              {sheetSelections.map(({ selection, index, ref }) => {
-                const refKey = `${ref.sheetName}::${ref.columnName}`;
-                const isMappedCore = mappedCoreRefs.has(refKey);
-                const action = isMappedCore ? CUSTOM_INSPECTOR_FIELD_DEFAULTS.ignore : normalizeAction(selection.action);
-                return (
-                  <tr key={`${refKey}-${index}`} className="border-t border-[var(--panel-card-border)] align-top">
-                    <td className="px-4 py-3 font-semibold text-[var(--panel-card-text)]">
-                      {ref.columnName || selection.sourceColumn}
-                      {isMappedCore ? <div className="mt-1 text-xs font-normal text-[var(--panel-card-muted-text)]">Already mapped to a visualization role.</div> : null}
-                    </td>
-                    <td className="px-4 py-3">
-                      <IncludeIgnoreCheckboxPair
-                        action={action}
-                        disabled={isMappedCore}
-                        onChange={(nextAction) => onActionChange(index, nextAction)}
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        type="text"
-                        value={selection.label || buildWorkbookSelectionLabel(selection, workbookMapping.primarySheetName)}
-                        onChange={(event) => onLabelChange(index, event.target.value)}
-                        className="peridot-mapping-input w-full min-w-[12rem] rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-[var(--input-text)]"
-                      />
-                    </td>
-                    <td className="px-4 py-3"><span className={selection.analyticsEligible ? 'peridot-mapping-readiness-badge peridot-mapping-readiness-badge-chart' : 'peridot-mapping-readiness-badge'}>{selection.analyticsEligible ? 'Likely chart/filter field' : 'Evidence only'}</span></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ))}
+        );
+      })}
 
       {!selections.length ? (
-        <div className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4 text-sm text-[var(--panel-card-muted-text)]">
-          No evidence or analysis field candidates are available from the configured workbook sheets.
+        <div className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+          No additional evidence fields are available from the configured workbook sheets.
         </div>
       ) : null}
     </div>

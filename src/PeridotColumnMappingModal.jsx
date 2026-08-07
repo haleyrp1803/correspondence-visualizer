@@ -2307,6 +2307,9 @@ export function PeridotColumnMappingModal({
             <InspectorFieldsStep
               selections={effectiveCustomSelections}
               coreMapping={{ ...coreMapping, ...stripDisplayDateMapping(temporalMapping), ...pointMapping, ...routeCoordinatePairMapping }}
+              rows={rows}
+              placeParts={placeParts}
+              relationshipParts={relationshipParts}
               onActionChange={handleCustomActionChange}
               onLabelChange={handleCustomLabelChange}
             />
@@ -2374,6 +2377,7 @@ export function PeridotColumnMappingModal({
 
           {isWorkbookMode && stepForRender === 'workbook-evidence' ? (
             <WorkbookInspectorFieldsStep
+              workbookModel={workbookModel}
               workbookMapping={workbookMapping}
               selections={workbookMapping.customFieldSelections || []}
               onActionChange={handleWorkbookCustomActionChange}
