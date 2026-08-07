@@ -896,140 +896,498 @@ export function WorkbookSpatialMappingPanel({ workbookModel, placeParts = [], on
 }
 
 
-const RELATIONSHIP_SINGLE_TABLE_FIELDS = Object.freeze([
-  Object.freeze({ label: 'Source entity', key: 'Source_Name', mappingType: 'core' }),
-  Object.freeze({ label: 'Target entity', key: 'Target_Name', mappingType: 'core' }),
-  Object.freeze({ label: 'Relationship type', key: 'Relationship_Type', mappingType: 'metadata' }),
-  Object.freeze({ label: 'Label/Note', key: 'Relationship_Label', mappingType: 'metadata' }),
-]);
 
-const RELATIONSHIP_METADATA_DEFINITIONS = Object.freeze({
-  Relationship_Type: Object.freeze({ key: 'Relationship_Type', label: 'Relationship type' }),
-  Relationship_Label: Object.freeze({ key: 'Relationship_Label', label: 'Label/Note' }),
+const EMPTY_RELATIONSHIP_PART = Object.freeze({
+  participantColumn: '',
+  roleMode: 'heading',
+  roleColumn: '',
 });
 
-function getRelationshipDefinition(field) {
+function RelationshipIntro() {
   return (
-    PERIDOT_CORE_FIELD_DEFINITIONS_BY_KEY[field.key]
-    || RELATIONSHIP_METADATA_DEFINITIONS[field.key]
-    || { key: field.key, label: field.label }
+    <div className="peridot-mapping-intro-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4">
+      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">Relations</div>
+      <div className="mt-1 text-lg font-bold text-[var(--panel-card-text)]">What connections are recorded in each row?</div>
+      <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+        Choose the columns that identify the people, places, organizations, objects, or other things connected by this row. A relationship can have two parts or many parts.
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+        <span className="font-semibold text-[var(--panel-card-text)]">Examples:</span> sender and recipient of a letter, parent and child, members of a family, origin and destination, people involved in a legal case, owner and object, organization and member, etc.
+      </p>
+    </div>
+  );
+}
+
+function RelationshipExamples({ rows = [], sourceColumn = '' }) {
+  if (!sourceColumn) return null;
+  const examples = [];
+  const seen = new Set();
+
+  for (const row of rows) {
+    const value = String(row?.[sourceColumn] ?? '').trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    examples.push(value);
+    if (examples.length >= 3) break;
+  }
+
+  if (!examples.length) return null;
+
+  return (
+    <div className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+      <span className="font-semibold text-[var(--panel-card-text)]">Examples from your data:</span>{' '}
+      {examples.join(' · ')}
+    </div>
   );
 }
 
 function RelationshipUsagePanel() {
   return (
-    <aside className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+    <aside className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">Used for</div>
-      <p className="mt-2">
-        Relationship information supports network graphs, connected-correspondent views, Inspector records, search and filter, charts, and export.
+      <p className="mt-3">
+        Relationship information supports network visualizations, Inspector records, search and filter, charts, and export.
       </p>
-      <p className="mt-2">
-        Use this step when each row links one entity to another.
+      <p className="mt-3">
+        Each part of a relationship can have its own role.
       </p>
-      <p className="mt-2">
-        Point/site datasets can leave these fields unassigned.
+      <p className="mt-3">
+        Relationships may include two participants or many participants.
       </p>
     </aside>
   );
 }
 
-function RelationshipFieldGrid({ children }) {
+function RelationshipPartCard({ part, index, headers, rows, onChange, onRemove, canRemove }) {
+  const participantColumn = part?.participantColumn || '';
+  const roleMode = part?.roleMode === 'column' ? 'column' : 'heading';
+  const roleColumn = part?.roleColumn || '';
+  const letter = String.fromCharCode(65 + index);
+
   return (
-    <div className="grid gap-2 md:grid-cols-4">
-      {children}
+    <section className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-lg font-bold text-[var(--panel-card-text)]">Part {letter}</div>
+          <p className="mt-1 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            {index === 0
+              ? 'This might be the sender of a letter, the place of origin, a person on a family tree, an organization, an object, or another participant.'
+              : index === 1
+                ? 'This might be the recipient of a letter, the destination or a stop along a journey, a relative of Part A on a family tree, or another participant.'
+                : 'Add another person, place, organization, object, or other participant in this relationship.'}
+          </p>
+        </div>
+        {canRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--panel-card-muted-text)] hover:text-[var(--panel-card-text)]"
+          >
+            Remove
+          </button>
+        ) : null}
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Which column contains this part of the relationship?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            Choose the column whose values identify the person, place, organization, object, or other participant.
+          </p>
+        </div>
+        <div>
+          <select
+            value={participantColumn}
+            onChange={(event) => onChange({ participantColumn: event.target.value })}
+            className={SOURCE_SELECT_CLASS}
+          >
+            <option value="">Unassigned</option>
+            {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+          </select>
+          <RelationshipExamples rows={rows} sourceColumn={participantColumn} />
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Where is this part&apos;s role recorded?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            The role explains how this participant takes part in the relationship, such as sender, recipient, mother, child, witness, owner, or member.
+          </p>
+        </div>
+        <div className="space-y-3">
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input
+              type="radio"
+              name={`relationship-role-${index}`}
+              checked={roleMode === 'heading'}
+              onChange={() => onChange({ roleMode: 'heading', roleColumn: '' })}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-semibold">In the column heading</span>
+              {participantColumn ? <span className="text-[var(--panel-card-muted-text)]"> — {participantColumn}</span> : null}
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input
+              type="radio"
+              name={`relationship-role-${index}`}
+              checked={roleMode === 'column'}
+              onChange={() => onChange({ roleMode: 'column' })}
+              className="mt-0.5"
+            />
+            <span className="font-semibold">In another column</span>
+          </label>
+          {roleMode === 'column' ? (
+            <div>
+              <select
+                value={roleColumn}
+                onChange={(event) => onChange({ roleColumn: event.target.value })}
+                className={SOURCE_SELECT_CLASS}
+              >
+                <option value="">Choose a role column</option>
+                {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+              </select>
+              <RelationshipExamples rows={rows} sourceColumn={roleColumn} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RelationshipMetadataSection({
+  headers,
+  rows,
+  relationshipMetadataMapping = {},
+  onMetadataChange,
+}) {
+  const relationshipTypeColumn = relationshipMetadataMapping?.Relationship_Type || '';
+  const relationshipLabelColumn = relationshipMetadataMapping?.Relationship_Label || '';
+
+  return (
+    <section className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-4">
+      <div className="text-lg font-bold text-[var(--panel-card-text)]">Relationship information <span className="font-normal text-[var(--panel-card-muted-text)]">(optional)</span></div>
+      <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+        Map columns that describe the relationship as a whole rather than one participant&apos;s role.
+      </p>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <label className="min-w-0">
+          <div className="mb-1 text-sm font-semibold text-[var(--panel-card-text)]">Relationship type</div>
+          <select
+            value={relationshipTypeColumn}
+            onChange={(event) => onMetadataChange('Relationship_Type', event.target.value)}
+            className={SOURCE_SELECT_CLASS}
+          >
+            <option value="">Unassigned</option>
+            {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+          </select>
+          <RelationshipExamples rows={rows} sourceColumn={relationshipTypeColumn} />
+        </label>
+        <label className="min-w-0">
+          <div className="mb-1 text-sm font-semibold text-[var(--panel-card-text)]">Relationship label or description</div>
+          <select
+            value={relationshipLabelColumn}
+            onChange={(event) => onMetadataChange('Relationship_Label', event.target.value)}
+            className={SOURCE_SELECT_CLASS}
+          >
+            <option value="">Unassigned</option>
+            {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+          </select>
+          <RelationshipExamples rows={rows} sourceColumn={relationshipLabelColumn} />
+        </label>
+      </div>
+    </section>
+  );
+}
+
+export function RelationshipMappingPanel({
+  headers,
+  rows = [],
+  relationshipParts = [],
+  relationshipMetadataMapping = {},
+  onRelationshipPartsChange,
+  onMetadataChange,
+}) {
+  const effectiveParts = relationshipParts.length >= 2
+    ? relationshipParts
+    : [
+        ...(relationshipParts || []),
+        ...Array.from({ length: Math.max(0, 2 - (relationshipParts || []).length) }, () => ({ ...EMPTY_RELATIONSHIP_PART })),
+      ];
+
+  const updatePart = (index, patch) => {
+    onRelationshipPartsChange?.(
+      effectiveParts.map((part, currentIndex) => currentIndex === index ? { ...part, ...patch } : part)
+    );
+  };
+
+  const addPart = () => {
+    onRelationshipPartsChange?.([...effectiveParts, { ...EMPTY_RELATIONSHIP_PART }]);
+  };
+
+  const removePart = (index) => {
+    const next = effectiveParts.filter((_, currentIndex) => currentIndex !== index);
+    onRelationshipPartsChange?.(next.length >= 2 ? next : effectiveParts);
+  };
+
+  return (
+    <div className="space-y-3">
+      <RelationshipIntro />
+      <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
+        <div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]">
+          <div className="min-w-0 space-y-4">
+            {effectiveParts.map((part, index) => (
+              <RelationshipPartCard
+                key={`relationship-part-${index}`}
+                part={part}
+                index={index}
+                headers={headers}
+                rows={rows}
+                onChange={(patch) => updatePart(index, patch)}
+                onRemove={() => removePart(index)}
+                canRemove={effectiveParts.length > 2}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={addPart}
+              className="rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]"
+            >
+              + Add another part
+            </button>
+            <RelationshipMetadataSection
+              headers={headers}
+              rows={rows}
+              relationshipMetadataMapping={relationshipMetadataMapping}
+              onMetadataChange={onMetadataChange}
+            />
+          </div>
+          <RelationshipUsagePanel />
+        </div>
+      </div>
     </div>
   );
 }
 
-function RelationshipFieldShell({ field, children }) {
-  const definition = getRelationshipDefinition(field);
+function WorkbookRelationshipExamples({ workbookModel, sourceRef = {} }) {
+  if (!sourceRef?.sheetName || !sourceRef?.columnName) return null;
+  const sheet = getWorkbookSheet(workbookModel, sourceRef.sheetName);
+  return <RelationshipExamples rows={sheet?.rows || []} sourceColumn={sourceRef.columnName} />;
+}
+
+const EMPTY_WORKBOOK_RELATIONSHIP_PART = Object.freeze({
+  participantRef: makeWorkbookColumnRef('', ''),
+  roleMode: 'heading',
+  roleRef: makeWorkbookColumnRef('', ''),
+});
+
+function WorkbookRelationshipPartCard({ part, index, workbookModel, onChange, onRemove, canRemove }) {
+  const participantRef = part?.participantRef || makeWorkbookColumnRef('', '');
+  const roleMode = part?.roleMode === 'column' ? 'column' : 'heading';
+  const roleRef = part?.roleRef || makeWorkbookColumnRef('', '');
+  const letter = String.fromCharCode(65 + index);
+  const headingLabel = participantRef?.columnName ? `${participantRef.sheetName} — ${participantRef.columnName}` : '';
+
   return (
-    <label className="min-w-0">
-      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">{field.label}</div>
-      {children}
-      <div className="mt-1 truncate text-[11px] text-[var(--panel-card-muted-text)]" title={definition.label || definition.key}>
-        {definition.key}
+    <section className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-lg font-bold text-[var(--panel-card-text)]">Part {letter}</div>
+          <p className="mt-1 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            {index === 0
+              ? 'This might be the sender of a letter, the place of origin, a person on a family tree, an organization, an object, or another participant.'
+              : index === 1
+                ? 'This might be the recipient of a letter, the destination or a stop along a journey, a relative of Part A on a family tree, or another participant.'
+                : 'Add another person, place, organization, object, or other participant in this relationship.'}
+          </p>
+        </div>
+        {canRemove ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--panel-card-muted-text)] hover:text-[var(--panel-card-text)]"
+          >
+            Remove
+          </button>
+        ) : null}
       </div>
-    </label>
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Which column contains this part of the relationship?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            Choose the sheet and column whose values identify the person, place, organization, object, or other participant.
+          </p>
+        </div>
+        <div>
+          <WorkbookFieldSelect
+            workbookModel={workbookModel}
+            currentRef={participantRef}
+            onChange={(ref) => onChange({ participantRef: ref })}
+          />
+          <WorkbookRelationshipExamples workbookModel={workbookModel} sourceRef={participantRef} />
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Where is this part&apos;s role recorded?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            The role explains how this participant takes part in the relationship, such as sender, recipient, mother, child, witness, owner, or member.
+          </p>
+        </div>
+        <div className="space-y-3">
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input
+              type="radio"
+              name={`workbook-relationship-role-${index}`}
+              checked={roleMode === 'heading'}
+              onChange={() => onChange({ roleMode: 'heading', roleRef: makeWorkbookColumnRef('', '') })}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-semibold">In the column heading</span>
+              {headingLabel ? <span className="text-[var(--panel-card-muted-text)]"> — {headingLabel}</span> : null}
+            </span>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input
+              type="radio"
+              name={`workbook-relationship-role-${index}`}
+              checked={roleMode === 'column'}
+              onChange={() => onChange({ roleMode: 'column' })}
+              className="mt-0.5"
+            />
+            <span className="font-semibold">In another column</span>
+          </label>
+
+          {roleMode === 'column' ? (
+            <div>
+              <WorkbookFieldSelect
+                workbookModel={workbookModel}
+                currentRef={roleRef}
+                onChange={(ref) => onChange({ roleRef: ref })}
+              />
+              <WorkbookRelationshipExamples workbookModel={workbookModel} sourceRef={roleRef} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </section>
   );
 }
 
-function getRelationshipMappingValue(field, { coreMapping, relationshipMetadataMapping }) {
-  if (field.mappingType === 'metadata') return relationshipMetadataMapping?.[field.key] || '';
-  return coreMapping?.[field.key] || '';
-}
+function WorkbookRelationshipMetadataSection({ workbookModel, relationshipMetadataMappings = {}, onMetadataChange }) {
+  const relationshipTypeRef = relationshipMetadataMappings?.Relationship_Type || makeWorkbookColumnRef('', '');
+  const relationshipLabelRef = relationshipMetadataMappings?.Relationship_Label || makeWorkbookColumnRef('', '');
 
-function getRelationshipWorkbookMappingValue(field, workbookMapping) {
-  if (field.mappingType === 'metadata') return workbookMapping?.relationshipMetadataMappings?.[field.key] || {};
-  return workbookMapping?.coreMappings?.[field.key] || {};
-}
-
-function handleRelationshipMappingChange(field, value, { onCoreChange, onMetadataChange }) {
-  if (field.mappingType === 'metadata') {
-    onMetadataChange(field.key, value);
-    return;
-  }
-  onCoreChange(field.key, value);
-}
-
-export function RelationshipMappingPanel({ headers, coreMapping = {}, relationshipMetadataMapping = {}, onCoreChange, onMetadataChange }) {
   return (
-    <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
-        <div className="min-w-0">
-          <div className="rounded-t-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-2.5 text-sm font-semibold text-[var(--panel-card-text)]">
-            Relationship Role
-          </div>
-          <div className="rounded-b-xl border-x border-b border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 px-4 py-3">
-            <section className="space-y-2">
-              <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Connected Entities</div>
-              <RelationshipFieldGrid>
-                {RELATIONSHIP_SINGLE_TABLE_FIELDS.map((field) => (
-                  <RelationshipFieldShell key={field.key} field={field}>
-                    <SpatialSelect
-                      headers={headers}
-                      value={getRelationshipMappingValue(field, { coreMapping, relationshipMetadataMapping })}
-                      onChange={(value) => handleRelationshipMappingChange(field, value, { onCoreChange, onMetadataChange })}
-                    />
-                  </RelationshipFieldShell>
-                ))}
-              </RelationshipFieldGrid>
-            </section>
-          </div>
-        </div>
-        <RelationshipUsagePanel />
+    <section className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-4">
+      <div className="text-lg font-bold text-[var(--panel-card-text)]">
+        Relationship information <span className="font-normal text-[var(--panel-card-muted-text)]">(optional)</span>
       </div>
-    </div>
+      <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+        Map columns that describe the relationship as a whole rather than one participant&apos;s role.
+      </p>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <label className="min-w-0">
+          <div className="mb-1 text-sm font-semibold text-[var(--panel-card-text)]">Relationship type</div>
+          <WorkbookFieldSelect
+            workbookModel={workbookModel}
+            currentRef={relationshipTypeRef}
+            onChange={(ref) => onMetadataChange('Relationship_Type', ref)}
+          />
+          <WorkbookRelationshipExamples workbookModel={workbookModel} sourceRef={relationshipTypeRef} />
+        </label>
+
+        <label className="min-w-0">
+          <div className="mb-1 text-sm font-semibold text-[var(--panel-card-text)]">Relationship label or description</div>
+          <WorkbookFieldSelect
+            workbookModel={workbookModel}
+            currentRef={relationshipLabelRef}
+            onChange={(ref) => onMetadataChange('Relationship_Label', ref)}
+          />
+          <WorkbookRelationshipExamples workbookModel={workbookModel} sourceRef={relationshipLabelRef} />
+        </label>
+      </div>
+    </section>
   );
 }
 
-export function WorkbookRelationshipMappingPanel({ workbookModel, workbookMapping = {}, onCoreChange, onMetadataChange }) {
+export function WorkbookRelationshipMappingPanel({ workbookModel, workbookMapping = {}, onRelationshipPartsChange, onMetadataChange }) {
+  const relationshipParts = Array.isArray(workbookMapping.relationshipParts) ? workbookMapping.relationshipParts : [];
+  const effectiveParts = relationshipParts.length >= 2
+    ? relationshipParts
+    : [
+        ...relationshipParts,
+        ...Array.from({ length: Math.max(0, 2 - relationshipParts.length) }, () => ({ ...EMPTY_WORKBOOK_RELATIONSHIP_PART })),
+      ];
+
+  const updatePart = (index, patch) => {
+    onRelationshipPartsChange?.(
+      effectiveParts.map((part, currentIndex) => currentIndex === index ? { ...part, ...patch } : part)
+    );
+  };
+
+  const addPart = () => {
+    onRelationshipPartsChange?.([
+      ...effectiveParts,
+      { participantRef: makeWorkbookColumnRef('', ''), roleMode: 'heading', roleRef: makeWorkbookColumnRef('', '') },
+    ]);
+  };
+
+  const removePart = (index) => {
+    const next = effectiveParts.filter((_, currentIndex) => currentIndex !== index);
+    onRelationshipPartsChange?.(next.length >= 2 ? next : effectiveParts);
+  };
+
   return (
-    <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
-        <div className="min-w-0">
-          <div className="rounded-t-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-2.5 text-sm font-semibold text-[var(--panel-card-text)]">
-            Relationship Role
+    <div className="space-y-3">
+      <RelationshipIntro />
+      <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
+        <div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]">
+          <div className="min-w-0 space-y-4">
+            {effectiveParts.map((part, index) => (
+              <WorkbookRelationshipPartCard
+                key={`workbook-relationship-part-${index}`}
+                part={part}
+                index={index}
+                workbookModel={workbookModel}
+                onChange={(patch) => updatePart(index, patch)}
+                onRemove={() => removePart(index)}
+                canRemove={effectiveParts.length > 2}
+              />
+            ))}
+
+            <button
+              type="button"
+              onClick={addPart}
+              className="rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]"
+            >
+              + Add another part
+            </button>
+
+            <WorkbookRelationshipMetadataSection
+              workbookModel={workbookModel}
+              relationshipMetadataMappings={workbookMapping.relationshipMetadataMappings || {}}
+              onMetadataChange={onMetadataChange}
+            />
           </div>
-          <div className="rounded-b-xl border-x border-b border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 px-4 py-3">
-            <section className="space-y-2">
-              <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Connected Entities</div>
-              <RelationshipFieldGrid>
-                {RELATIONSHIP_SINGLE_TABLE_FIELDS.map((field) => (
-                  <RelationshipFieldShell key={field.key} field={field}>
-                    <SpatialWorkbookSelect
-                      workbookModel={workbookModel}
-                      workbookMapping={workbookMapping}
-                      currentRef={getRelationshipWorkbookMappingValue(field, workbookMapping)}
-                      onChange={(value) => handleRelationshipMappingChange(field, value, { onCoreChange, onMetadataChange })}
-                    />
-                  </RelationshipFieldShell>
-                ))}
-              </RelationshipFieldGrid>
-            </section>
-          </div>
+          <RelationshipUsagePanel />
         </div>
-        <RelationshipUsagePanel />
       </div>
     </div>
   );

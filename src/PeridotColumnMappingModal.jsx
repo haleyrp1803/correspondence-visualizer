@@ -457,13 +457,14 @@ function PlacesMappingStep({ headers, rows, placeParts, onPlacePartsChange }) {
   );
 }
 
-function RelationshipsMappingStep({ headers, coreMapping, relationshipMetadataMapping, onChange, onMetadataChange }) {
+function RelationshipsMappingStep({ headers, rows, relationshipParts, relationshipMetadataMapping, onRelationshipPartsChange, onMetadataChange }) {
   return (
     <RelationshipMappingPanel
       headers={headers}
-      coreMapping={coreMapping}
+      rows={rows}
+      relationshipParts={relationshipParts}
       relationshipMetadataMapping={relationshipMetadataMapping}
-      onCoreChange={onChange}
+      onRelationshipPartsChange={onRelationshipPartsChange}
       onMetadataChange={onMetadataChange}
     />
   );
@@ -1073,12 +1074,12 @@ function WorkbookPlacesMappingStep({ workbookModel, placeParts, onPlacePartsChan
   );
 }
 
-function WorkbookRelationshipsMappingStep({ workbookModel, workbookMapping, onChange, onMetadataChange }) {
+function WorkbookRelationshipsMappingStep({ workbookModel, workbookMapping, onRelationshipPartsChange, onMetadataChange }) {
   return (
     <WorkbookRelationshipMappingPanel
       workbookModel={workbookModel}
       workbookMapping={workbookMapping}
-      onCoreChange={onChange}
+      onRelationshipPartsChange={onRelationshipPartsChange}
       onMetadataChange={onMetadataChange}
     />
   );
@@ -1335,6 +1336,82 @@ function buildInitialPlaceParts(mappingState = {}) {
 }
 
 
+function buildInitialRelationshipParts(mappingState = {}) {
+  const saved = Array.isArray(mappingState.relationshipParts) ? mappingState.relationshipParts : [];
+  if (saved.length >= 2) return saved.map((part) => ({ ...part }));
+
+  const core = mappingState.coreMapping || {};
+  const parts = [];
+
+  if (core.Source_Name) {
+    parts.push({
+      participantColumn: core.Source_Name,
+      roleMode: 'heading',
+      roleColumn: '',
+    });
+  }
+
+  if (core.Target_Name) {
+    parts.push({
+      participantColumn: core.Target_Name,
+      roleMode: 'heading',
+      roleColumn: '',
+    });
+  }
+
+  while (parts.length < 2) {
+    parts.push({
+      participantColumn: '',
+      roleMode: 'heading',
+      roleColumn: '',
+    });
+  }
+
+  return parts;
+}
+
+
+function buildInitialWorkbookRelationshipParts(mappingState = {}) {
+  const saved = Array.isArray(mappingState.relationshipParts) ? mappingState.relationshipParts : [];
+  if (saved.length >= 2) {
+    return saved.map((part) => ({
+      participantRef: part?.participantRef || makeWorkbookColumnRef('', ''),
+      roleMode: part?.roleMode === 'column' ? 'column' : 'heading',
+      roleRef: part?.roleRef || makeWorkbookColumnRef('', ''),
+    }));
+  }
+
+  const coreMappings = mappingState.coreMappings || {};
+  const parts = [];
+
+  if (coreMappings.Source_Name?.sheetName && coreMappings.Source_Name?.columnName) {
+    parts.push({
+      participantRef: coreMappings.Source_Name,
+      roleMode: 'heading',
+      roleRef: makeWorkbookColumnRef('', ''),
+    });
+  }
+
+  if (coreMappings.Target_Name?.sheetName && coreMappings.Target_Name?.columnName) {
+    parts.push({
+      participantRef: coreMappings.Target_Name,
+      roleMode: 'heading',
+      roleRef: makeWorkbookColumnRef('', ''),
+    });
+  }
+
+  while (parts.length < 2) {
+    parts.push({
+      participantRef: makeWorkbookColumnRef('', ''),
+      roleMode: 'heading',
+      roleRef: makeWorkbookColumnRef('', ''),
+    });
+  }
+
+  return parts;
+}
+
+
 export function PeridotColumnMappingModal({
   open,
   staging,
@@ -1374,9 +1451,14 @@ export function PeridotColumnMappingModal({
   const [pointMapping, setPointMapping] = useState(mappingState.pointMapping || {});
   const [routeCoordinatePairMapping, setRouteCoordinatePairMapping] = useState(mappingState.routeCoordinatePairMapping || {});
   const [placeParts, setPlaceParts] = useState(() => buildInitialPlaceParts(mappingState));
+  const [relationshipParts, setRelationshipParts] = useState(() => buildInitialRelationshipParts(mappingState));
   const [relationshipMetadataMapping, setRelationshipMetadataMapping] = useState(normalizeRelationshipMetadataMapping(mappingState.relationshipMetadataMapping || {}));
   const [customFieldSelections, setCustomFieldSelections] = useState(mappingState.customFieldSelections || []);
-  const [workbookMapping, setWorkbookMapping] = useState(() => ({ ...stripWorkbookDisplayDateMapping(mappingState), placeParts: buildInitialWorkbookPlaceParts(mappingState) }));
+  const [workbookMapping, setWorkbookMapping] = useState(() => ({
+    ...stripWorkbookDisplayDateMapping(mappingState),
+    placeParts: buildInitialWorkbookPlaceParts(mappingState),
+    relationshipParts: buildInitialWorkbookRelationshipParts(mappingState),
+  }));
   const [genealogyFieldMapping, setGenealogyFieldMapping] = useState(
     isWorkbookMode
       ? Object.fromEntries(Object.entries(mappingState.fieldMappings || {}).map(([field, ref]) => [field, ref?.columnName || '']))
@@ -1403,6 +1485,7 @@ export function PeridotColumnMappingModal({
     setCoreMapping(mappingState.coreMapping || {});
     setTemporalMapping(stripDisplayDateMapping(mappingState.temporalMapping || {}));
     setPlaceParts(buildInitialPlaceParts(mappingState));
+    setRelationshipParts(buildInitialRelationshipParts(mappingState));
     setRelationshipMetadataMapping(normalizeRelationshipMetadataMapping(mappingState.relationshipMetadataMapping || {}));
     setCustomFieldSelections(mappingState.customFieldSelections || []);
     setGenealogyFieldMapping(
@@ -1416,6 +1499,7 @@ export function PeridotColumnMappingModal({
         ? {
             ...stripWorkbookDisplayDateMapping(mappingState || {}),
             placeParts: buildInitialWorkbookPlaceParts(mappingState || {}),
+            relationshipParts: buildInitialWorkbookRelationshipParts(mappingState || {}),
             relationshipMetadataMappings: normalizeWorkbookRelationshipMetadataMappings(mappingState.relationshipMetadataMappings || {}),
             customFieldSelections: applyWorkbookRelationshipMetadataSelections(
               refreshWorkbookCustomSelections({
@@ -1939,6 +2023,13 @@ export function PeridotColumnMappingModal({
     });
   };
 
+  const handleWorkbookRelationshipPartsChange = (relationshipParts) => {
+    setWorkbookMapping((current) => ({
+      ...current,
+      relationshipParts,
+    }));
+  };
+
   const handleWorkbookRelationshipMetadataMappingChange = (field, ref) => {
     setWorkbookMapping((current) => {
       const nextRelationshipMetadataMappings = normalizeWorkbookRelationshipMetadataMappings({
@@ -2060,6 +2151,7 @@ export function PeridotColumnMappingModal({
       datasetProfileId: datasetProfile.id,
       tableOrientation,
       placeParts,
+      relationshipParts,
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
       pointMapping,
@@ -2203,9 +2295,10 @@ export function PeridotColumnMappingModal({
           {!isWorkbookMode && stepForRender === 'relationships' ? (
             <RelationshipsMappingStep
               headers={headers}
-              coreMapping={coreMapping}
+              rows={rows}
+              relationshipParts={relationshipParts}
               relationshipMetadataMapping={relationshipMetadataMapping}
-              onChange={handleCoreMappingChange}
+              onRelationshipPartsChange={setRelationshipParts}
               onMetadataChange={handleRelationshipMetadataMappingChange}
             />
           ) : null}
@@ -2274,7 +2367,7 @@ export function PeridotColumnMappingModal({
             <WorkbookRelationshipsMappingStep
               workbookModel={workbookModel}
               workbookMapping={workbookMapping}
-              onChange={handleWorkbookCoreMappingChange}
+              onRelationshipPartsChange={handleWorkbookRelationshipPartsChange}
               onMetadataChange={handleWorkbookRelationshipMetadataMappingChange}
             />
           ) : null}
