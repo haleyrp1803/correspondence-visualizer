@@ -2069,7 +2069,7 @@ export function PeridotColumnMappingModal({
           {!isWorkbookMode && stepForRender === 'time' ? (
             <TimeMappingStep
               headers={headers}
-              rows={staging?.rawRows || staging?.rows || rows}
+              rows={rows}
               temporalMapping={stripDisplayDateMapping(temporalMapping)}
               onTemporalChange={handleTemporalMappingChange}
             />
