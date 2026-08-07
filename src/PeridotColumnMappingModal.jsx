@@ -26,6 +26,7 @@ import {
 import { buildPeridotCsvValidationSummary } from './peridotCsvValidation.js';
 import {
   applyPeridotColumnMapping,
+  buildInitialPeridotColumnMappingState,
   CUSTOM_INSPECTOR_FIELD_DEFAULTS,
   PERIDOT_CORE_FIELD_DEFINITIONS,
   validatePeridotColumnMapping,
@@ -157,11 +158,11 @@ function PreviewTable({ rows = [], headers = [], maxRows = 11, totalRows, sheetN
       showAllRows ? 'peridot-mapping-table-wrap-full-preview' : '',
     ].filter(Boolean).join(' ')}>
       <div className="peridot-mapping-table-scroll">
-        <table className="min-w-full border-collapse text-left text-xs text-[var(--panel-card-muted-text)]">
+        <table className="min-w-full border-collapse text-left text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
           <thead className="bg-[var(--stat-card-bg)] text-[var(--panel-card-text)]">
             <tr>
               {displayHeaders.map((header) => (
-                <th key={header} className="max-w-[14rem] whitespace-nowrap px-3 py-2 font-semibold">{header}</th>
+                <th key={header} className="max-w-[14rem] whitespace-nowrap px-3 py-2.5 font-semibold">{header}</th>
               ))}
             </tr>
           </thead>
@@ -169,7 +170,7 @@ function PreviewTable({ rows = [], headers = [], maxRows = 11, totalRows, sheetN
             {displayRows.map((row, rowIndex) => (
               <tr key={`preview-${rowIndex}`} className="border-t border-[var(--panel-card-border)]">
                 {displayHeaders.map((header) => (
-                  <td key={`${rowIndex}-${header}`} className="max-w-[14rem] truncate px-3 py-2">{row?.[header]}</td>
+                  <td key={`${rowIndex}-${header}`} className="max-w-[14rem] truncate px-3 py-2.5">{row?.[header]}</td>
                 ))}
               </tr>
             ))}
@@ -204,25 +205,83 @@ function PreviewSummaryStrip({ fileLabel, fileType, rowCount, columnCount, sheet
 
   return (
     <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] px-4 py-3">
-      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">File preview</div>
-      <div className="mt-1 text-sm font-semibold text-[var(--panel-card-text)]">
+      <div className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">File preview</div>
+      <div className="mt-1 text-base font-semibold leading-relaxed text-[var(--panel-card-text)]">
         {summaryParts.join(' · ')}
       </div>
     </div>
   );
 }
 
-function PreviewOrientationCard({ workbook = false }) {
+function PreviewOrientationCard({ workbook = false, orientation = 'columns', onOrientationChange }) {
   return (
-    <MappingIntroCard
-      eyebrow="Preview"
-      title={workbook ? 'Make sure Peridot is reading your workbook correctly.' : 'Make sure Peridot is reading your file correctly.'}
-    >
-      {workbook
-        ? 'Review the sheets, columns, and source values below. You’ll describe what each sheet, row, and column means on the next pages.'
-        : 'Review the columns and source values below. You’ll describe what the rows and columns mean on the next pages.'}
-    </MappingIntroCard>
+    <div className="peridot-mapping-intro-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-4 text-[var(--panel-card-muted-text)]">
+      <div className="text-sm font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">Preview</div>
+      <div className="mt-1 text-base font-bold leading-relaxed text-[var(--panel-card-text)]">
+        {workbook ? 'Make sure Peridot is reading your workbook correctly.' : 'Make sure Peridot is reading your file correctly.'}
+      </div>
+      <p className="mt-1 text-sm leading-relaxed">
+        {workbook
+          ? 'Review the sheets, columns, and source values below. You’ll describe what each sheet, row, and column means on the next pages.'
+          : 'Review the columns and source values below. You’ll describe what the rows and columns mean on the next pages.'}
+      </p>
+
+      {!workbook && onOrientationChange ? (
+        <fieldset className="mt-4">
+          <legend className="text-base font-bold text-[var(--panel-card-text)]">How is this table arranged?</legend>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] px-3 py-2 text-sm font-semibold text-[var(--panel-card-text)]">
+              <input
+                type="radio"
+                name="peridot-table-orientation"
+                value="columns"
+                checked={orientation === 'columns'}
+                onChange={() => onOrientationChange('columns')}
+              />
+              <span>Column headings run across the top</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] px-3 py-2 text-sm font-semibold text-[var(--panel-card-text)]">
+              <input
+                type="radio"
+                name="peridot-table-orientation"
+                value="rows"
+                checked={orientation === 'rows'}
+                onChange={() => onOrientationChange('rows')}
+              />
+              <span>Row headings run down the left side</span>
+            </label>
+          </div>
+        </fieldset>
+      ) : null}
+    </div>
   );
+}
+
+function transposeSingleTableFromLeftHeadings(headers = [], rows = []) {
+  if (!headers.length || !rows.length) return { headers, rows };
+
+  const cornerHeader = headers[0];
+  const sourceValueHeaders = headers.slice(1);
+  const generatedHeaders = [
+    cornerHeader,
+    ...rows.map((row, index) => {
+      const candidate = String(row?.[cornerHeader] ?? '').trim();
+      return candidate || `Row ${index + 1}`;
+    }),
+  ];
+
+  const generatedRows = sourceValueHeaders.map((sourceHeader) => {
+    const nextRow = { [cornerHeader]: sourceHeader };
+    rows.forEach((row, index) => {
+      nextRow[generatedHeaders[index + 1]] = row?.[sourceHeader] ?? '';
+    });
+    return nextRow;
+  });
+
+  return {
+    headers: generatedHeaders,
+    rows: generatedRows,
+  };
 }
 
 
@@ -1188,9 +1247,20 @@ export function PeridotColumnMappingModal({
   const workbookSummary = staging?.workbookSummary || null;
 
   const definitions = mappingState.coreFieldDefinitions || [];
-  const headers = staging?.headers || [];
-  const rows = staging?.rows || staging?.rawRows || staging?.previewRows || [];
-  const previewRows = staging?.previewRows || rows.slice(0, 5);
+  const sourceHeaders = staging?.headers || [];
+  const sourceRows = staging?.rows || staging?.rawRows || staging?.previewRows || [];
+  const [tableOrientation, setTableOrientation] = useState(mappingState.tableOrientation === 'rows' ? 'rows' : 'columns');
+  const orientedSingleTableData = useMemo(
+    () => (
+      !isWorkbookMode && tableOrientation === 'rows'
+        ? transposeSingleTableFromLeftHeadings(sourceHeaders, sourceRows)
+        : { headers: sourceHeaders, rows: sourceRows }
+    ),
+    [isWorkbookMode, sourceHeaders, sourceRows, tableOrientation]
+  );
+  const headers = orientedSingleTableData.headers;
+  const rows = orientedSingleTableData.rows;
+  const previewRows = rows.slice(0, 5);
   const stepKeys = isGenealogyProfile ? GENEALOGY_STEP_KEYS : (isWorkbookMode ? WORKBOOK_STEP_KEYS : SINGLE_TABLE_STEP_KEYS);
 
   const [activeStep, setActiveStep] = useState(stepKeys[0]);
@@ -1221,6 +1291,7 @@ export function PeridotColumnMappingModal({
     stepTransitionTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
     stepTransitionTimeoutsRef.current = [];
     setActiveStep(firstStep);
+    setTableOrientation(mappingState.tableOrientation === 'rows' ? 'rows' : 'columns');
     setRenderedStep(firstStep);
     setStepTransitionPhase('idle');
     setCoreMapping(mappingState.coreMapping || {});
@@ -1436,6 +1507,27 @@ export function PeridotColumnMappingModal({
     }, 1480);
 
     stepTransitionTimeoutsRef.current = [swapTimeout, settleTimeout];
+  };
+
+  const handleTableOrientationChange = (nextOrientation) => {
+    if (nextOrientation === tableOrientation || isWorkbookMode) return;
+
+    const nextData = nextOrientation === 'rows'
+      ? transposeSingleTableFromLeftHeadings(sourceHeaders, sourceRows)
+      : { headers: sourceHeaders, rows: sourceRows };
+    const nextInitialMapping = buildInitialPeridotColumnMappingState(
+      nextData.headers,
+      nextData.rows,
+      { datasetProfileId: datasetProfile.id }
+    );
+
+    setTableOrientation(nextOrientation);
+    setCoreMapping(nextInitialMapping.coreMapping || {});
+    setTemporalMapping(stripDisplayDateMapping(nextInitialMapping.temporalMapping || {}));
+    setPointMapping(nextInitialMapping.pointMapping || {});
+    setRouteCoordinatePairMapping(nextInitialMapping.routeCoordinatePairMapping || {});
+    setRelationshipMetadataMapping(normalizeRelationshipMetadataMapping({}));
+    setCustomFieldSelections(nextInitialMapping.customFieldSelections || []);
   };
 
   const handleCoreMappingChange = (field, sourceColumn) => {
@@ -1851,6 +1943,7 @@ export function PeridotColumnMappingModal({
 
     return {
       datasetProfileId: datasetProfile.id,
+      tableOrientation,
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
       pointMapping,
@@ -1949,17 +2042,17 @@ export function PeridotColumnMappingModal({
 
           {!isWorkbookMode && stepForRender === 'preview' ? (
             <div className="space-y-3">
-              <PreviewOrientationCard />
+              <PreviewOrientationCard orientation={tableOrientation} onOrientationChange={handleTableOrientationChange} />
               <PreviewSummaryStrip
                 fileLabel={staging.fileLabel}
                 fileType={staging.fileType}
-                rowCount={staging.rowCount ?? rows.length}
-                columnCount={staging.columnCount ?? headers.length}
+                rowCount={sourceRows.length}
+                columnCount={sourceHeaders.length}
               />
               <PreviewTable
-                rows={rows}
-                headers={headers}
-                totalRows={staging.rowCount ?? rows.length}
+                rows={sourceRows}
+                headers={sourceHeaders}
+                totalRows={sourceRows.length}
                 maxRows={null}
               />
             </div>
