@@ -446,16 +446,13 @@ function TimeMappingStep({ headers, rows, temporalMapping, onTemporalChange }) {
   );
 }
 
-function PlacesMappingStep({ headers, coreMapping, pointMapping, routeCoordinatePairMapping, onRouteChange, onPointChange, onRoutePairChange }) {
+function PlacesMappingStep({ headers, rows, placeParts, onPlacePartsChange }) {
   return (
     <SpatialMappingPanel
       headers={headers}
-      pointMapping={pointMapping}
-      coreMapping={coreMapping}
-      routeCoordinatePairMapping={routeCoordinatePairMapping}
-      onPointChange={onPointChange}
-      onRouteChange={onRouteChange}
-      onRoutePairChange={onRoutePairChange}
+      rows={rows}
+      placeParts={placeParts}
+      onPlacePartsChange={onPlacePartsChange}
     />
   );
 }
@@ -1066,14 +1063,12 @@ function WorkbookTimeMappingStep({ workbookModel, workbookMapping, onTemporalCha
   );
 }
 
-function WorkbookPlacesMappingStep({ workbookModel, workbookMapping, onRouteChange, onPointChange, onRoutePairChange }) {
+function WorkbookPlacesMappingStep({ workbookModel, placeParts, onPlacePartsChange }) {
   return (
     <WorkbookSpatialMappingPanel
       workbookModel={workbookModel}
-      workbookMapping={workbookMapping}
-      onPointChange={onPointChange}
-      onRouteChange={onRouteChange}
-      onRoutePairChange={onRoutePairChange}
+      placeParts={placeParts}
+      onPlacePartsChange={onPlacePartsChange}
     />
   );
 }
@@ -1230,6 +1225,116 @@ function stripWorkbookDisplayDateMapping(workbookMapping = {}) {
 }
 
 
+function buildInitialWorkbookPlaceParts(mappingState = {}) {
+  const saved = Array.isArray(mappingState.placeParts) ? mappingState.placeParts : [];
+  if (saved.length && saved.some((part) => part?.placeRef || part?.coordinatePairRef || part?.latitudeRef || part?.longitudeRef)) {
+    return saved.map((part) => ({ ...part }));
+  }
+
+  const point = mappingState.pointMappings || {};
+  const core = mappingState.coreMappings || {};
+  const routePairs = mappingState.routeCoordinatePairMappings || {};
+  const emptyRef = () => makeWorkbookColumnRef('', '');
+  const parts = [];
+
+  const hasRef = (ref) => Boolean(ref?.sheetName && ref?.columnName);
+
+  if (hasRef(point.Point_Place) || hasRef(point.Point_Coordinates) || hasRef(point.Point_Latitude) || hasRef(point.Point_Longitude)) {
+    parts.push({
+      placeRef: point.Point_Place || emptyRef(),
+      roleMode: 'heading',
+      roleRef: emptyRef(),
+      coordinatePairRef: point.Point_Coordinates || emptyRef(),
+      latitudeRef: point.Point_Latitude || emptyRef(),
+      longitudeRef: point.Point_Longitude || emptyRef(),
+    });
+  }
+
+  if (hasRef(core.Source_Location) || hasRef(routePairs.Source_Coordinates) || hasRef(core.Source_Latitude) || hasRef(core.Source_Longitude)) {
+    parts.push({
+      placeRef: core.Source_Location || emptyRef(),
+      roleMode: 'heading',
+      roleRef: emptyRef(),
+      coordinatePairRef: routePairs.Source_Coordinates || emptyRef(),
+      latitudeRef: core.Source_Latitude || emptyRef(),
+      longitudeRef: core.Source_Longitude || emptyRef(),
+    });
+  }
+
+  if (hasRef(core.Target_Location) || hasRef(routePairs.Target_Coordinates) || hasRef(core.Target_Latitude) || hasRef(core.Target_Longitude)) {
+    parts.push({
+      placeRef: core.Target_Location || emptyRef(),
+      roleMode: 'heading',
+      roleRef: emptyRef(),
+      coordinatePairRef: routePairs.Target_Coordinates || emptyRef(),
+      latitudeRef: core.Target_Latitude || emptyRef(),
+      longitudeRef: core.Target_Longitude || emptyRef(),
+    });
+  }
+
+  return parts.length ? parts : [{
+    placeRef: emptyRef(),
+    roleMode: 'heading',
+    roleRef: emptyRef(),
+    coordinatePairRef: emptyRef(),
+    latitudeRef: emptyRef(),
+    longitudeRef: emptyRef(),
+  }];
+}
+
+function buildInitialPlaceParts(mappingState = {}) {
+  const saved = Array.isArray(mappingState.placeParts) ? mappingState.placeParts : [];
+  if (saved.length) return saved.map((part) => ({ ...part }));
+
+  const point = mappingState.pointMapping || {};
+  const route = mappingState.coreMapping || {};
+  const routePairs = mappingState.routeCoordinatePairMapping || {};
+  const parts = [];
+
+  if (point.Point_Place || point.Point_Coordinates || point.Point_Latitude || point.Point_Longitude) {
+    parts.push({
+      placeColumn: point.Point_Place || '',
+      roleMode: 'heading',
+      roleColumn: '',
+      coordinatePairColumn: point.Point_Coordinates || '',
+      latitudeColumn: point.Point_Latitude || '',
+      longitudeColumn: point.Point_Longitude || '',
+    });
+  }
+
+  if (route.Source_Location || routePairs.Source_Coordinates || route.Source_Latitude || route.Source_Longitude) {
+    parts.push({
+      placeColumn: route.Source_Location || '',
+      roleMode: 'heading',
+      roleColumn: '',
+      coordinatePairColumn: routePairs.Source_Coordinates || '',
+      latitudeColumn: route.Source_Latitude || '',
+      longitudeColumn: route.Source_Longitude || '',
+    });
+  }
+
+  if (route.Target_Location || routePairs.Target_Coordinates || route.Target_Latitude || route.Target_Longitude) {
+    parts.push({
+      placeColumn: route.Target_Location || '',
+      roleMode: 'heading',
+      roleColumn: '',
+      coordinatePairColumn: routePairs.Target_Coordinates || '',
+      latitudeColumn: route.Target_Latitude || '',
+      longitudeColumn: route.Target_Longitude || '',
+    });
+  }
+
+  return parts.length ? parts : [{
+    placeColumn: '',
+    roleMode: 'heading',
+    roleColumn: '',
+    coordinatePairColumn: '',
+    latitudeColumn: '',
+    longitudeColumn: '',
+  }];
+}
+
+
 export function PeridotColumnMappingModal({
   open,
   staging,
@@ -1268,9 +1373,10 @@ export function PeridotColumnMappingModal({
   const [temporalMapping, setTemporalMapping] = useState(stripDisplayDateMapping(mappingState.temporalMapping || {}));
   const [pointMapping, setPointMapping] = useState(mappingState.pointMapping || {});
   const [routeCoordinatePairMapping, setRouteCoordinatePairMapping] = useState(mappingState.routeCoordinatePairMapping || {});
+  const [placeParts, setPlaceParts] = useState(() => buildInitialPlaceParts(mappingState));
   const [relationshipMetadataMapping, setRelationshipMetadataMapping] = useState(normalizeRelationshipMetadataMapping(mappingState.relationshipMetadataMapping || {}));
   const [customFieldSelections, setCustomFieldSelections] = useState(mappingState.customFieldSelections || []);
-  const [workbookMapping, setWorkbookMapping] = useState(stripWorkbookDisplayDateMapping(mappingState));
+  const [workbookMapping, setWorkbookMapping] = useState(() => ({ ...stripWorkbookDisplayDateMapping(mappingState), placeParts: buildInitialWorkbookPlaceParts(mappingState) }));
   const [genealogyFieldMapping, setGenealogyFieldMapping] = useState(
     isWorkbookMode
       ? Object.fromEntries(Object.entries(mappingState.fieldMappings || {}).map(([field, ref]) => [field, ref?.columnName || '']))
@@ -1296,6 +1402,7 @@ export function PeridotColumnMappingModal({
     setStepTransitionPhase('idle');
     setCoreMapping(mappingState.coreMapping || {});
     setTemporalMapping(stripDisplayDateMapping(mappingState.temporalMapping || {}));
+    setPlaceParts(buildInitialPlaceParts(mappingState));
     setRelationshipMetadataMapping(normalizeRelationshipMetadataMapping(mappingState.relationshipMetadataMapping || {}));
     setCustomFieldSelections(mappingState.customFieldSelections || []);
     setGenealogyFieldMapping(
@@ -1308,6 +1415,7 @@ export function PeridotColumnMappingModal({
       nextIsWorkbookMode && staging?.workbookModel
         ? {
             ...stripWorkbookDisplayDateMapping(mappingState || {}),
+            placeParts: buildInitialWorkbookPlaceParts(mappingState || {}),
             relationshipMetadataMappings: normalizeWorkbookRelationshipMetadataMappings(mappingState.relationshipMetadataMappings || {}),
             customFieldSelections: applyWorkbookRelationshipMetadataSelections(
               refreshWorkbookCustomSelections({
@@ -1318,7 +1426,7 @@ export function PeridotColumnMappingModal({
               normalizeWorkbookRelationshipMetadataMappings(mappingState.relationshipMetadataMappings || {})
             ),
           }
-        : stripWorkbookDisplayDateMapping(mappingState || {})
+        : { ...stripWorkbookDisplayDateMapping(mappingState || {}), placeParts: buildInitialWorkbookPlaceParts(mappingState || {}) }
     );
     setShowCancelConfirmation(false);
   }, [open, staging?.stagedAt]);
@@ -1778,6 +1886,13 @@ export function PeridotColumnMappingModal({
     });
   };
 
+  const handleWorkbookPlacePartsChange = (placeParts) => {
+    setWorkbookMapping((current) => ({
+      ...current,
+      placeParts,
+    }));
+  };
+
   const handleWorkbookPointMappingChange = (field, ref) => {
     setWorkbookMapping((current) => {
       const nextMapping = {
@@ -1944,6 +2059,7 @@ export function PeridotColumnMappingModal({
     return {
       datasetProfileId: datasetProfile.id,
       tableOrientation,
+      placeParts,
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
       pointMapping,
@@ -2078,12 +2194,9 @@ export function PeridotColumnMappingModal({
           {!isWorkbookMode && stepForRender === 'places' ? (
             <PlacesMappingStep
               headers={headers}
-              coreMapping={coreMapping}
-              pointMapping={pointMapping}
-              routeCoordinatePairMapping={routeCoordinatePairMapping}
-              onRouteChange={handleCoreMappingChange}
-              onPointChange={handlePointMappingChange}
-              onRoutePairChange={handleRouteCoordinatePairMappingChange}
+              rows={rows}
+              placeParts={placeParts}
+              onPlacePartsChange={setPlaceParts}
             />
           ) : null}
 
@@ -2152,10 +2265,8 @@ export function PeridotColumnMappingModal({
           {isWorkbookMode && stepForRender === 'workbook-places' ? (
             <WorkbookPlacesMappingStep
               workbookModel={workbookModel}
-              workbookMapping={workbookMapping}
-              onRouteChange={handleWorkbookCoreMappingChange}
-              onPointChange={handleWorkbookPointMappingChange}
-              onRoutePairChange={handleWorkbookRouteCoordinatePairMappingChange}
+              placeParts={workbookMapping.placeParts || []}
+              onPlacePartsChange={handleWorkbookPlacePartsChange}
             />
           ) : null}
 

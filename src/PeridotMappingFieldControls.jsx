@@ -446,112 +446,450 @@ function handleSpatialMappingChange(field, value, { onPointChange, onRouteChange
   onRouteChange(field.key, value);
 }
 
-export function SpatialMappingPanel({ headers, pointMapping = {}, coreMapping = {}, routeCoordinatePairMapping = {}, onPointChange, onRouteChange, onRoutePairChange }) {
+const EMPTY_PLACE_PART = Object.freeze({
+  placeColumn: '',
+  roleMode: 'heading',
+  roleColumn: '',
+  coordinatePairColumn: '',
+  latitudeColumn: '',
+  longitudeColumn: '',
+});
+
+function placePartLabel(index) {
+  return index < 26 ? `Place ${String.fromCharCode(65 + index)}` : `Place ${index + 1}`;
+}
+
+function PlaceExamples({ rows = [], sourceColumn = '' }) {
+  const values = getNonBlankExampleValues(rows, sourceColumn, 3);
+  if (!values.length) return null;
   return (
-    <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
-        <div className="min-w-0">
-          <div className="rounded-t-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-2.5 text-sm font-semibold text-[var(--panel-card-text)]">
-            Location Role
-          </div>
-          <div className="rounded-b-xl border-x border-b border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 px-4 py-2">
-            {SPATIAL_SINGLE_TABLE_ROWS.map((row, rowIndex) => {
-              const isSourceRow = row.title === 'Source/Start Location';
-              const isTargetRow = row.title === 'Target/End Location';
+    <div className="mt-1.5 break-words text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+      <span className="font-semibold text-[var(--panel-card-text)]">Examples from your data:</span>{' '}
+      {values.map((value, index) => (
+        <React.Fragment key={`${sourceColumn}-${value}-${index}`}>
+          {index ? ' · ' : ''}<span>{value}</span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
 
-              if (!row.fields.length) {
-                return (
-                  <div key={row.title} className="pb-0 pt-2">
-                    <SectionDivider />
-                    <div className="pt-1 text-[16px] font-bold leading-tight text-[var(--panel-card-text)]">{row.title}</div>
-                  </div>
-                );
-              }
+const EMPTY_WORKBOOK_PLACE_PART = Object.freeze({
+  placeRef: makeWorkbookColumnRef('', ''),
+  roleMode: 'heading',
+  roleRef: makeWorkbookColumnRef('', ''),
+  coordinatePairRef: makeWorkbookColumnRef('', ''),
+  latitudeRef: makeWorkbookColumnRef('', ''),
+  longitudeRef: makeWorkbookColumnRef('', ''),
+});
 
-              return (
-                <section
-                  key={row.title}
-                  className={[
-                    'space-y-2 py-2.5',
-                    rowIndex === 0 ? 'pt-1' : '',
-                    isSourceRow ? 'pt-2' : '',
-                    isTargetRow ? 'pt-2' : '',
-                  ].filter(Boolean).join(' ')}
-                >
-                  <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">{row.title}</div>
-                  <SpatialFieldGrid>
-                    {row.fields.map((field) => (
-                      <SpatialFieldShell key={field.key} field={field}>
-                        <SpatialSelect
-                          headers={headers}
-                          value={getSpatialMappingValue(field, { pointMapping, coreMapping, routeCoordinatePairMapping })}
-                          onChange={(value) => handleSpatialMappingChange(field, value, { onPointChange, onRouteChange, onRoutePairChange })}
-                        />
-                      </SpatialFieldShell>
-                    ))}
-                  </SpatialFieldGrid>
-                </section>
-              );
-            })}
-          </div>
+function WorkbookPlaceExamples({ workbookModel, sourceRef = {} }) {
+  if (!sourceRef?.sheetName || !sourceRef?.columnName) return null;
+  const sheet = getWorkbookSheet(workbookModel, sourceRef.sheetName);
+  return (
+    <PlaceExamples
+      rows={sheet?.rows || []}
+      sourceColumn={sourceRef.columnName}
+    />
+  );
+}
+
+function WorkbookPlacePartCard({ part, index, workbookModel, onChange, onRemove }) {
+  const label = placePartLabel(index);
+  const placeRef = part?.placeRef || makeWorkbookColumnRef('', '');
+  const roleMode = part?.roleMode === 'column' ? 'column' : 'heading';
+  const roleRef = part?.roleRef || makeWorkbookColumnRef('', '');
+  const coordinatePairRef = part?.coordinatePairRef || makeWorkbookColumnRef('', '');
+  const latitudeRef = part?.latitudeRef || makeWorkbookColumnRef('', '');
+  const longitudeRef = part?.longitudeRef || makeWorkbookColumnRef('', '');
+  const headingLabel = placeRef?.columnName
+    ? `${placeRef.sheetName} — ${placeRef.columnName}`
+    : '';
+
+  return (
+    <section className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/30 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-[16px] font-bold leading-tight text-[var(--panel-card-text)]">{label}</div>
+        {index > 0 ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--panel-card-muted-text)] hover:text-[var(--panel-card-text)]"
+          >
+            Remove place
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Which column contains the place?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            Choose the column whose values name or identify this place.
+          </p>
         </div>
-        <SpatialUsagePanel />
+        <div className="min-w-0">
+          <WorkbookFieldSelect
+            workbookModel={workbookModel}
+            currentRef={placeRef}
+            onChange={(ref) => onChange({ placeRef: ref })}
+          />
+          <WorkbookPlaceExamples workbookModel={workbookModel} sourceRef={placeRef} />
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Where is the role of this place recorded?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            The role explains how this place is connected to the row, such as birthplace, residence, origin, destination, court, or repository.
+          </p>
+        </div>
+        <div className="space-y-3">
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input
+              type="radio"
+              name={`workbook-place-role-${index}`}
+              checked={roleMode === 'heading'}
+              onChange={() => onChange({ roleMode: 'heading', roleRef: makeWorkbookColumnRef('', '') })}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-semibold">In the column heading</span>
+              {headingLabel ? <span className="text-[var(--panel-card-muted-text)]"> — {headingLabel}</span> : null}
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input
+              type="radio"
+              name={`workbook-place-role-${index}`}
+              checked={roleMode === 'column'}
+              onChange={() => onChange({ roleMode: 'column' })}
+              className="mt-0.5"
+            />
+            <span className="font-semibold">In another column</span>
+          </label>
+          {roleMode === 'column' ? (
+            <div>
+              <WorkbookFieldSelect
+                workbookModel={workbookModel}
+                currentRef={roleRef}
+                onChange={(ref) => onChange({ roleRef: ref })}
+              />
+              <WorkbookPlaceExamples workbookModel={workbookModel} sourceRef={roleRef} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div>
+        <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Coordinates for this place <span className="font-normal text-[var(--panel-card-muted-text)]">(optional)</span></div>
+        <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+          Choose a combined coordinate column, or separate latitude and longitude columns, if your source records them.
+        </p>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <label className="min-w-0">
+            <div className="mb-1 text-xs font-semibold text-[var(--panel-card-text)]">Coordinate pair</div>
+            <WorkbookFieldSelect
+              workbookModel={workbookModel}
+              currentRef={coordinatePairRef}
+              onChange={(ref) => onChange({ coordinatePairRef: ref })}
+            />
+            <WorkbookPlaceExamples workbookModel={workbookModel} sourceRef={coordinatePairRef} />
+          </label>
+          <label className="min-w-0">
+            <div className="mb-1 text-xs font-semibold text-[var(--panel-card-text)]">Latitude</div>
+            <WorkbookFieldSelect
+              workbookModel={workbookModel}
+              currentRef={latitudeRef}
+              onChange={(ref) => onChange({ latitudeRef: ref })}
+            />
+            <WorkbookPlaceExamples workbookModel={workbookModel} sourceRef={latitudeRef} />
+          </label>
+          <label className="min-w-0">
+            <div className="mb-1 text-xs font-semibold text-[var(--panel-card-text)]">Longitude</div>
+            <WorkbookFieldSelect
+              workbookModel={workbookModel}
+              currentRef={longitudeRef}
+              onChange={(ref) => onChange({ longitudeRef: ref })}
+            />
+            <WorkbookPlaceExamples workbookModel={workbookModel} sourceRef={longitudeRef} />
+          </label>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PlacesIntro() {
+  return (
+    <div className="peridot-mapping-intro-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-sm leading-snug text-[var(--panel-card-muted-text)]">
+      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">Places</div>
+      <div className="mt-1 text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">
+        Where are the people, events, objects, records, or other information in each row located?
+      </div>
+      <p className="mt-2 text-sm leading-relaxed">
+        Choose any columns that identify places connected to this row. Your data may use one place, several places, or no places at all.
+      </p>
+      <p className="mt-2 text-sm leading-relaxed">
+        <span className="font-semibold text-[var(--panel-card-text)]">Examples:</span> birthplace, place a letter was sent from or to, residence, court, archive, event location, stops along a journey, excavation site, etc.
+      </p>
+    </div>
+  );
+}
+
+function PlacesUsagePanel() {
+  return (
+    <aside className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">Used for</div>
+      <p className="mt-3">Place information supports maps, Inspector records, search and filter, charts, and export.</p>
+      <p className="mt-3">Coordinates allow Peridot to place locations on maps.</p>
+      <p className="mt-3">If one row contains several places, Peridot can preserve each place and its role separately.</p>
+    </aside>
+  );
+}
+
+function PlacePartCard({ part, index, headers, rows, onChange, onRemove }) {
+  const label = placePartLabel(index);
+  const selectedPlaceColumn = part?.placeColumn || '';
+  const roleMode = part?.roleMode === 'column' ? 'column' : 'heading';
+  const roleColumn = part?.roleColumn || '';
+  const coordinatePairColumn = part?.coordinatePairColumn || '';
+  const latitudeColumn = part?.latitudeColumn || '';
+  const longitudeColumn = part?.longitudeColumn || '';
+
+  return (
+    <section className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/30 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-[16px] font-bold leading-tight text-[var(--panel-card-text)]">{label}</div>
+        {index > 0 ? (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--panel-card-muted-text)] hover:text-[var(--panel-card-text)]"
+          >
+            Remove place
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Which column contains the place?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            Choose the column whose values name or identify this place.
+          </p>
+        </div>
+        <div className="min-w-0">
+          <select
+            value={selectedPlaceColumn}
+            onChange={(event) => onChange({ placeColumn: event.target.value })}
+            className={SOURCE_SELECT_CLASS}
+          >
+            <option value="">Unassigned</option>
+            {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+          </select>
+          <PlaceExamples rows={rows} sourceColumn={selectedPlaceColumn} />
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Which column contains the place?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            Choose the column whose values name or identify this place.
+          </p>
+        </div>
+        <div className="space-y-3">
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input
+              type="radio"
+              name={`place-role-${index}`}
+              checked={roleMode === 'heading'}
+              onChange={() => onChange({ roleMode: 'heading', roleColumn: '' })}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-semibold">In the column heading</span>
+              {selectedPlaceColumn ? <span className="text-[var(--panel-card-muted-text)]"> — {selectedPlaceColumn}</span> : null}
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input
+              type="radio"
+              name={`place-role-${index}`}
+              checked={roleMode === 'column'}
+              onChange={() => onChange({ roleMode: 'column' })}
+              className="mt-0.5"
+            />
+            <span className="font-semibold">In another column</span>
+          </label>
+          {roleMode === 'column' ? (
+            <div>
+              <select
+                value={roleColumn}
+                onChange={(event) => onChange({ roleColumn: event.target.value })}
+                className={SOURCE_SELECT_CLASS}
+              >
+                <option value="">Choose a role column</option>
+                {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+              </select>
+              <PlaceExamples rows={rows} sourceColumn={roleColumn} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div>
+        <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Coordinates for this place <span className="font-normal text-[var(--panel-card-muted-text)]">(optional)</span></div>
+        <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+          Choose a combined coordinate column, or separate latitude and longitude columns, if your source records them.
+        </p>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <label className="min-w-0">
+            <div className="mb-1 text-xs font-semibold text-[var(--panel-card-text)]">Coordinate pair</div>
+            <select
+              value={coordinatePairColumn}
+              onChange={(event) => onChange({ coordinatePairColumn: event.target.value })}
+              className={SPATIAL_SELECT_CLASS}
+            >
+              <option value="">Unassigned</option>
+              {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+            </select>
+            <PlaceExamples rows={rows} sourceColumn={coordinatePairColumn} />
+          </label>
+          <label className="min-w-0">
+            <div className="mb-1 text-xs font-semibold text-[var(--panel-card-text)]">Latitude</div>
+            <select
+              value={latitudeColumn}
+              onChange={(event) => onChange({ latitudeColumn: event.target.value })}
+              className={SPATIAL_SELECT_CLASS}
+            >
+              <option value="">Unassigned</option>
+              {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+            </select>
+            <PlaceExamples rows={rows} sourceColumn={latitudeColumn} />
+          </label>
+          <label className="min-w-0">
+            <div className="mb-1 text-xs font-semibold text-[var(--panel-card-text)]">Longitude</div>
+            <select
+              value={longitudeColumn}
+              onChange={(event) => onChange({ longitudeColumn: event.target.value })}
+              className={SPATIAL_SELECT_CLASS}
+            >
+              <option value="">Unassigned</option>
+              {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+            </select>
+            <PlaceExamples rows={rows} sourceColumn={longitudeColumn} />
+          </label>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function SpatialMappingPanel({ headers, rows = [], placeParts = [], onPlacePartsChange }) {
+  const effectiveParts = placeParts.length ? placeParts : [{ ...EMPTY_PLACE_PART }];
+
+  const updatePart = (index, patch) => {
+    onPlacePartsChange?.(
+      effectiveParts.map((part, currentIndex) => currentIndex === index ? { ...part, ...patch } : part)
+    );
+  };
+
+  const addPart = () => {
+    onPlacePartsChange?.([...effectiveParts, { ...EMPTY_PLACE_PART }]);
+  };
+
+  const removePart = (index) => {
+    const next = effectiveParts.filter((_, currentIndex) => currentIndex !== index);
+    onPlacePartsChange?.(next.length ? next : [{ ...EMPTY_PLACE_PART }]);
+  };
+
+  return (
+    <div className="space-y-3">
+      <PlacesIntro />
+      <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
+        <div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]">
+          <div className="min-w-0 space-y-4">
+            {effectiveParts.map((part, index) => (
+              <PlacePartCard
+                key={`place-part-${index}`}
+                part={part}
+                index={index}
+                headers={headers}
+                rows={rows}
+                onChange={(patch) => updatePart(index, patch)}
+                onRemove={() => removePart(index)}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={addPart}
+              className="rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]"
+            >
+              + Add another place
+            </button>
+          </div>
+          <PlacesUsagePanel />
+        </div>
       </div>
     </div>
   );
 }
 
-export function WorkbookSpatialMappingPanel({ workbookModel, workbookMapping = {}, onPointChange, onRouteChange, onRoutePairChange }) {
+export function WorkbookSpatialMappingPanel({ workbookModel, placeParts = [], onPlacePartsChange }) {
+  const effectiveParts = placeParts.length ? placeParts : [{ ...EMPTY_WORKBOOK_PLACE_PART }];
+
+  const updatePart = (index, patch) => {
+    onPlacePartsChange?.(
+      effectiveParts.map((part, currentIndex) => currentIndex === index ? { ...part, ...patch } : part)
+    );
+  };
+
+  const addPart = () => {
+    onPlacePartsChange?.([...effectiveParts, { ...EMPTY_WORKBOOK_PLACE_PART }]);
+  };
+
+  const removePart = (index) => {
+    const next = effectiveParts.filter((_, currentIndex) => currentIndex !== index);
+    onPlacePartsChange?.(next.length ? next : [{ ...EMPTY_WORKBOOK_PLACE_PART }]);
+  };
+
   return (
-    <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
-        <div className="min-w-0">
-          <div className="rounded-t-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-2.5 text-sm font-semibold text-[var(--panel-card-text)]">
-            Location Role
+    <div className="space-y-3">
+      <PlacesIntro />
+      <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
+        <div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]">
+          <div className="min-w-0 space-y-4">
+            {effectiveParts.map((part, index) => (
+              <WorkbookPlacePartCard
+                key={`workbook-place-part-${index}`}
+                part={part}
+                index={index}
+                workbookModel={workbookModel}
+                onChange={(patch) => updatePart(index, patch)}
+                onRemove={() => removePart(index)}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={addPart}
+              className="rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]"
+            >
+              + Add another place
+            </button>
           </div>
-          <div className="rounded-b-xl border-x border-b border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 px-4 py-2">
-            {SPATIAL_SINGLE_TABLE_ROWS.map((row, rowIndex) => {
-              const isSourceRow = row.title === 'Source/Start Location';
-              const isTargetRow = row.title === 'Target/End Location';
-
-              if (!row.fields.length) {
-                return (
-                  <div key={row.title} className="pb-0 pt-2">
-                    <SectionDivider />
-                    <div className="pt-1 text-[16px] font-bold leading-tight text-[var(--panel-card-text)]">{row.title}</div>
-                  </div>
-                );
-              }
-
-              return (
-                <section
-                  key={row.title}
-                  className={[
-                    'space-y-2 py-2.5',
-                    rowIndex === 0 ? 'pt-1' : '',
-                    isSourceRow ? 'pt-2' : '',
-                    isTargetRow ? 'pt-2' : '',
-                  ].filter(Boolean).join(' ')}
-                >
-                  <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">{row.title}</div>
-                  <SpatialFieldGrid>
-                    {row.fields.map((field) => (
-                      <SpatialFieldShell key={field.key} field={field}>
-                        <SpatialWorkbookSelect
-                          workbookModel={workbookModel}
-                          workbookMapping={workbookMapping}
-                          currentRef={getSpatialWorkbookMappingValue(field, workbookMapping)}
-                          onChange={(value) => handleSpatialMappingChange(field, value, { onPointChange, onRouteChange, onRoutePairChange })}
-                        />
-                      </SpatialFieldShell>
-                    ))}
-                  </SpatialFieldGrid>
-                </section>
-              );
-            })}
-          </div>
+          <PlacesUsagePanel />
         </div>
-        <SpatialUsagePanel />
       </div>
     </div>
   );
