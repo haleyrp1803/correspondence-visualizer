@@ -1,4 +1,4 @@
-/* Phase 2.2 fixture definitions for the isolated universal-upload prototype. */
+/* Phase 2.3 fixture definitions for the isolated universal-upload prototype. */
 
 import {
   PERIDOT_GENERATED_VARIABLE_SOURCES,
@@ -21,12 +21,16 @@ import {
 } from './peridotSourceModel.js';
 import {
   acceptPrototypeFieldSuggestion,
+  assignPrototypeField,
   buildPeridotUniversalUploadPrototypeResult,
   dismissPrototypeFieldSuggestion,
   getPrototypeFieldSuggestions,
+  getPrototypeTablesForStep,
   makePeridotUniversalUploadPrototypeState,
+  setPrototypeSheetPurpose,
 } from './peridotUniversalUploadPrototype.js';
 import { recognizePeridotUniversalFields } from './peridotUniversalFieldRecognizers.js';
+import { buildPeridotUniversalSheetPurposeReview } from './peridotUniversalSheetPurposePolicy.js';
 
 function makeManifest(fileName, sheets) {
   const fileId = makePeridotSourceFileId({ fileName });
@@ -232,10 +236,16 @@ export function runPeridotUniversalUploadPrototypeSelfAudit() {
     mariaKeepsSummaryAndControlledSheetsDistinct: maria.universalMapping.sheetPurposes.some((item) => item.purpose === PERIDOT_SHEET_PURPOSES.SUMMARY_TOTALS) && maria.universalMapping.sheetPurposes.some((item) => item.purpose === PERIDOT_SHEET_PURPOSES.CONTROLLED_VALUES),
   });
 
+  const alaskaTableForSuggestions = alaskaPrototypeFixture.sourceManifest.sourceTables[0];
   const alaskaState = makePeridotUniversalUploadPrototypeState({
     sourceManifest: alaskaPrototypeFixture.sourceManifest,
     sourceRowsByTableId: alaskaPrototypeFixture.sourceRowsByTableId,
-    mapping: {},
+    mapping: makePeridotUniversalMappingDefinition({
+      sheetPurposes: [makePeridotSheetPurposeAssignment({
+        sourceTableId: alaskaTableForSuggestions.id,
+        purpose: PERIDOT_SHEET_PURPOSES.INDIVIDUAL_RECORDS,
+      })],
+    }),
     savedVariables: [],
   });
   const alaskaSuggestions = recognizePeridotUniversalFields({
@@ -267,6 +277,63 @@ export function runPeridotUniversalUploadPrototypeSelfAudit() {
   suggestionChecks.dismissedSuggestionStaysUnassigned = !getPrototypeFieldSuggestions(dismissed).some((item) => item.id === coordinateSuggestion?.id)
     && dismissed.fieldAssignments.length === 0;
 
-  const allChecks = Object.freeze({ ...checks, ...suggestionChecks });
+  const blankMariaState = makePeridotUniversalUploadPrototypeState({
+    sourceManifest: mariaPrototypeFixture.sourceManifest,
+    sourceRowsByTableId: mariaPrototypeFixture.sourceRowsByTableId,
+    mapping: {},
+    savedVariables: mariaPrototypeFixture.savedVariables,
+  });
+  const mariaTables = mariaPrototypeFixture.sourceManifest.sourceTables;
+  const [rawTable, summaryTable, geographicTable, placeTable, peopleTable, controlledTable] = mariaTables;
+  const blankPurposeReview = buildPeridotUniversalSheetPurposeReview(blankMariaState);
+  const namedWithoutKind = setPrototypeSheetPurpose(blankMariaState, {
+    sourceTableId: placeTable.id,
+    purpose: PERIDOT_SHEET_PURPOSES.NAMED_THINGS,
+  });
+  const namedWithKind = setPrototypeSheetPurpose(namedWithoutKind, {
+    sourceTableId: placeTable.id,
+    purpose: PERIDOT_SHEET_PURPOSES.NAMED_THINGS,
+    namedThingKind: 'place',
+  });
+
+  const mariaState = makePeridotUniversalUploadPrototypeState({
+    sourceManifest: mariaPrototypeFixture.sourceManifest,
+    sourceRowsByTableId: mariaPrototypeFixture.sourceRowsByTableId,
+    mapping: mariaPrototypeFixture.mapping,
+    savedVariables: mariaPrototypeFixture.savedVariables,
+  });
+  const mariaEligibleFields = new Set(getPrototypeTablesForStep(mariaState, 'fields').map((table) => table.id));
+  const withDormantControlledAssignment = assignPrototypeField(mariaState, {
+    sourceTableId: controlledTable.id,
+    sourceFieldId: field(controlledTable, 'Relationships'),
+    variableId: 'variable:record-id',
+    status: 'active',
+  });
+  const controlledResult = buildPeridotUniversalUploadPrototypeResult(withDormantControlledAssignment);
+  const rawIgnored = setPrototypeSheetPurpose(mariaState, { sourceTableId: rawTable.id, purpose: PERIDOT_SHEET_PURPOSES.IGNORE });
+  const rawIgnoredResult = buildPeridotUniversalUploadPrototypeResult(rawIgnored);
+  const rawRestored = setPrototypeSheetPurpose(rawIgnored, { sourceTableId: rawTable.id, purpose: PERIDOT_SHEET_PURPOSES.INDIVIDUAL_RECORDS });
+  const rawRestoredResult = buildPeridotUniversalUploadPrototypeResult(rawRestored);
+
+  const purposeChecks = {
+    unclassifiedSheetsStayOutOfLaterMapping: blankPurposeReview.unresolvedCount === mariaTables.length
+      && getPrototypeTablesForStep(blankMariaState, 'fields').length === 0,
+    namedThingSheetRequiresKind: buildPeridotUniversalSheetPurposeReview(namedWithoutKind).namedThingKindNeededCount === 1
+      && !getPrototypeTablesForStep(namedWithoutKind, 'fields').some((table) => table.id === placeTable.id),
+    namedThingKindEnablesLaterMapping: getPrototypeTablesForStep(namedWithKind, 'fields').some((table) => table.id === placeTable.id),
+    controlledVocabularySheetIsWithheld: !mariaEligibleFields.has(controlledTable.id),
+    summarySheetRemainsAvailableAsSummarizedData: mariaEligibleFields.has(summaryTable.id),
+    recordAndProfileSheetsRemainAvailable: mariaEligibleFields.has(rawTable.id)
+      && mariaEligibleFields.has(geographicTable.id)
+      && mariaEligibleFields.has(placeTable.id)
+      && mariaEligibleFields.has(peopleTable.id),
+    dormantControlledAssignmentIsNotSerialized: withDormantControlledAssignment.fieldAssignments.some((item) => item.sourceTableId === controlledTable.id)
+      && !controlledResult.universalMapping.fieldAssignments.some((item) => item.sourceTableId === controlledTable.id),
+    changingPurposePreservesButDeactivatesDraftMapping: rawIgnored.fieldAssignments.some((item) => item.sourceTableId === rawTable.id)
+      && !rawIgnoredResult.universalMapping.fieldAssignments.some((item) => item.sourceTableId === rawTable.id)
+      && rawRestoredResult.universalMapping.fieldAssignments.some((item) => item.sourceTableId === rawTable.id),
+  };
+
+  const allChecks = Object.freeze({ ...checks, ...suggestionChecks, ...purposeChecks });
   return Object.freeze({ passed: Object.values(allChecks).every(Boolean), checks: allChecks, results: Object.freeze(results), recognizerSuggestions: alaskaSuggestions });
 }

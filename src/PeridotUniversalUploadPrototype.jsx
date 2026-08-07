@@ -25,12 +25,18 @@ import {
   buildPeridotUniversalUploadPrototypeResult,
   dismissPrototypeFieldSuggestion,
   getPrototypeFieldSuggestions,
+  getPrototypeTablesForStep,
   makePeridotUniversalUploadPrototypeState,
   removePrototypeRepeatedHeadingGroup,
   removePrototypeTableConnection,
   setPrototypeFieldIgnored,
   setPrototypeSheetPurpose,
 } from './peridotUniversalUploadPrototype.js';
+import {
+  PERIDOT_UNIVERSAL_NAMED_THING_KIND_OPTIONS,
+  buildPeridotUniversalSheetPurposeReview,
+  getPeridotUniversalSheetPurposePolicy,
+} from './peridotUniversalSheetPurposePolicy.js';
 
 function Select({ value, onChange, children, className = '' }) {
   return (
@@ -74,16 +80,38 @@ function SourceStep({ state }) {
 }
 
 function PurposeStep({ state, update }) {
+  const review = useMemo(() => buildPeridotUniversalSheetPurposeReview(state), [state]);
   return (
     <div className="space-y-3">
+      <PrototypeCard eyebrow="Why this matters" title="Sheet purpose controls which later questions Peridot asks">
+        <p className="text-sm leading-relaxed text-[var(--panel-card-muted-text)]">You are describing the role of each sheet. Peridot will not infer that role from its contents. Sheets marked as data remain available for variable mapping; reference, maintenance, ignored, and still-unsure sheets are withheld from later mapping until their purpose changes.</p>
+        <div className="mt-3 text-xs text-[var(--panel-card-muted-text)]">{review.ready ? 'Every sheet has enough information to continue.' : `${review.unresolvedCount} sheet(s) are still unsure; ${review.namedThingKindNeededCount} named-thing sheet(s) still need a type.`}</div>
+      </PrototypeCard>
       {(state.sourceManifest?.sourceTables || []).map((table) => {
-        const current = state.sheetPurposes.find((item) => item.sourceTableId === table.id)?.purpose || PERIDOT_SHEET_PURPOSES.UNSURE;
+        const assignment = state.sheetPurposes.find((item) => item.sourceTableId === table.id);
+        const current = assignment?.purpose || PERIDOT_SHEET_PURPOSES.UNSURE;
+        const namedThingKind = assignment?.namedThingKind || '';
+        const policy = getPeridotUniversalSheetPurposePolicy(current);
         return (
           <PrototypeCard key={table.id} eyebrow="Sheet purpose" title={table.label || table.sheetName || table.id}>
             <p className="mb-3 text-sm text-[var(--panel-card-muted-text)]">What does this sheet mainly contain?</p>
-            <Select value={current} onChange={(purpose) => update(setPrototypeSheetPurpose(state, { sourceTableId: table.id, purpose }))}>
-              {PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_PURPOSE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </Select>
+            <div className="grid gap-3 lg:grid-cols-2 lg:items-end">
+              <Select value={current} onChange={(purpose) => update(setPrototypeSheetPurpose(state, { sourceTableId: table.id, purpose, namedThingKind: purpose === PERIDOT_SHEET_PURPOSES.NAMED_THINGS ? namedThingKind : '' }))}>
+                {PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_PURPOSE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </Select>
+              {current === PERIDOT_SHEET_PURPOSES.NAMED_THINGS ? (
+                <label className="text-xs text-[var(--panel-card-muted-text)]">What kind of things does each row describe?
+                  <Select value={namedThingKind} onChange={(value) => update(setPrototypeSheetPurpose(state, { sourceTableId: table.id, purpose: current, namedThingKind: value }))} className="mt-1 w-full">
+                    <option value="">Choose one</option>
+                    {PERIDOT_UNIVERSAL_NAMED_THING_KIND_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </Select>
+                </label>
+              ) : null}
+            </div>
+            <div className="mt-3 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-xs leading-relaxed text-[var(--panel-card-muted-text)]">
+              {policy.explanation}
+              <div className="mt-1 font-semibold">Later mapping: {policy.exposesFields ? 'fields available' : 'fields withheld'} · {policy.allowsRepeatedHeadings ? 'repeated columns available' : 'no repeated-column setup'} · {policy.allowsConnections ? 'sheet connections available' : 'no sheet connections'}</div>
+            </div>
           </PrototypeCard>
         );
       })}
@@ -122,6 +150,8 @@ function VariableStep({ state, update }) {
   const [label, setLabel] = useState('');
   const [kind, setKind] = useState(PERIDOT_VARIABLE_KINDS.OTHER);
   const variables = state.savedVariables;
+  const tables = useMemo(() => getPrototypeTablesForStep(state, 'fields'), [state]);
+  const allTables = state.sourceManifest?.sourceTables || [];
   const suggestions = useMemo(() => getPrototypeFieldSuggestions(state), [state]);
   const suggestionsByField = useMemo(() => new Map(suggestions.map((suggestion) => [suggestion.sourceFieldId, suggestion])), [suggestions]);
 
@@ -140,7 +170,9 @@ function VariableStep({ state, update }) {
         </div>
       </PrototypeCard>
 
-      {(state.sourceManifest?.sourceTables || []).map((table) => (
+      {tables.length === 0 ? <PrototypeCard eyebrow="No data sheets available" title="Classify a sheet before assigning variables"><p className="text-sm text-[var(--panel-card-muted-text)]">Return to What each sheet contains and classify at least one sheet as records, named things, or summary/totals.</p></PrototypeCard> : null}
+      {allTables.length > tables.length ? <div className="text-xs text-[var(--muted-text)]">{allTables.length - tables.length} sheet(s) are intentionally withheld from variable mapping by their current purpose.</div> : null}
+      {tables.map((table) => (
         <PrototypeCard key={table.id} eyebrow="Assign columns" title={table.label || table.sheetName || table.id}>
           <div className="space-y-2">
             {(table.fields || []).map((field) => {
@@ -171,7 +203,7 @@ function VariableStep({ state, update }) {
 }
 
 function RepeatedHeadingsStep({ state, update }) {
-  const tables = state.sourceManifest?.sourceTables || [];
+  const tables = getPrototypeTablesForStep(state, 'repeated-headings');
   const [tableId, setTableId] = useState(tables[0]?.id || '');
   const [selected, setSelected] = useState([]);
   const [headingVariableId, setHeadingVariableId] = useState('');
@@ -183,7 +215,8 @@ function RepeatedHeadingsStep({ state, update }) {
 
   return (
     <div className="space-y-4">
-      <PrototypeCard eyebrow="Repeated columns" title="Tell Peridot when several headings represent comparable things">
+      {tables.length === 0 ? <PrototypeCard eyebrow="No eligible sheets" title="Repeated columns are not available yet"><p className="text-sm text-[var(--panel-card-muted-text)]">Classify a data-bearing sheet first. Reference, maintenance, ignored, and unsure sheets do not enter repeated-column setup.</p></PrototypeCard> : null}
+      {tables.length > 0 ? <PrototypeCard eyebrow="Repeated columns" title="Tell Peridot when several headings represent comparable things">
         <p className="mb-3 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">Example: five company headings can become one Organization variable, while the cells beneath them become one Stock price variable. This prototype asks rather than inferring.</p>
         <div className="grid gap-3 lg:grid-cols-2">
           <label className="text-sm text-[var(--panel-card-muted-text)]">Table<Select value={tableId} onChange={(value) => { setTableId(value); setSelected([]); }} className="mt-1 w-full">{tables.map((item) => <option key={item.id} value={item.id}>{item.label || item.sheetName}</option>)}</Select></label>
@@ -197,7 +230,7 @@ function RepeatedHeadingsStep({ state, update }) {
           <label className="text-sm text-[var(--panel-card-muted-text)]">What do the cells contain?<Select value={cellVariableId} onChange={setCellVariableId} className="mt-1 w-full"><option value="">Choose a saved variable</option>{state.savedVariables.map((variable) => <option key={variable.id} value={variable.id}>{variable.label}</option>)}</Select></label>
         </div>
         <button type="button" disabled={!tableId || selected.length < 2 || !headingVariableId || !cellVariableId} onClick={() => { update(addPrototypeRepeatedHeadingGroup(state, { sourceTableId: tableId, sourceFieldIds: selected, headingVariableId, cellVariableId, transposeFirst })); setSelected([]); }} className="mt-3 rounded-lg border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-2 text-sm font-semibold text-[var(--button-primary-text)] disabled:opacity-50">Save repeated-column rule</button>
-      </PrototypeCard>
+      </PrototypeCard> : null}
 
       {state.repeatedHeadingGroups.map((group) => (
         <PrototypeCard key={group.id} eyebrow="Saved rule" title={group.id}>
@@ -209,7 +242,7 @@ function RepeatedHeadingsStep({ state, update }) {
 }
 
 function ConnectionsStep({ state, update }) {
-  const tables = state.sourceManifest?.sourceTables || [];
+  const tables = getPrototypeTablesForStep(state, 'connections');
   const [fromTableId, setFromTableId] = useState(tables[0]?.id || '');
   const [toTableId, setToTableId] = useState(tables[1]?.id || tables[0]?.id || '');
   const [fromFieldId, setFromFieldId] = useState('');
@@ -219,14 +252,15 @@ function ConnectionsStep({ state, update }) {
 
   return (
     <div className="space-y-4">
-      <PrototypeCard eyebrow="Connect sheets" title="Choose fields whose values should match">
+      {tables.length < 2 ? <PrototypeCard eyebrow="No connection needed yet" title="At least two eligible data sheets are required"><p className="text-sm text-[var(--panel-card-muted-text)]">Only sheets classified as records, named things, or summary/totals participate in field-to-field connections.</p></PrototypeCard> : null}
+      {tables.length >= 2 ? <PrototypeCard eyebrow="Connect sheets" title="Choose fields whose values should match">
         <p className="mb-3 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">Peridot will later report whether each row has no match, one match, or several matches. This prototype does not assume that several matches are an error.</p>
         <div className="grid gap-3 lg:grid-cols-2">
           <div className="space-y-2"><Select value={fromTableId} onChange={(value) => { setFromTableId(value); setFromFieldId(''); }} className="w-full">{tables.map((table) => <option key={table.id} value={table.id}>{table.label || table.sheetName}</option>)}</Select><Select value={fromFieldId} onChange={setFromFieldId} className="w-full"><option value="">Field to match</option>{fromFields.map((field) => <option key={field.id} value={field.id}>{field.name}</option>)}</Select></div>
           <div className="space-y-2"><Select value={toTableId} onChange={(value) => { setToTableId(value); setToFieldId(''); }} className="w-full">{tables.map((table) => <option key={table.id} value={table.id}>{table.label || table.sheetName}</option>)}</Select><Select value={toFieldId} onChange={setToFieldId} className="w-full"><option value="">Field to match</option>{toFields.map((field) => <option key={field.id} value={field.id}>{field.name}</option>)}</Select></div>
         </div>
         <button type="button" disabled={!fromFieldId || !toFieldId || fromTableId === toTableId} onClick={() => update(addPrototypeTableConnection(state, { fromTableId, fromFieldId, toTableId, toFieldId }))} className="mt-3 rounded-lg border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-2 text-sm font-semibold text-[var(--button-primary-text)] disabled:opacity-50">Save connection</button>
-      </PrototypeCard>
+      </PrototypeCard> : null}
 
       {state.tableConnections.map((connection) => (
         <PrototypeCard key={connection.id} eyebrow="Saved connection" title={connection.label || connection.id}>
@@ -245,6 +279,9 @@ function ReviewStep({ state }) {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           ['Source tables', summary.sourceTables],
+          ['Data-bearing sheets', summary.mappingEligibleTables],
+          ['Reference sheets', summary.referenceTables],
+          ['Unresolved purposes', summary.unresolvedSheetPurposes + summary.namedThingKindsNeeded],
           ['Saved variables', summary.savedVariables],
           ['Assigned fields', summary.assignedFields],
           ['Unassigned fields', summary.unassignedFields],
@@ -252,6 +289,11 @@ function ReviewStep({ state }) {
           ['Sheet connections', summary.tableConnections],
         ].map(([label, value]) => <div key={label} className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4"><div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">{label}</div><div className="mt-2 text-2xl font-bold text-[var(--panel-card-text)]">{value}</div></div>)}
       </div>
+      <PrototypeCard eyebrow="Sheet-purpose review" title={result.sheetPurposeReview.ready ? 'Every sheet has an operational purpose' : 'Some sheet purposes still need attention'}>
+        <div className="space-y-2">
+          {result.sheetPurposeReview.rows.map((row) => <div key={row.sourceTableId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-xs text-[var(--panel-card-muted-text)]"><span><strong className="text-[var(--panel-card-text)]">{row.label}</strong> · {row.purposeLabel}{row.namedThingKind ? ` · ${row.namedThingKind}` : ''}</span><span>{row.ready ? row.mappingMode : row.unresolvedPurpose ? 'choose a purpose' : 'choose what kind of named thing'}</span></div>)}
+        </div>
+      </PrototypeCard>
       <PrototypeCard eyebrow="Prototype interpretation" title="What Peridot would save">
         <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--panel-card-border)] bg-[var(--input-bg)] p-3 text-xs leading-relaxed text-[var(--panel-card-muted-text)]">{JSON.stringify({ savedVariables: result.savedVariables, universalMapping: result.universalMapping }, null, 2)}</pre>
       </PrototypeCard>
@@ -271,9 +313,9 @@ export function PeridotUniversalUploadPrototype({ sourceManifest, sourceRowsByTa
   return (
     <div className="rounded-[2rem] border border-[var(--panel-card-border)] bg-[var(--panel-bg)] p-5 shadow-xl">
       <header className="mb-4">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted-text)]">Phase 2.2 prototype</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted-text)]">Phase 2.3 prototype</div>
         <h2 className="mt-1 text-2xl font-bold text-[var(--panel-card-text)]">Describe how your data is organized</h2>
-        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--panel-card-muted-text)]">This deliberately detailed prototype now offers conservative structural suggestions for common dates, coordinates, numbers, categories, identifiers, links, entities, and text. Suggestions never become mappings until you accept or edit them.</p>
+        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--panel-card-muted-text)]">This deliberately detailed prototype now makes sheet purpose operational. Your classifications control which sheets appear in later mapping steps, while Peridot’s conservative field suggestions remain editable and never become mappings until you accept them.</p>
       </header>
 
       <nav className="mb-5 flex flex-wrap gap-2" aria-label="Universal upload prototype steps">

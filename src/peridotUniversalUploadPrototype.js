@@ -24,6 +24,11 @@ import {
   findPeridotUniversalFieldSuggestion,
   recognizePeridotUniversalFields,
 } from './peridotUniversalFieldRecognizers.js';
+import {
+  buildPeridotUniversalSheetPurposeReview,
+  isPeridotUniversalSheetAvailableFor,
+  listPeridotUniversalPrototypeTablesFor,
+} from './peridotUniversalSheetPurposePolicy.js';
 
 export const PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_STEPS = Object.freeze([
   'sources',
@@ -187,10 +192,12 @@ export function getPrototypeFieldSuggestions(state, { includeAssigned = false, i
   const assigned = new Set((state.fieldAssignments || [])
     .filter((item) => item.status !== PERIDOT_FIELD_ASSIGNMENT_STATUS.UNASSIGNED)
     .map((item) => item.sourceFieldId));
+  const eligibleTableIds = new Set(listPeridotUniversalPrototypeTablesFor(state, 'fields').map((table) => table.id));
   return recognizePeridotUniversalFields({
     sourceManifest: state.sourceManifest,
     sourceRowsByTableId: state.sourceRowsByTableId,
-  }).filter((suggestion) => (includeDismissed || !dismissed.has(suggestion.id))
+  }).filter((suggestion) => eligibleTableIds.has(suggestion.sourceTableId)
+    && (includeDismissed || !dismissed.has(suggestion.id))
     && (includeAssigned || !assigned.has(suggestion.sourceFieldId)));
 }
 
@@ -299,35 +306,64 @@ export function removePrototypeTableConnection(state, connectionId) {
 }
 
 export function buildPeridotUniversalUploadPrototypeResult(state) {
+  const purposeReview = buildPeridotUniversalSheetPurposeReview(state);
+  const fieldTableIds = new Set(listPeridotUniversalPrototypeTablesFor(state, 'fields').map((table) => table.id));
+  const repeatedTableIds = new Set(listPeridotUniversalPrototypeTablesFor(state, 'repeated-headings').map((table) => table.id));
+  const connectionTableIds = new Set(listPeridotUniversalPrototypeTablesFor(state, 'connections').map((table) => table.id));
+
+  // Keep draft choices in prototype state, but only serialize mappings from sheets
+  // whose user-declared purpose makes those choices operational. This means a
+  // researcher can temporarily mark a sheet Ignore/Unsure and later restore it
+  // without Peridot silently using its dormant mappings in the saved result.
+  const operationalFieldAssignments = state.fieldAssignments.filter((item) => fieldTableIds.has(item.sourceTableId));
+  const operationalRepeatedHeadingGroups = state.repeatedHeadingGroups.filter((item) => repeatedTableIds.has(item.sourceTableId));
+  const operationalTableConnections = state.tableConnections.filter((item) => connectionTableIds.has(item.fromTableId) && connectionTableIds.has(item.toTableId));
+
   const universalMapping = makePeridotUniversalMappingDefinition({
     id: 'universal-upload-prototype',
     label: 'Universal upload prototype',
     sheetPurposes: state.sheetPurposes,
-    fieldAssignments: state.fieldAssignments,
-    repeatedHeadingGroups: state.repeatedHeadingGroups,
-    tableConnections: state.tableConnections,
+    fieldAssignments: operationalFieldAssignments,
+    repeatedHeadingGroups: operationalRepeatedHeadingGroups,
+    tableConnections: operationalTableConnections,
   });
 
   const tables = sourceTables(state.sourceManifest);
-  const assignedFieldIds = new Set(state.fieldAssignments.filter((item) => item.status === PERIDOT_FIELD_ASSIGNMENT_STATUS.ACTIVE).map((item) => item.sourceFieldId));
-  const ignoredFieldIds = new Set(state.fieldAssignments.filter((item) => item.status === PERIDOT_FIELD_ASSIGNMENT_STATUS.IGNORED).map((item) => item.sourceFieldId));
+  const assignedFieldIds = new Set(operationalFieldAssignments.filter((item) => item.status === PERIDOT_FIELD_ASSIGNMENT_STATUS.ACTIVE).map((item) => item.sourceFieldId));
+  const ignoredFieldIds = new Set(operationalFieldAssignments.filter((item) => item.status === PERIDOT_FIELD_ASSIGNMENT_STATUS.IGNORED).map((item) => item.sourceFieldId));
+  const operationalFieldIds = tables.filter((table) => fieldTableIds.has(table.id)).flatMap((table) => (table.fields || []).map((field) => field.id));
   const allFieldIds = tables.flatMap((table) => (table.fields || []).map((field) => field.id));
 
   return Object.freeze({
     savedVariables: state.savedVariables,
     universalMapping,
+    sheetPurposeReview: purposeReview,
     summary: Object.freeze({
       sourceTables: tables.length,
       sourceFields: allFieldIds.length,
       sheetPurposesAssigned: state.sheetPurposes.length,
+      unresolvedSheetPurposes: purposeReview.unresolvedCount,
+      namedThingKindsNeeded: purposeReview.namedThingKindNeededCount,
+      mappingEligibleTables: purposeReview.dataTableCount,
+      referenceTables: purposeReview.referenceTableCount,
+      inactiveTables: purposeReview.inactiveTableCount,
       savedVariables: state.savedVariables.length,
       assignedFields: assignedFieldIds.size,
       ignoredFields: ignoredFieldIds.size,
-      unassignedFields: allFieldIds.filter((id) => !assignedFieldIds.has(id) && !ignoredFieldIds.has(id)).length,
-      repeatedHeadingGroups: state.repeatedHeadingGroups.length,
-      tableConnections: state.tableConnections.length,
+      unassignedFields: operationalFieldIds.filter((id) => !assignedFieldIds.has(id) && !ignoredFieldIds.has(id)).length,
+      withheldFields: allFieldIds.length - operationalFieldIds.length,
+      repeatedHeadingGroups: operationalRepeatedHeadingGroups.length,
+      tableConnections: operationalTableConnections.length,
     }),
   });
+}
+
+export function getPrototypeTablesForStep(state, capability) {
+  return listPeridotUniversalPrototypeTablesFor(state, capability);
+}
+
+export function isPrototypeSheetAvailableFor(state, sourceTableId, capability) {
+  return isPeridotUniversalSheetAvailableFor(state, sourceTableId, capability);
 }
 
 export function describePrototypeTable(state, sourceTableId) {
