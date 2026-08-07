@@ -1,4 +1,4 @@
-/* Phase 2.5 fixture definitions for the isolated universal-upload prototype. */
+/* Phase 2.6 fixture definitions for the isolated universal-upload prototype. */
 
 import {
   PERIDOT_GENERATED_VARIABLE_SOURCES,
@@ -463,6 +463,24 @@ export function runPeridotUniversalUploadPrototypeSelfAudit() {
     connectionReportDoesNotFlattenRelatedRows: rawToGeographyReport.rows.find((row) => row.sourceValue === 'MM0001')?.matchedRowNumbers.length === 2,
   };
 
-  const allChecks = Object.freeze({ ...checks, ...suggestionChecks, ...purposeChecks, ...connectionChecks });
+  const rawPausedForEditing = setPrototypeSheetPurpose(mariaState, { sourceTableId: rawTable.id, purpose: PERIDOT_SHEET_PURPOSES.IGNORE });
+  const pausedResult = buildPeridotUniversalUploadPrototypeResult(rawPausedForEditing);
+  const rawReactivatedAfterEditing = setPrototypeSheetPurpose(rawPausedForEditing, { sourceTableId: rawTable.id, purpose: PERIDOT_SHEET_PURPOSES.INDIVIDUAL_RECORDS });
+  const reactivatedResult = buildPeridotUniversalUploadPrototypeResult(rawReactivatedAfterEditing);
+  const unrelatedPlaceAssignmentsBefore = mariaState.fieldAssignments.filter((item) => item.sourceTableId === placeTable.id).length;
+  const unrelatedPlaceAssignmentsDuring = rawPausedForEditing.fieldAssignments.filter((item) => item.sourceTableId === placeTable.id).length;
+  const continuityChecks = {
+    upstreamEditPausesDependentMappingsImmediately: pausedResult.editContinuityReview.hasDormantWork === true
+      && pausedResult.editContinuityReview.dormantFieldAssignments.some((item) => item.sourceTableId === rawTable.id)
+      && pausedResult.editContinuityReview.dormantTableConnections.some((item) => item.fromTableId === rawTable.id || item.toTableId === rawTable.id),
+    pausedDependentMappingsAreNotSerialized: !pausedResult.universalMapping.fieldAssignments.some((item) => item.sourceTableId === rawTable.id)
+      && !pausedResult.universalMapping.tableConnections.some((item) => item.fromTableId === rawTable.id || item.toTableId === rawTable.id),
+    unrelatedWorkSurvivesUpstreamEdit: unrelatedPlaceAssignmentsBefore === unrelatedPlaceAssignmentsDuring,
+    restoringUpstreamChoiceReactivatesDraftWork: reactivatedResult.editContinuityReview.dormantCount === 0
+      && reactivatedResult.universalMapping.fieldAssignments.some((item) => item.sourceTableId === rawTable.id)
+      && reactivatedResult.universalMapping.tableConnections.some((item) => item.fromTableId === rawTable.id || item.toTableId === rawTable.id),
+  };
+
+  const allChecks = Object.freeze({ ...checks, ...suggestionChecks, ...purposeChecks, ...connectionChecks, ...continuityChecks });
   return Object.freeze({ passed: Object.values(allChecks).every(Boolean), checks: allChecks, results: Object.freeze(results), recognizerSuggestions: alaskaSuggestions });
 }

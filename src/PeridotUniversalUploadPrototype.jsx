@@ -1,5 +1,5 @@
 /*
- * Standalone Phase 2.5 universal-upload prototype.
+ * Standalone Phase 2.6 universal-upload prototype.
  *
  * This component is intentionally NOT wired into App.jsx or the active mapping
  * modal. It exists so the complicated interaction model can be tested and
@@ -477,7 +477,7 @@ function ConnectionsStep({ state, update }) {
   );
 }
 
-function ReviewStep({ state }) {
+function ReviewStep({ state, onEditStep }) {
   const result = useMemo(() => buildPeridotUniversalUploadPrototypeResult(state), [state]);
   const summary = result.summary;
   return (
@@ -494,8 +494,22 @@ function ReviewStep({ state }) {
           ['Repeated-column rules', summary.repeatedHeadingGroups],
           ['Sheet connections', summary.tableConnections],
           ['Connection questions', summary.unresolvedConnectionQuestions],
+          ['Paused draft choices', summary.dormantDraftChoices],
         ].map(([label, value]) => <div key={label} className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4"><div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">{label}</div><div className="mt-2 text-2xl font-bold text-[var(--panel-card-text)]">{value}</div></div>)}
       </div>
+      <PrototypeCard eyebrow="Return and edit" title="Nothing here is final yet">
+        <p className="text-sm leading-relaxed text-[var(--panel-card-muted-text)]">Review is an editing hub. Return to any earlier step, change one decision, and come back here. Peridot recalculates the saved interpretation from the current choices rather than treating Review as a one-way finish line.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {[['purposes', 'Edit sheet purposes'], ['variables', 'Edit variables'], ['repeated-headings', 'Edit repeated data'], ['connections', 'Edit connections']].map(([stepKey, label]) => <button key={stepKey} type="button" onClick={() => onEditStep(stepKey)} className="rounded-lg border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2 text-xs font-semibold text-[var(--panel-card-text)]">{label}</button>)}
+        </div>
+      </PrototypeCard>
+      {result.editContinuityReview.hasDormantWork ? <PrototypeCard eyebrow="Paused draft work" title="Some earlier choices are preserved but not currently active">
+        <p className="text-sm leading-relaxed text-[var(--panel-card-muted-text)]">{result.editContinuityReview.message}</p>
+        <div className="mt-3 space-y-2">
+          {[...result.editContinuityReview.dormantFieldAssignments, ...result.editContinuityReview.dormantRepeatedHeadingGroups, ...result.editContinuityReview.dormantTableConnections].map((item) => <div key={`${item.editStep}:${item.id}`} className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-xs text-[var(--panel-card-muted-text)]"><strong className="text-[var(--panel-card-text)]">{item.label}</strong><div className="mt-1">{item.reason}</div></div>)}
+        </div>
+        <button type="button" onClick={() => onEditStep('purposes')} className="mt-3 rounded-lg border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-xs font-semibold text-[var(--button-primary-text)]">Review sheet purposes</button>
+      </PrototypeCard> : null}
       <PrototypeCard eyebrow="Sheet-purpose review" title={result.sheetPurposeReview.ready ? 'Every sheet has an operational purpose' : 'Some sheet purposes still need attention'}>
         <div className="space-y-2">
           {result.sheetPurposeReview.rows.map((row) => <div key={row.sourceTableId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-xs text-[var(--panel-card-muted-text)]"><span><strong className="text-[var(--panel-card-text)]">{row.label}</strong> · {row.purposeLabel}{row.namedThingKind ? ` · ${row.namedThingKind}` : ''}</span><span>{row.ready ? row.mappingMode : row.unresolvedPurpose ? 'choose a purpose' : 'choose what kind of named thing'}</span></div>)}
@@ -525,9 +539,9 @@ export function PeridotUniversalUploadPrototype({ sourceManifest, sourceRowsByTa
   return (
     <div className="rounded-[2rem] border border-[var(--panel-card-border)] bg-[var(--panel-bg)] p-5 shadow-xl">
       <header className="mb-4">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted-text)]">Phase 2.5 prototype</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted-text)]">Phase 2.6 prototype</div>
         <h2 className="mt-1 text-2xl font-bold text-[var(--panel-card-text)]">Describe how your data is organized</h2>
-        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--panel-card-muted-text)]">This deliberately detailed prototype now makes related-sheet connections operational. You choose the matching fields; Peridot reports no, one, or several matches without flattening related rows, and only asks about several matches when they actually occur.</p>
+        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--panel-card-muted-text)]">This deliberately detailed prototype now supports return-and-edit mapping. Review is reversible: earlier choices can be changed, dependent mappings become inactive when an upstream choice makes them ineligible, unrelated work stays active, and paused draft work is preserved for restoration.</p>
       </header>
 
       <nav className="mb-5 flex flex-wrap gap-2" aria-label="Universal upload prototype steps">
@@ -539,7 +553,7 @@ export function PeridotUniversalUploadPrototype({ sourceManifest, sourceRowsByTa
       {step === 'variables' ? <VariableStep state={state} update={update} /> : null}
       {step === 'repeated-headings' ? <RepeatedHeadingsStep state={state} update={update} /> : null}
       {step === 'connections' ? <ConnectionsStep state={state} update={update} /> : null}
-      {step === 'review' ? <ReviewStep state={state} /> : null}
+      {step === 'review' ? <ReviewStep state={state} onEditStep={setStep} /> : null}
     </div>
   );
 }

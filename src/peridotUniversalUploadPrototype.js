@@ -38,6 +38,7 @@ import {
   buildPeridotTableConnectionMatchReport,
   buildPeridotTableConnectionReview,
 } from './peridotUniversalTableConnections.js';
+import { buildPeridotUniversalMappingEditContinuityReview } from './peridotUniversalMappingEditContinuity.js';
 
 export const PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_STEPS = Object.freeze([
   'sources',
@@ -404,6 +405,7 @@ export function buildPeridotUniversalUploadPrototypeResult(state) {
     sourceRowsByTableId: state.sourceRowsByTableId,
     connections: operationalTableConnections,
   });
+  const editContinuityReview = buildPeridotUniversalMappingEditContinuityReview(state);
 
   return Object.freeze({
     savedVariables: state.savedVariables,
@@ -411,6 +413,7 @@ export function buildPeridotUniversalUploadPrototypeResult(state) {
     sheetPurposeReview: purposeReview,
     repeatedStructurePreviews: Object.freeze(repeatedStructurePreviews),
     tableConnectionReview,
+    editContinuityReview,
     summary: Object.freeze({
       sourceTables: tables.length,
       sourceFields: allFieldIds.length,
@@ -429,6 +432,7 @@ export function buildPeridotUniversalUploadPrototypeResult(state) {
       tableConnections: operationalTableConnections.length,
       unresolvedConnectionQuestions: tableConnectionReview.unresolvedMultipleMatchQuestions,
       connectionExpectationConflicts: tableConnectionReview.expectationConflicts,
+      dormantDraftChoices: editContinuityReview.dormantCount,
     }),
   });
 }
