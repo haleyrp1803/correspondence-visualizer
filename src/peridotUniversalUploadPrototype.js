@@ -20,6 +20,10 @@ import {
   makePeridotTableConnection,
   makePeridotUniversalMappingDefinition,
 } from './peridotUniversalMappingModel.js';
+import {
+  findPeridotUniversalFieldSuggestion,
+  recognizePeridotUniversalFields,
+} from './peridotUniversalFieldRecognizers.js';
 
 export const PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_STEPS = Object.freeze([
   'sources',
@@ -102,23 +106,30 @@ function makeVariableId(label, existing = []) {
 
 export function makePeridotUniversalUploadPrototypeState({
   sourceManifest = {},
+  sourceRowsByTableId = {},
   mapping = {},
   savedVariables = [],
+  dismissedSuggestionIds = [],
 } = {}) {
   const normalizedMapping = makePeridotUniversalMappingDefinition(mapping);
   return Object.freeze({
     sourceManifest,
+    // Prototype-only source rows are kept outside the Phase 1 source manifest so
+    // canonical structural metadata does not duplicate uploaded row content.
+    sourceRowsByTableId,
     savedVariables: makePeridotSavedVariables(savedVariables),
     sheetPurposes: Object.freeze(cloneArray(normalizedMapping.sheetPurposes)),
     fieldAssignments: Object.freeze(cloneArray(normalizedMapping.fieldAssignments)),
     repeatedHeadingGroups: Object.freeze(cloneArray(normalizedMapping.repeatedHeadingGroups)),
     tableConnections: Object.freeze(cloneArray(normalizedMapping.tableConnections)),
+    dismissedSuggestionIds: Object.freeze(Array.from(new Set(dismissedSuggestionIds.map(asText).filter(Boolean)))),
   });
 }
 
 function replaceState(state, changes) {
   return makePeridotUniversalUploadPrototypeState({
     sourceManifest: state.sourceManifest,
+    sourceRowsByTableId: state.sourceRowsByTableId,
     savedVariables: changes.savedVariables ?? state.savedVariables,
     mapping: {
       id: 'universal-upload-prototype',
@@ -128,6 +139,7 @@ function replaceState(state, changes) {
       repeatedHeadingGroups: changes.repeatedHeadingGroups ?? state.repeatedHeadingGroups,
       tableConnections: changes.tableConnections ?? state.tableConnections,
     },
+    dismissedSuggestionIds: changes.dismissedSuggestionIds ?? state.dismissedSuggestionIds,
   });
 }
 
@@ -168,6 +180,70 @@ export function setPrototypeFieldIgnored(state, { sourceTableId, sourceFieldId }
     variableId: '',
     status: PERIDOT_FIELD_ASSIGNMENT_STATUS.IGNORED,
   });
+}
+
+export function getPrototypeFieldSuggestions(state, { includeAssigned = false, includeDismissed = false } = {}) {
+  const dismissed = new Set(state.dismissedSuggestionIds || []);
+  const assigned = new Set((state.fieldAssignments || [])
+    .filter((item) => item.status !== PERIDOT_FIELD_ASSIGNMENT_STATUS.UNASSIGNED)
+    .map((item) => item.sourceFieldId));
+  return recognizePeridotUniversalFields({
+    sourceManifest: state.sourceManifest,
+    sourceRowsByTableId: state.sourceRowsByTableId,
+  }).filter((suggestion) => (includeDismissed || !dismissed.has(suggestion.id))
+    && (includeAssigned || !assigned.has(suggestion.sourceFieldId)));
+}
+
+export function dismissPrototypeFieldSuggestion(state, suggestionId) {
+  return replaceState(state, {
+    dismissedSuggestionIds: [...state.dismissedSuggestionIds, asText(suggestionId)],
+  });
+}
+
+export function restorePrototypeFieldSuggestion(state, suggestionId) {
+  return replaceState(state, {
+    dismissedSuggestionIds: state.dismissedSuggestionIds.filter((id) => id !== suggestionId),
+  });
+}
+
+export function acceptPrototypeFieldSuggestion(state, {
+  suggestionId,
+  label,
+  kind,
+  semanticRole,
+  temporalRole,
+  variableId = '',
+} = {}) {
+  const suggestions = recognizePeridotUniversalFields({
+    sourceManifest: state.sourceManifest,
+    sourceRowsByTableId: state.sourceRowsByTableId,
+  });
+  const suggestion = findPeridotUniversalFieldSuggestion(suggestions, suggestionId);
+  if (!suggestion) return state;
+
+  let next = state;
+  let chosenVariableId = asText(variableId);
+  if (!chosenVariableId) {
+    const variable = makePeridotSavedVariable({
+      id: makeVariableId(label || suggestion.suggestedLabel, state.savedVariables),
+      label: label || suggestion.suggestedLabel,
+      kind: kind || suggestion.suggestedKind,
+      semanticRole: semanticRole ?? suggestion.semanticRole,
+      temporalRole: temporalRole ?? suggestion.temporalRole,
+      sourceFieldIds: [suggestion.sourceFieldId],
+      attributes: { recognizedFromSourceStructure: true },
+    });
+    chosenVariableId = variable.id;
+    next = replaceState(next, { savedVariables: [...next.savedVariables, variable] });
+  }
+
+  next = assignPrototypeField(next, {
+    sourceTableId: suggestion.sourceTableId,
+    sourceFieldId: suggestion.sourceFieldId,
+    variableId: chosenVariableId,
+    status: PERIDOT_FIELD_ASSIGNMENT_STATUS.ACTIVE,
+  });
+  return restorePrototypeFieldSuggestion(next, suggestionId);
 }
 
 export function addPrototypeRepeatedHeadingGroup(state, {

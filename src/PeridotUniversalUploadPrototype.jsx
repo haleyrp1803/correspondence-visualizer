@@ -1,5 +1,5 @@
 /*
- * Standalone Phase 2.1 universal-upload prototype.
+ * Standalone Phase 2.2 universal-upload prototype.
  *
  * This component is intentionally NOT wired into App.jsx or the active mapping
  * modal. It exists so the complicated interaction model can be tested and
@@ -17,11 +17,14 @@ import {
   PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_STEP_LABELS,
   PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_STEPS,
   PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_VARIABLE_KIND_OPTIONS,
+  acceptPrototypeFieldSuggestion,
   addPrototypeRepeatedHeadingGroup,
   addPrototypeSavedVariable,
   addPrototypeTableConnection,
   assignPrototypeField,
   buildPeridotUniversalUploadPrototypeResult,
+  dismissPrototypeFieldSuggestion,
+  getPrototypeFieldSuggestions,
   makePeridotUniversalUploadPrototypeState,
   removePrototypeRepeatedHeadingGroup,
   removePrototypeTableConnection,
@@ -88,10 +91,39 @@ function PurposeStep({ state, update }) {
   );
 }
 
+function FieldSuggestion({ suggestion, state, update }) {
+  const [label, setLabel] = useState(suggestion.suggestedLabel);
+  const [kind, setKind] = useState(suggestion.suggestedKind);
+
+  return (
+    <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
+      <div className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--muted-text)]">Peridot noticed a possible mapping</div>
+      <div className="mt-2 grid gap-2 lg:grid-cols-[minmax(12rem,1fr)_minmax(15rem,1fr)_auto_auto] lg:items-end">
+        <label className="text-xs text-[var(--panel-card-muted-text)]">Variable name
+          <input value={label} onChange={(event) => setLabel(event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--panel-card-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--panel-card-text)]" />
+        </label>
+        <label className="text-xs text-[var(--panel-card-muted-text)]">What kind of information is this?
+          <Select value={kind} onChange={setKind} className="mt-1 w-full">
+            {PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_VARIABLE_KIND_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </Select>
+        </label>
+        <button type="button" disabled={!label.trim()} onClick={() => update(acceptPrototypeFieldSuggestion(state, { suggestionId: suggestion.id, label, kind }))} className="rounded-lg border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-xs font-semibold text-[var(--button-primary-text)] disabled:opacity-50">Use suggestion</button>
+        <button type="button" onClick={() => update(dismissPrototypeFieldSuggestion(state, suggestion.id))} className="rounded-lg border border-[var(--panel-card-border)] px-3 py-2 text-xs font-semibold text-[var(--panel-card-muted-text)]">Dismiss</button>
+      </div>
+      <div className="mt-2 space-y-1 text-xs leading-relaxed text-[var(--panel-card-muted-text)]">
+        {suggestion.basis.map((reason) => <div key={reason}>{reason}</div>)}
+        {suggestion.sampleValues.length ? <div>Examples seen: {suggestion.sampleValues.join(' · ')}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 function VariableStep({ state, update }) {
   const [label, setLabel] = useState('');
   const [kind, setKind] = useState(PERIDOT_VARIABLE_KINDS.OTHER);
   const variables = state.savedVariables;
+  const suggestions = useMemo(() => getPrototypeFieldSuggestions(state), [state]);
+  const suggestionsByField = useMemo(() => new Map(suggestions.map((suggestion) => [suggestion.sourceFieldId, suggestion])), [suggestions]);
 
   return (
     <div className="space-y-4">
@@ -115,16 +147,19 @@ function VariableStep({ state, update }) {
               const assignment = state.fieldAssignments.find((item) => item.sourceFieldId === field.id);
               const value = assignment?.status === PERIDOT_FIELD_ASSIGNMENT_STATUS.IGNORED ? '__ignore__' : (assignment?.variableId || '');
               return (
-                <div key={field.id} className="grid gap-2 md:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.2fr)] md:items-center">
-                  <div className="text-sm font-semibold text-[var(--panel-card-text)]">{field.name}</div>
-                  <Select value={value} onChange={(next) => {
-                    if (next === '__ignore__') update(setPrototypeFieldIgnored(state, { sourceTableId: table.id, sourceFieldId: field.id }));
-                    else update(assignPrototypeField(state, { sourceTableId: table.id, sourceFieldId: field.id, variableId: next, status: next ? PERIDOT_FIELD_ASSIGNMENT_STATUS.ACTIVE : PERIDOT_FIELD_ASSIGNMENT_STATUS.UNASSIGNED }));
-                  }}>
-                    <option value="">Not assigned yet</option>
-                    {variables.map((variable) => <option key={variable.id} value={variable.id}>{variable.label}</option>)}
-                    <option value="__ignore__">Ignore this column</option>
-                  </Select>
+                <div key={field.id} className="space-y-2 rounded-xl border border-transparent py-1">
+                  <div className="grid gap-2 md:grid-cols-[minmax(12rem,1fr)_minmax(16rem,1.2fr)] md:items-center">
+                    <div className="text-sm font-semibold text-[var(--panel-card-text)]">{field.name}</div>
+                    <Select value={value} onChange={(next) => {
+                      if (next === '__ignore__') update(setPrototypeFieldIgnored(state, { sourceTableId: table.id, sourceFieldId: field.id }));
+                      else update(assignPrototypeField(state, { sourceTableId: table.id, sourceFieldId: field.id, variableId: next, status: next ? PERIDOT_FIELD_ASSIGNMENT_STATUS.ACTIVE : PERIDOT_FIELD_ASSIGNMENT_STATUS.UNASSIGNED }));
+                    }}>
+                      <option value="">Not assigned yet</option>
+                      {variables.map((variable) => <option key={variable.id} value={variable.id}>{variable.label}</option>)}
+                      <option value="__ignore__">Ignore this column</option>
+                    </Select>
+                  </div>
+                  {suggestionsByField.get(field.id) ? <FieldSuggestion key={suggestionsByField.get(field.id).id} suggestion={suggestionsByField.get(field.id)} state={state} update={update} /> : null}
                 </div>
               );
             })}
@@ -224,9 +259,9 @@ function ReviewStep({ state }) {
   );
 }
 
-export function PeridotUniversalUploadPrototype({ sourceManifest, initialMapping, initialSavedVariables = [], onChange }) {
+export function PeridotUniversalUploadPrototype({ sourceManifest, sourceRowsByTableId = {}, initialMapping, initialSavedVariables = [], onChange }) {
   const [step, setStep] = useState(PERIDOT_UNIVERSAL_UPLOAD_PROTOTYPE_STEPS[0]);
-  const [state, setState] = useState(() => makePeridotUniversalUploadPrototypeState({ sourceManifest, mapping: initialMapping, savedVariables: initialSavedVariables }));
+  const [state, setState] = useState(() => makePeridotUniversalUploadPrototypeState({ sourceManifest, sourceRowsByTableId, mapping: initialMapping, savedVariables: initialSavedVariables }));
 
   const update = (next) => {
     setState(next);
@@ -236,9 +271,9 @@ export function PeridotUniversalUploadPrototype({ sourceManifest, initialMapping
   return (
     <div className="rounded-[2rem] border border-[var(--panel-card-border)] bg-[var(--panel-bg)] p-5 shadow-xl">
       <header className="mb-4">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted-text)]">Phase 2.1 prototype</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted-text)]">Phase 2.2 prototype</div>
         <h2 className="mt-1 text-2xl font-bold text-[var(--panel-card-text)]">Describe how your data is organized</h2>
-        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--panel-card-muted-text)]">This deliberately detailed prototype exposes the full mapping model first. Later passes can remove steps and wording that real workbook testing shows are unnecessary.</p>
+        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[var(--panel-card-muted-text)]">This deliberately detailed prototype now offers conservative structural suggestions for common dates, coordinates, numbers, categories, identifiers, links, entities, and text. Suggestions never become mappings until you accept or edit them.</p>
       </header>
 
       <nav className="mb-5 flex flex-wrap gap-2" aria-label="Universal upload prototype steps">
