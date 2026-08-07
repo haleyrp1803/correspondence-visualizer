@@ -677,3 +677,36 @@
   }
 }
 
+/* Phase 2 production-mapper Page 1: source preview.
+ * Preview is inspection-only: researchers can scroll through the actual parsed
+ * source rows before assigning any meaning. Wide tables retain horizontal
+ * scrolling; full previews add vertical scrolling with a sticky header and
+ * footer so column names and row-count context remain visible.
+ */
+.peridot-mapping-table-wrap {
+  overflow: hidden;
+}
+
+.peridot-mapping-table-scroll {
+  overflow-x: auto;
+}
+
+.peridot-mapping-table-wrap-full-preview .peridot-mapping-table-scroll {
+  max-height: min(52vh, 32rem);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.peridot-mapping-table-wrap-full-preview thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(219, 205, 154, 0.98) !important;
+  box-shadow: 0 1px 0 rgba(74, 93, 62, 0.18);
+}
+
+.peridot-mapping-table-footer {
+  position: relative;
+  z-index: 3;
+}
+

@@ -132,11 +132,16 @@ function formatPreviewCount(value) {
 
 function PreviewTable({ rows = [], headers = [], maxRows = 11, totalRows, sheetName }) {
   const displayHeaders = headers;
-  const displayRows = rows.slice(0, maxRows);
+  const showAllRows = maxRows == null;
+  const displayRows = showAllRows ? rows : rows.slice(0, maxRows);
   const effectiveTotalRows = totalRows ?? rows.length;
-  const footerText = sheetName
-    ? `Showing ${formatPreviewCount(displayRows.length)} of ${formatPreviewCount(effectiveTotalRows)} rows on sheet “${sheetName}.”`
-    : `Showing ${formatPreviewCount(displayRows.length)} of ${formatPreviewCount(effectiveTotalRows)} rows.`;
+  const footerText = showAllRows
+    ? sheetName
+      ? `Showing all ${formatPreviewCount(effectiveTotalRows)} rows on sheet “${sheetName}.” Scroll to inspect the source data.`
+      : `Showing all ${formatPreviewCount(effectiveTotalRows)} rows. Scroll to inspect the source data.`
+    : sheetName
+      ? `Showing ${formatPreviewCount(displayRows.length)} of ${formatPreviewCount(effectiveTotalRows)} rows on sheet “${sheetName}.”`
+      : `Showing ${formatPreviewCount(displayRows.length)} of ${formatPreviewCount(effectiveTotalRows)} rows.`;
 
   if (!displayRows.length || !displayHeaders.length) {
     return (
@@ -147,35 +152,50 @@ function PreviewTable({ rows = [], headers = [], maxRows = 11, totalRows, sheetN
   }
 
   return (
-    <div className="peridot-mapping-table-wrap overflow-x-auto rounded-2xl border border-[var(--panel-card-border)]">
-      <table className="min-w-full border-collapse text-left text-xs text-[var(--panel-card-muted-text)]">
-        <thead className="bg-[var(--stat-card-bg)] text-[var(--panel-card-text)]">
-          <tr>
-            {displayHeaders.map((header) => (
-              <th key={header} className="max-w-[14rem] whitespace-nowrap px-3 py-2 font-semibold">{header}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {displayRows.map((row, rowIndex) => (
-            <tr key={`preview-${rowIndex}`} className="border-t border-[var(--panel-card-border)]">
+    <div className={[
+      'peridot-mapping-table-wrap rounded-2xl border border-[var(--panel-card-border)]',
+      showAllRows ? 'peridot-mapping-table-wrap-full-preview' : '',
+    ].filter(Boolean).join(' ')}>
+      <div className="peridot-mapping-table-scroll">
+        <table className="min-w-full border-collapse text-left text-xs text-[var(--panel-card-muted-text)]">
+          <thead className="bg-[var(--stat-card-bg)] text-[var(--panel-card-text)]">
+            <tr>
               {displayHeaders.map((header) => (
-                <td key={`${rowIndex}-${header}`} className="max-w-[14rem] truncate px-3 py-2">{row?.[header]}</td>
+                <th key={header} className="max-w-[14rem] whitespace-nowrap px-3 py-2 font-semibold">{header}</th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="border-t border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2 text-xs text-[var(--panel-card-muted-text)]">
+          </thead>
+          <tbody>
+            {displayRows.map((row, rowIndex) => (
+              <tr key={`preview-${rowIndex}`} className="border-t border-[var(--panel-card-border)]">
+                {displayHeaders.map((header) => (
+                  <td key={`${rowIndex}-${header}`} className="max-w-[14rem] truncate px-3 py-2">{row?.[header]}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="peridot-mapping-table-footer border-t border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2 text-xs text-[var(--panel-card-muted-text)]">
         {footerText}
       </div>
     </div>
   );
 }
 
-function PreviewSummaryStrip({ fileLabel, rowCount, columnCount, sheetName, sheetCount }) {
+function inferPreviewFileType(fileLabel = '', explicitFileType = '') {
+  const explicit = String(explicitFileType || '').trim();
+  if (explicit) return explicit.toUpperCase();
+
+  const match = String(fileLabel || '').trim().match(/\.([^.]+)$/);
+  return match?.[1] ? match[1].toUpperCase() : '';
+}
+
+function PreviewSummaryStrip({ fileLabel, fileType, rowCount, columnCount, sheetName, sheetCount }) {
+  const resolvedFileType = inferPreviewFileType(fileLabel, fileType);
   const summaryParts = [
     fileLabel || 'Uploaded data',
+    resolvedFileType ? `Type: ${resolvedFileType}` : '',
     sheetName ? `Sheet: ${sheetName}` : '',
     `${formatPreviewCount(rowCount)} row${Number(rowCount) === 1 ? '' : 's'}`,
     `${formatPreviewCount(columnCount)} column${Number(columnCount) === 1 ? '' : 's'}`,
@@ -189,6 +209,19 @@ function PreviewSummaryStrip({ fileLabel, rowCount, columnCount, sheetName, shee
         {summaryParts.join(' · ')}
       </div>
     </div>
+  );
+}
+
+function PreviewOrientationCard({ workbook = false }) {
+  return (
+    <MappingIntroCard
+      eyebrow="Preview"
+      title={workbook ? 'Make sure Peridot is reading your workbook correctly.' : 'Make sure Peridot is reading your file correctly.'}
+    >
+      {workbook
+        ? 'Review the sheets, columns, and source values below. You’ll describe what each sheet, row, and column means on the next pages.'
+        : 'Review the columns and source values below. You’ll describe what the rows and columns mean on the next pages.'}
+    </MappingIntroCard>
   );
 }
 
@@ -678,8 +711,17 @@ function ReviewStep({ validation, summary, mappedPreviewRows, headers, capabilit
 }
 
 function WorkbookOverviewStep({ staging, workbookModel, workbookSummary }) {
-  const usableSheets = getUsableWorkbookSheets(workbookModel);
-  const previewSheet = usableSheets[0] || workbookModel?.sheets?.[0] || staging?.sheets?.[0] || null;
+  const previewSheets = workbookModel?.sheets || staging?.sheets || [];
+  const fallbackSheet = previewSheets[0] || null;
+  const [previewSheetName, setPreviewSheetName] = useState(fallbackSheet?.sheetName || '');
+
+  useEffect(() => {
+    const availableNames = new Set(previewSheets.map((sheet) => sheet.sheetName));
+    if (previewSheetName && availableNames.has(previewSheetName)) return;
+    setPreviewSheetName(fallbackSheet?.sheetName || '');
+  }, [fallbackSheet?.sheetName, previewSheetName, previewSheets]);
+
+  const previewSheet = previewSheets.find((sheet) => sheet.sheetName === previewSheetName) || fallbackSheet;
   const previewRows = previewSheet?.rows || [];
   const previewHeaders = previewSheet?.headers || [];
   const rowCount = previewSheet?.rowCount ?? previewRows.length ?? 0;
@@ -688,19 +730,42 @@ function WorkbookOverviewStep({ staging, workbookModel, workbookSummary }) {
 
   return (
     <div className="space-y-3">
+      <PreviewOrientationCard workbook />
       <PreviewSummaryStrip
         fileLabel={staging.fileLabel}
+        fileType={staging.fileType}
         rowCount={rowCount}
         columnCount={columnCount}
         sheetName={previewSheet?.sheetName}
         sheetCount={sheetCount}
       />
+      {previewSheets.length > 1 ? (
+        <div className="peridot-mapping-section-card flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] px-4 py-3">
+          <label className="min-w-[16rem] flex-1">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted-text)]">Sheet to preview</div>
+            <select
+              value={previewSheet?.sheetName || ''}
+              onChange={(event) => setPreviewSheetName(event.target.value)}
+              className="peridot-mapping-select mt-1 w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-sm text-[var(--input-text)]"
+            >
+              {previewSheets.map((sheet) => (
+                <option key={sheet.sheetName} value={sheet.sheetName}>
+                  {sheet.sheetName} — {formatPreviewCount(sheet.rowCount)} rows · {formatPreviewCount(sheet.columnCount)} columns
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="max-w-xl text-xs leading-relaxed text-[var(--panel-card-muted-text)]">
+            Switch between sheets to inspect the workbook only. Choosing a sheet here does not assign its meaning or role.
+          </p>
+        </div>
+      ) : null}
       <PreviewTable
         rows={previewRows}
         headers={previewHeaders}
         totalRows={rowCount}
         sheetName={previewSheet?.sheetName}
-        maxRows={11}
+        maxRows={null}
       />
     </div>
   );
@@ -1842,8 +1907,10 @@ export function PeridotColumnMappingModal({
             <div className="space-y-4">
               {stepForRender === 'genealogy-preview' ? (
                 <>
+                  <PreviewOrientationCard workbook={isWorkbookMode} />
                   <PreviewSummaryStrip
                     fileLabel={staging.fileLabel}
+                    fileType={staging.fileType}
                     rowCount={genealogyRows.length}
                     columnCount={genealogyHeaders.length}
                     sheetName={isWorkbookMode ? mappingState.primarySheetName : ''}
@@ -1856,7 +1923,7 @@ export function PeridotColumnMappingModal({
                       Assign stable person IDs, family references, life events, places, and optional attributes. Birth and death places remain event locations and are never converted into movement routes.
                     </p>
                   </div>
-                  <PreviewTable rows={genealogyRows} headers={genealogyHeaders} totalRows={genealogyRows.length} maxRows={11} />
+                  <PreviewTable rows={genealogyRows} headers={genealogyHeaders} totalRows={genealogyRows.length} maxRows={null} />
                 </>
               ) : null}
 
@@ -1882,8 +1949,10 @@ export function PeridotColumnMappingModal({
 
           {!isWorkbookMode && stepForRender === 'preview' ? (
             <div className="space-y-3">
+              <PreviewOrientationCard />
               <PreviewSummaryStrip
                 fileLabel={staging.fileLabel}
+                fileType={staging.fileType}
                 rowCount={staging.rowCount ?? rows.length}
                 columnCount={staging.columnCount ?? headers.length}
               />
@@ -1891,7 +1960,7 @@ export function PeridotColumnMappingModal({
                 rows={rows}
                 headers={headers}
                 totalRows={staging.rowCount ?? rows.length}
-                maxRows={11}
+                maxRows={null}
               />
             </div>
           ) : null}
