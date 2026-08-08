@@ -38,7 +38,7 @@ function valueFrom(row = {}, column = '') {
 function roleFromPart(row = {}, part = {}, valueColumnKey = '') {
   const valueColumn = asText(part?.[valueColumnKey]);
   if (part?.roleMode === 'column') return asText(valueFrom(row, part?.roleColumn));
-  return valueColumn;
+  return asText(part?.headingRole) || valueColumn;
 }
 
 function coordinatesFromPlacePart(row = {}, part = {}) {
@@ -94,6 +94,7 @@ function buildGeneralizedPlaces(row = {}, placeParts = []) {
         role: roleFromPart(row, part, 'placeColumn') || `place-${index + 1}`,
         sourceColumn,
         roleSourceColumn: part?.roleMode === 'column' ? asText(part?.roleColumn) : '',
+        subjectParticipantIndex: Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : null,
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
         coordinateSourceColumns: coordinates.sourceColumns,
@@ -198,9 +199,16 @@ export function projectGeneralizedObservationToLegacyRow(observation = {}, mappi
   legacyRow.Date_End = temporal.dateEnd || '';
   legacyRow.Date_Display = temporal.displayDate || '';
 
-  const pointPlace = findPlaceByLegacySourceColumn(observation, mapping.pointMapping?.Point_Place);
-  const sourcePlace = findPlaceByLegacySourceColumn(observation, mapping.coreMapping?.Source_Location);
-  const targetPlace = findPlaceByLegacySourceColumn(observation, mapping.coreMapping?.Target_Location);
+  const explicitlySourceAssociatedPlace = (observation.places || []).find((place) => place.subjectParticipantIndex === 0) || null;
+  const explicitlyTargetAssociatedPlace = (observation.places || []).find((place) => place.subjectParticipantIndex === 1) || null;
+  const explicitlyRecordAssociatedPlace = (observation.places || []).find((place) => place.subjectParticipantIndex === null) || null;
+
+  const pointPlace = explicitlyRecordAssociatedPlace
+    || findPlaceByLegacySourceColumn(observation, mapping.pointMapping?.Point_Place);
+  const sourcePlace = explicitlySourceAssociatedPlace
+    || findPlaceByLegacySourceColumn(observation, mapping.coreMapping?.Source_Location);
+  const targetPlace = explicitlyTargetAssociatedPlace
+    || findPlaceByLegacySourceColumn(observation, mapping.coreMapping?.Target_Location);
 
   projectPlaceToLegacy(legacyRow, pointPlace, 'Point');
   projectPlaceToLegacy(legacyRow, sourcePlace, 'Source');

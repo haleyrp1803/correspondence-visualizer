@@ -450,6 +450,7 @@ const EMPTY_PLACE_PART = Object.freeze({
   placeColumn: '',
   roleMode: 'heading',
   roleColumn: '',
+  subjectParticipantIndex: '',
   coordinatePairColumn: '',
   latitudeColumn: '',
   longitudeColumn: '',
@@ -478,6 +479,7 @@ const EMPTY_WORKBOOK_PLACE_PART = Object.freeze({
   placeRef: makeWorkbookColumnRef('', ''),
   roleMode: 'heading',
   roleRef: makeWorkbookColumnRef('', ''),
+  subjectParticipantIndex: '',
   coordinatePairRef: makeWorkbookColumnRef('', ''),
   latitudeRef: makeWorkbookColumnRef('', ''),
   longitudeRef: makeWorkbookColumnRef('', ''),
@@ -494,11 +496,12 @@ function WorkbookPlaceExamples({ workbookModel, sourceRef = {} }) {
   );
 }
 
-function WorkbookPlacePartCard({ part, index, workbookModel, onChange, onRemove }) {
+function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts = [], onChange, onRemove }) {
   const label = placePartLabel(index);
   const placeRef = part?.placeRef || makeWorkbookColumnRef('', '');
   const roleMode = part?.roleMode === 'column' ? 'column' : 'heading';
   const roleRef = part?.roleRef || makeWorkbookColumnRef('', '');
+  const subjectParticipantIndex = Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : '';
   const coordinatePairRef = part?.coordinatePairRef || makeWorkbookColumnRef('', '');
   const latitudeRef = part?.latitudeRef || makeWorkbookColumnRef('', '');
   const longitudeRef = part?.longitudeRef || makeWorkbookColumnRef('', '');
@@ -586,6 +589,33 @@ function WorkbookPlacePartCard({ part, index, workbookModel, onChange, onRemove 
 
       <div className="my-4"><SectionDivider /></div>
 
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Who or what does this place describe?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            Connect this place to a relationship participant when it describes that person or other participant. Leave it attached to the row when it describes the event, record, object, or observation as a whole.
+          </p>
+        </div>
+        <div>
+          <select
+            value={subjectParticipantIndex}
+            onChange={(event) => onChange({ subjectParticipantIndex: event.target.value === '' ? '' : Number(event.target.value) })}
+            className={SOURCE_SELECT_CLASS}
+          >
+            <option value="">This row / record as a whole</option>
+            {(relationshipParts || []).map((relationshipPart, participantIndex) => {
+              const participantRef = relationshipPart?.participantRef || makeWorkbookColumnRef('', '');
+              const participantLabel = participantRef?.columnName
+                ? `${participantRef.sheetName} — ${participantRef.columnName}`
+                : `Relationship part ${participantIndex + 1}`;
+              return <option key={`workbook-place-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
+            })}
+          </select>
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+
       <div>
         <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Coordinates for this place <span className="font-normal text-[var(--panel-card-muted-text)]">(optional)</span></div>
         <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
@@ -653,11 +683,12 @@ function PlacesUsagePanel() {
   );
 }
 
-function PlacePartCard({ part, index, headers, rows, onChange, onRemove }) {
+function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onChange, onRemove }) {
   const label = placePartLabel(index);
   const selectedPlaceColumn = part?.placeColumn || '';
   const roleMode = part?.roleMode === 'column' ? 'column' : 'heading';
   const roleColumn = part?.roleColumn || '';
+  const subjectParticipantIndex = Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : '';
   const coordinatePairColumn = part?.coordinatePairColumn || '';
   const latitudeColumn = part?.latitudeColumn || '';
   const longitudeColumn = part?.longitudeColumn || '';
@@ -748,6 +779,30 @@ function PlacePartCard({ part, index, headers, rows, onChange, onRemove }) {
 
       <div className="my-4"><SectionDivider /></div>
 
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Who or what does this place describe?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            Connect this place to a relationship participant when it describes that person or other participant. Leave it attached to the row when it describes the event, record, object, or observation as a whole.
+          </p>
+        </div>
+        <div>
+          <select
+            value={subjectParticipantIndex}
+            onChange={(event) => onChange({ subjectParticipantIndex: event.target.value === '' ? '' : Number(event.target.value) })}
+            className={SOURCE_SELECT_CLASS}
+          >
+            <option value="">This row / record as a whole</option>
+            {(relationshipParts || []).map((relationshipPart, participantIndex) => {
+              const participantLabel = relationshipPart?.participantColumn || `Relationship part ${participantIndex + 1}`;
+              return <option key={`place-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
+            })}
+          </select>
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+
       <div>
         <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Coordinates for this place <span className="font-normal text-[var(--panel-card-muted-text)]">(optional)</span></div>
         <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
@@ -796,7 +851,7 @@ function PlacePartCard({ part, index, headers, rows, onChange, onRemove }) {
   );
 }
 
-export function SpatialMappingPanel({ headers, rows = [], placeParts = [], onPlacePartsChange }) {
+export function SpatialMappingPanel({ headers, rows = [], placeParts = [], relationshipParts = [], onPlacePartsChange }) {
   const effectiveParts = placeParts.length ? placeParts : [{ ...EMPTY_PLACE_PART }];
 
   const updatePart = (index, patch) => {
@@ -827,6 +882,7 @@ export function SpatialMappingPanel({ headers, rows = [], placeParts = [], onPla
                 index={index}
                 headers={headers}
                 rows={rows}
+                relationshipParts={relationshipParts}
                 onChange={(patch) => updatePart(index, patch)}
                 onRemove={() => removePart(index)}
               />
@@ -846,7 +902,7 @@ export function SpatialMappingPanel({ headers, rows = [], placeParts = [], onPla
   );
 }
 
-export function WorkbookSpatialMappingPanel({ workbookModel, placeParts = [], onPlacePartsChange }) {
+export function WorkbookSpatialMappingPanel({ workbookModel, placeParts = [], relationshipParts = [], onPlacePartsChange }) {
   const effectiveParts = placeParts.length ? placeParts : [{ ...EMPTY_WORKBOOK_PLACE_PART }];
 
   const updatePart = (index, patch) => {
@@ -876,6 +932,7 @@ export function WorkbookSpatialMappingPanel({ workbookModel, placeParts = [], on
                 part={part}
                 index={index}
                 workbookModel={workbookModel}
+                relationshipParts={relationshipParts}
                 onChange={(patch) => updatePart(index, patch)}
                 onRemove={() => removePart(index)}
               />

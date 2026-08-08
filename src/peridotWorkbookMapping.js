@@ -57,6 +57,10 @@ import {
   suggestPeridotCoreFieldMappings,
 } from './peridotColumnMapping.js';
 import { buildInitialPeridotGenealogyWorkbookMappingState } from './peridotGenealogyMapping.js';
+import {
+  buildPeridotGeneralizedObservation,
+  projectGeneralizedObservationToLegacyRow,
+} from './peridotGeneralizedMappingRuntime.js';
 
 export const PERIDOT_WORKBOOK_JOIN_TYPES = Object.freeze({
   letterId: 'letter_id',
@@ -170,7 +174,7 @@ export function makeWorkbookColumnRefKey(ref = {}) {
 }
 
 function isWorkbookColumnRefPresent(ref = {}) {
-  return Boolean(asText(ref.sheetName) && asText(ref.columnName));
+  return Boolean(asText(ref?.sheetName) && asText(ref?.columnName));
 }
 
 export function getWorkbookSheet(workbookModel, sheetName) {
@@ -553,6 +557,35 @@ export function suggestLookupSheetRoles(workbookModel) {
   );
 }
 
+function getWorkbookSemanticRefs(mappingState = {}) {
+  const placeRefs = (mappingState.placeParts || []).flatMap((part) => [
+    part?.placeRef,
+    part?.roleMode === 'column' ? part?.roleRef : null,
+    part?.coordinatePairRef,
+    part?.latitudeRef,
+    part?.longitudeRef,
+  ]);
+  const relationshipRefs = (mappingState.relationshipParts || []).flatMap((part) => [
+    part?.participantRef,
+    part?.roleMode === 'column' ? part?.roleRef : null,
+  ]);
+  const relationshipMetadataRefs = Object.values(mappingState.relationshipMetadataMappings || {});
+  const evidenceRefs = (mappingState.customFieldSelections || []).map((selection) =>
+    selection?.sourceRef || makeWorkbookColumnRef(selection?.sheetName, selection?.sourceColumn)
+  );
+
+  return [
+    ...Object.values(mappingState.coreMappings || {}),
+    ...Object.values(mappingState.temporalMappings || {}),
+    ...Object.values(mappingState.pointMappings || {}),
+    ...Object.values(mappingState.routeCoordinatePairMappings || {}),
+    ...placeRefs,
+    ...relationshipRefs,
+    ...relationshipMetadataRefs,
+    ...evidenceRefs,
+  ].filter((ref) => isWorkbookColumnRefPresent(ref));
+}
+
 function getMappedCoreSheets(coreMappings = {}, temporalMappings = {}, pointMappings = {}, routeCoordinatePairMappings = {}) {
   return Array.from(
     new Set(
@@ -561,6 +594,10 @@ function getMappedCoreSheets(coreMappings = {}, temporalMappings = {}, pointMapp
         .map((ref) => ref.sheetName)
     )
   );
+}
+
+function getMappedWorkbookSemanticSheets(mappingState = {}) {
+  return Array.from(new Set(getWorkbookSemanticRefs(mappingState).map((ref) => ref.sheetName)));
 }
 
 export function buildInitialPeridotWorkbookMappingState(workbookModel, options = {}) {
@@ -763,7 +800,7 @@ export function validatePeridotWorkbookMapping(workbookModel, mappingState = {})
     if (issue) issues.push({ ...issue, severity: 'error' });
   });
 
-  const mappedSheets = getMappedCoreSheets(coreMappings, temporalMappings, pointMappings, routeCoordinatePairMappings);
+  const mappedSheets = getMappedWorkbookSemanticSheets(mappingState);
   const nonPrimaryMappedSheets = mappedSheets.filter((sheetName) => sheetName !== primarySheetName);
 
   if (usableSheets.length > 1 && nonPrimaryMappedSheets.length > 0 && mode !== PERIDOT_WORKBOOK_MAPPING_MODES.multiSheetLetterId) {
@@ -1032,6 +1069,61 @@ function buildOriginalWorkbookRowContext(context = {}) {
   );
 }
 
+function workbookRefRuntimeKey(ref = {}) {
+  return isWorkbookColumnRefPresent(ref) ? makeWorkbookColumnRefKey(ref) : '';
+}
+
+function buildWorkbookGeneralizedRuntimeMapping(mappingState = {}) {
+  return {
+    relationshipParts: (mappingState.relationshipParts || []).map((part) => ({
+      participantColumn: workbookRefRuntimeKey(part?.participantRef),
+      headingRole: asText(part?.participantRef?.columnName),
+      roleMode: part?.roleMode === 'column' ? 'column' : 'heading',
+      roleColumn: workbookRefRuntimeKey(part?.roleRef),
+    })),
+    placeParts: (mappingState.placeParts || []).map((part) => ({
+      placeColumn: workbookRefRuntimeKey(part?.placeRef),
+      headingRole: asText(part?.placeRef?.columnName),
+      roleMode: part?.roleMode === 'column' ? 'column' : 'heading',
+      roleColumn: workbookRefRuntimeKey(part?.roleRef),
+      subjectParticipantIndex: Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : null,
+      coordinatePairColumn: workbookRefRuntimeKey(part?.coordinatePairRef),
+      latitudeColumn: workbookRefRuntimeKey(part?.latitudeRef),
+      longitudeColumn: workbookRefRuntimeKey(part?.longitudeRef),
+    })),
+    temporalMapping: Object.fromEntries(
+      Object.entries(mappingState.temporalMappings || {}).map(([field, ref]) => [field, workbookRefRuntimeKey(ref)])
+    ),
+    relationshipMetadataMapping: Object.fromEntries(
+      Object.entries(mappingState.relationshipMetadataMappings || {}).map(([field, ref]) => [field, workbookRefRuntimeKey(ref)])
+    ),
+    customFieldSelections: (mappingState.customFieldSelections || []).map((selection) => ({
+      ...selection,
+      sourceColumn: workbookRefRuntimeKey(
+        selection?.sourceRef || makeWorkbookColumnRef(selection?.sheetName, selection?.sourceColumn)
+      ),
+    })),
+    coreMapping: Object.fromEntries(
+      Object.entries(mappingState.coreMappings || {}).map(([field, ref]) => [field, workbookRefRuntimeKey(ref)])
+    ),
+    pointMapping: Object.fromEntries(
+      Object.entries(mappingState.pointMappings || {}).map(([field, ref]) => [field, workbookRefRuntimeKey(ref)])
+    ),
+    routeCoordinatePairMapping: Object.fromEntries(
+      Object.entries(mappingState.routeCoordinatePairMappings || {}).map(([field, ref]) => [field, workbookRefRuntimeKey(ref)])
+    ),
+  };
+}
+
+function buildWorkbookSemanticRuntimeRow(workbookModel, context = {}, mappingState = {}) {
+  return Object.fromEntries(
+    getWorkbookSemanticRefs(mappingState).map((ref) => [
+      makeWorkbookColumnRefKey(ref),
+      getValueFromWorkbookRef(workbookModel, context, ref),
+    ])
+  );
+}
+
 /**
  * Assemble Peridot-shaped rows from a workbook mapping configuration.
  *
@@ -1055,72 +1147,23 @@ export function buildPeridotRowsFromWorkbookMapping(workbookModel, mappingState 
 
   const primarySheetName = asText(mappingState.primarySheetName);
   const primaryRows = getSheetRows(workbookModel, primarySheetName);
-  const coreMappings = mappingState.coreMappings || {};
-  const temporalMappings = mappingState.temporalMappings || {};
-  const pointMappings = mappingState.pointMappings || {};
-  const routeCoordinatePairMappings = mappingState.routeCoordinatePairMappings || {};
-  const customSelections = normalizeWorkbookCustomInspectorSelections(mappingState);
+  const runtimeMapping = buildWorkbookGeneralizedRuntimeMapping(mappingState);
 
   return primaryRows.map((primaryRow, index) => {
     const context = getPrimaryWorkbookRowContext(workbookModel, mappingState, primaryRow);
-    const coreValues = Object.fromEntries(
-      PERIDOT_CORE_FIELDS.map((field) => [
-        field,
-        getValueFromWorkbookRef(workbookModel, context, coreMappings[field]),
-      ])
-    );
-    const temporalValues = Object.fromEntries(
-      PERIDOT_TEMPORAL_FIELDS.map((field) => [field, getValueFromWorkbookRef(workbookModel, context, temporalMappings[field])])
-    );
-    const pointValues = Object.fromEntries(
-      PERIDOT_POINT_FIELDS.map((field) => [field, getValueFromWorkbookRef(workbookModel, context, pointMappings[field])])
-    );
-    const routeCoordinatePairValues = Object.fromEntries(
-      PERIDOT_ROUTE_COORDINATE_PAIR_FIELDS.map((field) => [field, getValueFromWorkbookRef(workbookModel, context, routeCoordinatePairMappings[field])])
-    );
-
-    if (temporalValues.Date) coreValues.Date = temporalValues.Date;
-    if (!coreValues.Date && temporalValues.Date_Start) coreValues.Date = temporalValues.Date_Start;
-    if (!coreValues.Date && temporalValues.Date_End) coreValues.Date = temporalValues.Date_End;
-
-    const composedDisplayDate = composeDisplayDateValue(
-      coreValues.Date || temporalValues.Date,
-      temporalValues.Date_Start,
-      temporalValues.Date_End,
-      temporalValues.Date_Display
-    );
-
-    const customInspectorFields = customSelections.map((selection) => ({
-      key: selection.key || selection.sourceColumn || selection.label,
-      sourceColumn: selection.sourceColumn || selection.sourceRef?.columnName || selection.key,
-      label: selection.label || selection.sourceColumn || selection.key,
-      value: getValueFromWorkbookRef(workbookModel, context, selection.sourceRef),
-      analyticsEligible: Boolean(selection.analyticsEligible),
-    }));
-
-    const customFieldValues = Object.fromEntries(
-      customInspectorFields
-        .filter((field) => field.label)
-        .map((field) => [field.label, field.value])
-    );
-
-    return {
-      ...customFieldValues,
-      ...coreValues,
-      Date_Start: temporalValues.Date_Start || '',
-      Date_End: temporalValues.Date_End || '',
-      Date_Display: composedDisplayDate,
-      ...pointValues,
-      ...routeCoordinatePairValues,
-      customInspectorFields,
-      ignoredUploadedColumns: [],
+    const semanticRow = buildWorkbookSemanticRuntimeRow(workbookModel, context, mappingState);
+    const generalizedObservation = buildPeridotGeneralizedObservation(semanticRow, runtimeMapping, index);
+    const authoritativeObservation = Object.freeze({
+      ...generalizedObservation,
       originalUploadedRow: {
         workbookFileName: workbookModel?.fileName || workbookModel?.workbookName || '',
         primarySheetName,
         primaryRowNumber: index + 2,
         sheetRows: buildOriginalWorkbookRowContext(context),
       },
-    };
+    });
+
+    return projectGeneralizedObservationToLegacyRow(authoritativeObservation, runtimeMapping);
   });
 }
 

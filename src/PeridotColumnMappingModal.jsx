@@ -446,12 +446,13 @@ function TimeMappingStep({ headers, rows, temporalMapping, onTemporalChange }) {
   );
 }
 
-function PlacesMappingStep({ headers, rows, placeParts, onPlacePartsChange }) {
+function PlacesMappingStep({ headers, rows, placeParts, relationshipParts, onPlacePartsChange }) {
   return (
     <SpatialMappingPanel
       headers={headers}
       rows={rows}
       placeParts={placeParts}
+      relationshipParts={relationshipParts}
       onPlacePartsChange={onPlacePartsChange}
     />
   );
@@ -1501,11 +1502,12 @@ function WorkbookTimeMappingStep({ workbookModel, workbookMapping, onTemporalCha
   );
 }
 
-function WorkbookPlacesMappingStep({ workbookModel, placeParts, onPlacePartsChange }) {
+function WorkbookPlacesMappingStep({ workbookModel, placeParts, relationshipParts, onPlacePartsChange }) {
   return (
     <WorkbookSpatialMappingPanel
       workbookModel={workbookModel}
       placeParts={placeParts}
+      relationshipParts={relationshipParts}
       onPlacePartsChange={onPlacePartsChange}
     />
   );
@@ -1682,7 +1684,7 @@ function stripWorkbookDisplayDateMapping(workbookMapping = {}) {
 function buildInitialWorkbookPlaceParts(mappingState = {}) {
   const saved = Array.isArray(mappingState.placeParts) ? mappingState.placeParts : [];
   if (saved.length && saved.some((part) => part?.placeRef || part?.coordinatePairRef || part?.latitudeRef || part?.longitudeRef)) {
-    return saved.map((part) => ({ ...part }));
+    return saved.map((part) => ({ ...part, subjectParticipantIndex: Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : '' }));
   }
 
   const point = mappingState.pointMappings || {};
@@ -1698,6 +1700,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
       placeRef: point.Point_Place || emptyRef(),
       roleMode: 'heading',
       roleRef: emptyRef(),
+      subjectParticipantIndex: '',
       coordinatePairRef: point.Point_Coordinates || emptyRef(),
       latitudeRef: point.Point_Latitude || emptyRef(),
       longitudeRef: point.Point_Longitude || emptyRef(),
@@ -1709,6 +1712,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
       placeRef: core.Source_Location || emptyRef(),
       roleMode: 'heading',
       roleRef: emptyRef(),
+      subjectParticipantIndex: 0,
       coordinatePairRef: routePairs.Source_Coordinates || emptyRef(),
       latitudeRef: core.Source_Latitude || emptyRef(),
       longitudeRef: core.Source_Longitude || emptyRef(),
@@ -1720,6 +1724,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
       placeRef: core.Target_Location || emptyRef(),
       roleMode: 'heading',
       roleRef: emptyRef(),
+      subjectParticipantIndex: 1,
       coordinatePairRef: routePairs.Target_Coordinates || emptyRef(),
       latitudeRef: core.Target_Latitude || emptyRef(),
       longitudeRef: core.Target_Longitude || emptyRef(),
@@ -1730,6 +1735,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
     placeRef: emptyRef(),
     roleMode: 'heading',
     roleRef: emptyRef(),
+    subjectParticipantIndex: '',
     coordinatePairRef: emptyRef(),
     latitudeRef: emptyRef(),
     longitudeRef: emptyRef(),
@@ -1738,7 +1744,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
 
 function buildInitialPlaceParts(mappingState = {}) {
   const saved = Array.isArray(mappingState.placeParts) ? mappingState.placeParts : [];
-  if (saved.length) return saved.map((part) => ({ ...part }));
+  if (saved.length) return saved.map((part) => ({ ...part, subjectParticipantIndex: Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : '' }));
 
   const point = mappingState.pointMapping || {};
   const route = mappingState.coreMapping || {};
@@ -1750,6 +1756,7 @@ function buildInitialPlaceParts(mappingState = {}) {
       placeColumn: point.Point_Place || '',
       roleMode: 'heading',
       roleColumn: '',
+      subjectParticipantIndex: '',
       coordinatePairColumn: point.Point_Coordinates || '',
       latitudeColumn: point.Point_Latitude || '',
       longitudeColumn: point.Point_Longitude || '',
@@ -1761,6 +1768,7 @@ function buildInitialPlaceParts(mappingState = {}) {
       placeColumn: route.Source_Location || '',
       roleMode: 'heading',
       roleColumn: '',
+      subjectParticipantIndex: 0,
       coordinatePairColumn: routePairs.Source_Coordinates || '',
       latitudeColumn: route.Source_Latitude || '',
       longitudeColumn: route.Source_Longitude || '',
@@ -1772,6 +1780,7 @@ function buildInitialPlaceParts(mappingState = {}) {
       placeColumn: route.Target_Location || '',
       roleMode: 'heading',
       roleColumn: '',
+      subjectParticipantIndex: 1,
       coordinatePairColumn: routePairs.Target_Coordinates || '',
       latitudeColumn: route.Target_Latitude || '',
       longitudeColumn: route.Target_Longitude || '',
@@ -1782,6 +1791,7 @@ function buildInitialPlaceParts(mappingState = {}) {
     placeColumn: '',
     roleMode: 'heading',
     roleColumn: '',
+    subjectParticipantIndex: '',
     coordinatePairColumn: '',
     latitudeColumn: '',
     longitudeColumn: '',
@@ -2755,6 +2765,7 @@ export function PeridotColumnMappingModal({
               headers={headers}
               rows={rows}
               placeParts={placeParts}
+              relationshipParts={relationshipParts}
               onPlacePartsChange={setPlaceParts}
             />
           ) : null}
@@ -2835,6 +2846,7 @@ export function PeridotColumnMappingModal({
             <WorkbookPlacesMappingStep
               workbookModel={workbookModel}
               placeParts={workbookMapping.placeParts || []}
+              relationshipParts={workbookMapping.relationshipParts || []}
               onPlacePartsChange={handleWorkbookPlacePartsChange}
             />
           ) : null}

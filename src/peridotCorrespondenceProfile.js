@@ -857,15 +857,20 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
     });
 
     placeEntries.forEach(({ place, placeId }, placeIndex) => {
+      const associatedParticipant = Number.isInteger(place.subjectParticipantIndex)
+        ? participantEntries[place.subjectParticipantIndex]
+        : null;
+      const placeSubjectId = associatedParticipant?.entityId || recordId;
       assertions.push(makePeridotAssertion({
         id: `${recordId}:assertion:place:${placeIndex + 1}`,
-        subjectId: recordId,
+        subjectId: placeSubjectId,
         predicate: `mapped-place:${asText(place.role) || `place-${placeIndex + 1}`}`,
         objectId: placeId,
         evidenceSourceIds: evidenceSourceId ? [evidenceSourceId] : [],
         temporalAssertion,
         attributes: {
           mappedRole: asText(place.role),
+          subjectParticipantIndex: Number.isInteger(place.subjectParticipantIndex) ? place.subjectParticipantIndex : null,
           sourceColumn: asText(place.sourceColumn),
         },
         provenance: makeRowProvenance({
