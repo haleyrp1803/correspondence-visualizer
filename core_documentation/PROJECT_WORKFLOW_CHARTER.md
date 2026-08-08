@@ -24,7 +24,7 @@ This Charter owns mandatory process rules, source-of-truth continuity, delivery/
 Current synchronized checkpoint:
 
 ```text
-301a1e1 — Add universal runtime compatibility boundary
+134c67c — Refine upload review checkpoint
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
@@ -305,9 +305,11 @@ Future cluster changes should preserve:
 
 ### Data import, canonical normalization, and mapping caution
 
-Data import is a fragile boundary. Keep the public direction intact: unified CSV / TSV / XLSX / XLS upload, user-confirmed/user-owned mapping, active correspondence and genealogy profiles, permissive database-first admission, and no silent standardization. Correspondence currently passes through the canonical normalized model and a legacy runtime adapter; genealogy uses a direct canonical runtime projection; broader universal structures remain canonical-only until a consumer deliberately adopts them.
+Data import is a fragile boundary. Keep the public direction intact: unified CSV / TSV / XLSX / XLS upload, user-confirmed/user-owned mapping, active correspondence and genealogy profiles, permissive database-first admission, and no silent standardization. The accepted Phase 2 correspondence/directed-record mapper now uses Preview/orientation, Time, repeatable Places, n-part Relations, Evidence, and Review; workbook Places/Relations use sheet-qualified versions of the same model. Correspondence still passes through the canonical normalized model and a legacy runtime adapter; genealogy uses a direct canonical runtime projection; broader universal structures may remain canonical-only until a consumer deliberately adopts them.
 
-Do not create a new profile for every unusual spreadsheet shape as a substitute for the universal mapping work. Conversely, do not retire or collapse the existing Correspondence / Directed Record or Genealogy / Person-Centered profiles until a later universal mapper proves that doing so loses no behavior or scholarly expressiveness and simplifies the architecture rather than relocating complexity. Do not reintroduce the legacy three-file workflow without a specific recovery or compatibility reason.
+The next architectural task is to make generalized `placeParts`, `relationshipParts`, temporal/evidence assignments, and workbook references authoritative through normalization/runtime consumption. Do not let legacy Source/Target or point/route fields silently override a user's newer mapping merely because older consumers still exist. Compatibility projection is allowed only as an explicit downstream bridge.
+
+Do not create a new profile for every unusual spreadsheet shape as a substitute for the universal mapping work. Conversely, do not retire or collapse the existing Correspondence / Directed Record or Genealogy / Person-Centered profiles until runtime integration, representative regression testing, and a repository-wide retirement audit prove that removal loses no behavior or scholarly expressiveness and simplifies the architecture rather than relocating complexity. Do not reintroduce the legacy three-file workflow without a specific recovery or compatibility reason.
 
 For the current import/workbook contract and detailed regression checks, see the [Maintainer’s Guide — Data Import and Workbook Contract](MAINTAINERS_GUIDE.md#7-data-import-and-workbook-contract).
 
@@ -341,7 +343,33 @@ Detailed historical decision rationale remains preserved in the archived invento
 - Arbitrary tables use explicit user-confirmed mapping; current correspondence workbooks use user-confirmed unique-ID joins rather than row-order matching.
 - The Phase 1 universal mapping foundation is deterministic and user-owned: saved variables, field assignments, sheet-purpose assignments, repeated-heading groups, source-table/field descriptors, transformations, and table connections record what the user has told Peridot. Peridot may suggest broad recognizable forms such as dates or coordinates, but the user is ultimately responsible for the accepted mapping.
 - Broader universal datasets must not be forced into correspondence- or genealogy-shaped runtime rows merely because those are the current active consumer projections. Canonical-only preservation is valid until appropriate downstream consumers are implemented.
-- Phase 2 should prototype the complete progressive mapping workflow before targeted simplification. Phase 3 should build chart controls from saved variables, including a structured autocomplete sentence builder that mirrors scholarly questions without implementing unrestricted natural-language prompting.
+- Phase 2's progressive mapping UI has now been tested and simplified around the existing production role-mapper shell. The accepted human-facing grammar is Preview/orientation → Time → repeatable Places → n-part Relations → Evidence → Review, with workbook Sheets where needed. Major tabs remain visible rather than disappearing because Peridot thinks a capability is unused.
+- Generalized mappings must become authoritative before the old upload/runtime system is retired. Sequence: runtime integration → validation/warning audit → representative end-to-end regression testing → repository-wide legacy retirement audit → Phase 2 documentation closure.
+- The repository-wide retirement audit should classify old code as delete now, still-required compatibility layer, legitimate profile-specific specialization, or uncertain/retain. Do not perform broad deletion before the replacement has carried real data end-to-end.
+- Phase 3 should begin only after that Phase 2 boundary is clean. It should build chart controls from saved variables, including a structured autocomplete sentence builder that mirrors scholarly questions without implementing unrestricted natural-language prompting.
+
+
+#### Phase 2 generalized-mapper authority decision
+
+```text
+Decision:
+Treat the accepted generalized mapping assignments as the future authoritative semantic inputs.
+
+Context:
+The Phase 2 UI now captures repeatable place parts and n-participant relationships that are richer than the legacy Source/Target and point/route row vocabulary.
+
+Chosen approach:
+Finish runtime integration first, audit warnings second, test representative datasets third, and perform a repository-wide legacy retirement audit only after those checks pass.
+
+Rejected alternative:
+Delete or bypass the legacy system immediately after the UI redesign, or begin Phase 3 while two competing mapping architectures remain authoritative.
+
+Reason:
+The replacement must prove end-to-end behavior before compatibility code can be safely removed, and Phase 3 should target one stable data architecture.
+
+Maintenance consequence:
+Legacy fields may remain temporarily as explicit compatibility projections, but they must not override accepted generalized mappings. Retirement happens in bounded passes after audit classification.
+```
 
 ### 7.2 Routing and workspace model
 

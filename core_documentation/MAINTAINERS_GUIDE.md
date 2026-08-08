@@ -29,7 +29,7 @@ This document owns current architecture, source/module ownership, state and data
 Current synchronized checkpoint:
 
 ```text
-301a1e1 — Add universal runtime compatibility boundary
+134c67c — Refine upload review checkpoint
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
@@ -41,7 +41,9 @@ For detailed milestone interpretation and full commit history, see [CHANGELOG.md
 
 Peridot is a Vite/React/Tailwind research application that has moved from a map-first side-panel model to a workspace-first, multimodal exploration environment. `src/App.jsx` remains the top-level orchestration boundary, while dedicated workspaces and pure/helper modules now own much of the UI, import, visualization, theme, and interaction behavior.
 
-The active data architecture now includes a canonical normalized research model beneath the current runtime consumers. Correspondence imports normalize into canonical entities/places/records/participations/evidence/assertions and then pass through a legacy compatibility adapter so existing consumers retain their accepted row contracts. Genealogy imports normalize person-centered data directly into canonical entities, life events, relationships, places, evidence, and provenance and project through a dedicated genealogy runtime model. Phase 1 of the universal-data program adds user-owned variable/mapping definitions, stable source-table metadata, deterministic transformation helpers, and an explicit runtime compatibility boundary; universal datasets that lack a current consumer are preserved canonically rather than coerced into correspondence rows.
+The active data architecture now includes a canonical normalized research model beneath the current runtime consumers. Correspondence imports normalize into canonical entities/places/records/participations/evidence/assertions and then pass through a legacy compatibility adapter so existing consumers retain their accepted row contracts. Genealogy imports normalize person-centered data directly into canonical entities, life events, relationships, places, evidence, and provenance and project through a dedicated genealogy runtime model. Phase 1 established user-owned variable/mapping definitions, stable source-table metadata, deterministic transformation helpers, and an explicit runtime compatibility boundary.
+
+Phase 2 has now generalized the active correspondence/directed-record mapping shell itself. The accepted workflow is Preview → Time → Places → Relations → Evidence → Review, with a workbook Sheets step where relevant. Preview records table orientation without visually transposing the source; Time uses plain date/beginning/ending roles; Places stores repeatable place parts; Relations stores repeatable n-participant relationship parts; Evidence preserves Include/Ignore and display labels; Review repeats the assignments before capability validation. Workbook Places and Relations use the same interaction model with sheet-qualified references. These richer mappings are currently preserved in mapping state, but the next Phase 2 task is to make them authoritative inputs to canonical normalization/runtime behavior rather than leaving legacy Source/Target and point/route compatibility fields as downstream decision-makers.
 
 The active public workflow is Home → Manage Your Data → Visualize Your Data → Explore Your Data → Learn More. Themes and Accessibility remains route-compatible but intentionally hidden from the public hamburger menu. Timeline and Export are Visualizations-integrated surfaces; Inspector is a compact/full shared-state evidence system.
 
@@ -267,12 +269,16 @@ parsed/staged source
 
 - `PeridotDataWorkspace.jsx` owns user entry, template download, upload launch, profile selection, upload summary, and navigation into Visualizations.
 - `PeridotColumnMappingModal.jsx` owns the correspondence/directed-record mapping stages (Preview, Sheets where applicable, Time, Places, Relations, Evidence, Review) and the genealogy stages (Preview, Identity, Parents, Partners, Life events, Places, Attributes, Review).
-- Mapping is explicit and user-owned. Peridot may propose recognizable structures, but it does not silently standardize values, assign scholarly meaning, or infer irreversible relationships.
-- Workbooks on the current correspondence path use a selected primary record sheet and user-configured unique-ID joins; never use row-order joining as the primary assembly strategy.
-- Combined sheet-column controls preserve the internal workbook reference model while keeping the mapping interface compact.
-- Evidence/analysis fields use explicit Include and Ignore controls; selected fields remain available to supported Inspector and Analytics paths.
-- Capability reporting distinguishes Inspector, Search, point-map, route-map, network, timeline, chart, and export readiness without rejecting otherwise useful incomplete records.
-- The Phase 1 universal mapping layer is internal groundwork. It defines saved variables, field assignments, sheet-purpose assignments, repeated-heading groups, generalized source-table/field descriptors, deterministic transforms, and table connections; the progressive public universal-upload workflow is Phase 2 work.
+- Mapping is explicit, progressive, reversible, and user-owned. Peridot may propose recognizable structures, but it does not silently standardize values, assign scholarly meaning, or infer irreversible relationships.
+- Preview preserves the source table visually as uploaded. For single tables, the user can state whether headings run across the top or down the left; downstream mapping controls and example values must use the same orientation-aware internal row set.
+- Time maps Date, Beginning date, and Ending date in human-readable language; no mandatory primary date is imposed.
+- Places uses repeatable `placeParts` (Place A/B/C...) with place source, role source, and optional combined or separate coordinates. The user-facing model no longer asks users to classify a place as a point versus route endpoint.
+- Relations uses repeatable `relationshipParts` (Part A/B/C...) with per-part participant and role mappings, plus optional relationship-level type/label fields. N-part relationships must not be silently reduced to binary Source/Target just to satisfy legacy consumers.
+- Workbook Places and Relations mirror the single-table interaction model using `{ sheetName, columnName }` references.
+- Evidence retains explicit Include and Ignore controls, optional display labels, source examples, and chart/filter-readiness hints. Fields already structurally mapped on earlier pages remain visible but are ignored as duplicate evidence.
+- Review is a summary + validation + correction checkpoint. It repeats Time/Places/Relations/Evidence assignments, provides one unified **Map** readiness row, and retains current capability/warning output underneath.
+- Workbooks still use a selected primary record sheet and user-configured unique-ID joins; never use row-order joining as the primary assembly strategy.
+- The Phase 1 universal mapping/source/transformation layer remains the canonical architectural foundation. The Phase 2 UI is now substantially integrated, but its richer assignments are not yet authoritative throughout runtime assembly and all consumer paths.
 
 ### Minimum regression checks
 
@@ -296,7 +302,7 @@ Committed Data Inputs behavior includes:
 - mapped arbitrary-table import into Peridot data;
 - post-upload validation popup;
 - persistent latest-upload summary in the Data Inputs panel after the popup closes;
-- capability reporting for Inspector, Search, point-map readiness, route-map readiness, network readiness, timeline readiness, Analytics/chart readiness, and Export;
+- capability reporting for Inspector, Search, unified Map readiness, network readiness, timeline readiness, Analytics/chart readiness, and Export;
 - public legacy Geography / Raw Data / Person Metadata upload controls superseded by the one-file and mapped-import workflows;
 - workbook parsing, mapping, unique-ID joins, and import assembly for XLSX/XLS workbooks;
 - selected workbook custom fields visible in linked-record and entity-profile Inspector views;
@@ -527,7 +533,7 @@ Owns pure post-upload validation summaries. It produces:
 
 Owns the large column/workbook-mapping workspace for arbitrary CSV/TSV/XLSX/XLS imports. The current UI is role-based rather than correspondence-template-first: users move through Preview, Sheets for workbooks, Time, Places, Relations, Evidence, and Review. It still produces Peridot-compatible rows for the existing visualization pipeline, but it now exposes explicit temporal roles, point-location roles, route coordinate-pair roles, workbook primary-sheet selection, multi-sheet unique-ID joins, and selected evidence/Analytics metadata from primary and joined sheets.
 
-This file has been partially decomposed. Static UI labels/step groupings live in `peridotColumnMappingUiConfig.js`; repeated mapping table controls live in `PeridotMappingFieldControls.jsx`; evidence/analysis Include/Ignore controls live in `PeridotEvidenceFieldControls.jsx`. The modal should continue to own state transitions, workbook state, import/cancel behavior, final mapping assembly, upload-mapping entrance animation hooks, and the accepted opacity-only step transition. Avoid reintroducing carousel/slide/scale/blur transitions for step changes unless a new motion pass explicitly chooses that direction.
+This file has been partially decomposed. Static UI labels/step groupings live in `peridotColumnMappingUiConfig.js`; repeated Time/Places/Relations controls live in `PeridotMappingFieldControls.jsx`; Evidence Include/Ignore controls live in `PeridotEvidenceFieldControls.jsx`. The modal now also owns orientation-aware single-table interpretation, `placeParts`, `relationshipParts`, workbook-qualified equivalents, and the human-readable Review assignment summary. It should continue to own state transitions, workbook state, import/cancel behavior, final mapping assembly, upload-mapping entrance animation hooks, and the accepted opacity-only step transition. Avoid reintroducing carousel/slide/scale/blur transitions for step changes unless a new motion pass explicitly chooses that direction.
 
 #### `src/peridotColumnMappingUiConfig.js`
 
@@ -535,11 +541,11 @@ Static UI configuration for the mapping modal: single-table/workbook step sequen
 
 #### `src/PeridotMappingFieldControls.jsx`
 
-Presentational mapping-table controls used by the mapping modal for temporal fields, core relationship/place roles, and workbook-aware field-role rows. Workbook role controls now use combined sheet-column selectors rather than stacked Sheet and Column dropdowns, while preserving the internal workbook reference shape. It should remain stateless and receive current values plus callbacks from `PeridotColumnMappingModal.jsx`.
+Presentational mapping controls used by the mapping modal for Time, generalized repeatable Places, generalized repeatable Relations, and workbook-qualified equivalents. Places support arbitrary Place A/B/C parts with role source and optional coordinates; Relations support Part A/B/C participants with per-part role source and optional relationship metadata. Workbook controls use combined sheet-column references while preserving the internal workbook reference shape. This file should remain stateless and receive current values plus callbacks from `PeridotColumnMappingModal.jsx`.
 
 #### `src/PeridotEvidenceFieldControls.jsx`
 
-Presentational evidence/analysis Include/Ignore controls for single-table and workbook imports. Workbook Evidence remains grouped by sheet, but default display labels use the column name only so the sheet name is not duplicated in every label. The modal owns the state and update handlers; this file owns the repeated row rendering, display labels, and checkbox layout.
+Presentational Evidence Include/Ignore controls for single-table and workbook imports. Workbook Evidence remains grouped by sheet, default display labels use the column name only, and each field may show up to three unique nonblank examples from the same source rows used by mapping controls. Structurally mapped Time/Place/Relation fields remain visible but are treated as already used rather than duplicated as Evidence. The modal owns state and update handlers; this file owns repeated row rendering, labels, examples, and checkbox layout.
 
 #### `src/peridotColumnMapping.js`
 
@@ -775,6 +781,8 @@ These areas still deserve narrow, explicit passes:
 - Data upload state, one-file CSV normalization, arbitrary table mapping, workbook parsing helper, and validation summary behavior
 - canonical normalization/runtime compatibility boundaries: correspondence must preserve legacy parity; genealogy must remain direct; canonical-only universal datasets must not be silently coerced into either profile
 - universal mapping/source/transformation schemas and fixture parity across correspondence, genealogy, stock-price, Alaska, and Maria-style examples
+- generalized mapping/runtime authority boundary: `placeParts` and `relationshipParts` are accepted user mappings, but some assembly, capability, and warning paths still consult legacy Source/Target and point/route fields; do not treat those legacy diagnostics as the universal contract
+- Review warning/validation audit is deferred until generalized runtime integration is complete; distinguish genuine runtime constraints from correspondence-specific legacy assumptions before removing or rewriting warnings
 - dataset-profile fixtures: one pre-existing assertion still describes genealogy as routed-but-not-importable even though active genealogy import was enabled at `8f19997`; treat this as a stale maintenance fixture, not current product behavior
 
 - shared side-panel shell and inspector-open interactions
@@ -804,37 +812,48 @@ These areas still deserve narrow, explicit passes:
 
 ## 11. Active Technical Backlog
 
-1. **Universal data architecture — Phase 2: progressive upload and mapping workflow**, in bounded passes:
-   - intentionally complete/complicated mapping prototype against real stock-price, Alaskan-airfield, and Maria-Maddalena-style workbooks;
-   - standard structural recognition and editable user-owned assignments;
-   - plain-language sheet-purpose mapping;
-   - repeated-heading/orientation mapping;
-   - related-sheet connection review without silent one-to-many flattening;
-   - return-and-edit mapping workflow;
-   - targeted simplification before production integration.
-2. **Universal data architecture — Phase 3: chart builder**, after Phase 2:
+1. **Universal data architecture — Phase 2: make generalized mappings authoritative end-to-end.**
+   - Trace Confirm import from `placeParts`, `relationshipParts`, generalized temporal/evidence mappings, and workbook-qualified references into canonical normalization and runtime assembly.
+   - Make the generalized assignments the authoritative source for downstream semantics.
+   - Retain legacy correspondence-shaped projections only where a current consumer still demonstrably requires them.
+   - Do not collapse arbitrary n-part relationships into Source/Target or reinstate point-versus-route classification as the user-facing model.
+2. **Audit validation and Review warnings against the generalized model.**
+   - Classify each warning/requirement as universal, compatibility-path-specific, or obsolete.
+   - Pay particular attention to `Letter_ID`, exact-key join language, Source/Target requirements, source/target place assumptions, and point/route terminology.
+   - Rewrite or retire warnings only after the authoritative runtime requirements are known.
+3. **End-to-end Phase 2 regression suite.**
+   - Test the Maria Maddalena workbook, correspondence data, genealogy data, Alaskan-airfield data, and wide/transposed stock-price data.
+   - Verify mapping → confirm import → canonical dataset → applicable Search/Inspector/Map/Network/Timeline/Charts/Export consumers.
+   - Preserve canonical-only validity where no current visualization consumer exists.
+4. **Repository-wide legacy upload/runtime retirement audit.**
+   - Run only after generalized runtime integration and regression testing.
+   - Inventory old Source/Target-only mapping code, point/route branching, correspondence-shaped workbook assembly, obsolete UI/components, compatibility adapters, tests/fixtures, comments, and documentation.
+   - Classify each item as **delete now**, **still-required compatibility layer**, **legitimate profile-specific specialization**, or **uncertain/retain**.
+   - Retire in bounded cleanup passes; do not perform one broad deletion.
+5. **Close Phase 2 with core-document synchronization and a clean checkpoint.**
+6. **Universal data architecture — Phase 3: chart builder**, only after the Phase 2 authority/retirement boundary is clean:
    - universal chart-variable registry;
    - permissive direct x/y/group/filter controls;
    - structured scholarly sentence builder with autocomplete and visible interpretation, not free-form natural-language prompting;
    - targeted clarification/validity handling;
    - Search/Timeline/export integration audit;
    - final UX simplification as needed.
-3. First-time tutorial polish, in bounded passes:
+7. First-time tutorial polish, in bounded passes:
    - attention choreography that sequences dialogue, workspace movement, tutorial placement, and target emphasis;
    - placement audit for panels that obscure important controls;
    - minor typography/spacing refinement;
    - standardized semantic keyword highlighting;
    - final full UX walkthrough.
-4. Search coverage and scope audit.
-5. Inspector → Advanced Search actions and safe metadata filters, after the coverage audit.
-6. Timeline playback × Analytics audit.
-7. Accessibility pass.
-8. Clarify data-scope language across the app.
-9. Learn More completion: substantive research-workflow tutorial/help material.
-10. Correct the stale dataset-profile fixture that still expects genealogy to be non-importable; keep this as a narrowly bounded maintenance fix rather than mixing it into universal-upload behavior.
-11. Continue bounded structural work only when a concrete maintenance need exists; `App.jsx` remains concentrated but should not be casually refactored.
+8. Search coverage and scope audit.
+9. Inspector → Advanced Search actions and safe metadata filters, after the coverage audit.
+10. Timeline playback × Analytics audit.
+11. Accessibility pass.
+12. Clarify data-scope language across the app.
+13. Learn More completion: substantive research-workflow tutorial/help material.
+14. Correct the stale dataset-profile fixture that still expects genealogy to be non-importable; keep this as a narrowly bounded maintenance fix rather than mixing it into universal-upload behavior.
+15. Continue bounded structural work only when a concrete maintenance need exists; `App.jsx` remains concentrated but should not be casually refactored.
 
-For the universal-data program, keep the architectural rule established in Phase 1: do not create a proliferating profile for every spreadsheet shape, and do not retire the active correspondence or genealogy profiles until the universal mapper proves full parity and actual simplification. For the tutorial polish pass, prefer subtle motion over stronger outlines and explicitly review and refine the order and timing of tutorial-related animations during final visual polish. Do not resurrect the rolled-back animation implementation wholesale.
+For the universal-data program, the page-by-page Phase 2 mapping redesign is accepted at `134c67c`. The next work is not another mapper-shell redesign: it is making those mappings authoritative in the runtime, then auditing warnings and legacy paths from that new baseline. Correspondence and Genealogy profiles remain until the retirement audit proves a simpler no-loss replacement. For tutorial polish, prefer subtle motion over stronger outlines and explicitly review animation order/timing during final visual polish.
 
 ## 12. Archived and Compatibility Paths
 
@@ -842,9 +861,9 @@ For the universal-data program, keep the architectural rule established in Phase
 
 ### Canonical correspondence adapter and profile routing — active compatibility paths
 
-The canonical normalized model is now authoritative for correspondence import, but most current downstream consumers still receive the established legacy row structures through `peridotLegacyCompatibilityAdapter.js` and `peridotCanonicalRuntimeModel.js`. This is an **active compatibility path**, not archived code. Genealogy uses its own direct canonical runtime projection.
+The canonical normalized model is authoritative for correspondence import, but many current downstream consumers still receive established legacy row structures through `peridotLegacyCompatibilityAdapter.js` and `peridotCanonicalRuntimeModel.js`. The Phase 2 mapping UI now captures richer generalized place and relationship assignments than those legacy row contracts can express. This is therefore an **active compatibility boundary**, not yet dead code. Genealogy continues to use its own direct canonical runtime projection.
 
-Do not remove or collapse the Correspondence / Directed Record or Genealogy / Person-Centered profiles merely because the universal mapping foundation exists. A later migration may convert them into optional presets over a universal mapper, but retirement requires demonstrated behavioral parity, no loss of scholarly mapping capability, and a net simplification of the architecture.
+Do not remove or collapse the Correspondence / Directed Record or Genealogy / Person-Centered profiles merely because the generalized mapper UI exists. First make the generalized mapping architecture authoritative end-to-end, then run the warning/validation and repository-wide retirement audits. A compatibility adapter should be removed only after all remaining consumers have either migrated or been shown not to need it.
 
 ### MapLibre migrated-overlay branch paused / active preview removed
 
@@ -882,15 +901,19 @@ A future chat should start from:
 
 - source of truth folder: `C:\Users\haley\OneDrive\Desktop\Peridot\`
 - active branch: `main`
-- current synchronized checkpoint: **`301a1e1` — `Add universal runtime compatibility boundary`**
+- current synchronized checkpoint: **`134c67c` — `Refine upload review checkpoint`**
 
 A future chat should also be told that:
 
 - the app identity is **Peridot**
-- Phase 1 of the universal data architecture is complete at `301a1e1`: universal mapping definitions, generalized source/sheet descriptors, deterministic transformation helpers, and a runtime compatibility boundary are implemented beneath the current public upload UI
-- canonical normalization is active: correspondence runs canonical → legacy compatibility adapter; genealogy runs canonical → dedicated genealogy runtime; broader universal structures remain canonical-only until deliberately adopted by consumers
-- Correspondence / Directed Record and Genealogy / Person-Centered are both active profiles; do not retire/collapse either until universal mapping proves full parity and actual architectural simplification
-- Phase 2 is the next universal-data phase: prototype the complete progressive upload/mapping workflow first, then simplify it based on real workbook tests
+- Phase 1 of the universal data architecture is complete: universal mapping definitions, generalized source/sheet descriptors, deterministic transformation helpers, and a runtime compatibility boundary are implemented
+- Phase 2's page-by-page mapping redesign is accepted through `134c67c`: Preview/orientation, Time, generalized repeatable Places, generalized n-part Relations, Evidence, and Review have been tested; workbook Places/Relations have parity with the single-table interaction model
+- Review is a double-check checkpoint: it repeats assignments and reports one unified **Map** readiness state rather than separate point/route map categories
+- the new mapper state is richer than the legacy runtime: `placeParts` and `relationshipParts` are preserved, but the next task is to make them authoritative through canonical normalization/runtime consumption instead of allowing old Source/Target or point/route fields to decide downstream behavior
+- after runtime integration, audit validation/warnings; then run the representative dataset regression suite; then perform a repository-wide legacy upload/runtime retirement audit; only after Phase 2 is clean should Phase 3 chart-builder work begin
+- the deferred Review-warning audit must distinguish genuine requirements from legacy correspondence/workbook assumptions, including `Letter_ID`, exact-key joins, Source/Target, and point/route language
+- canonical normalization remains active: correspondence currently runs canonical → legacy compatibility adapter; genealogy runs canonical → dedicated genealogy runtime; broader universal structures may remain canonical-only until deliberately adopted by consumers
+- Correspondence / Directed Record and Genealogy / Person-Centered remain active profiles until the retirement audit proves full parity and actual architectural simplification
 
 - the first-time tutorial is implemented as a seven-stage guided overlay beginning in Visualizations, with draggable/minimizable panels, Back/Continue progression, recovery logic, keyboard accessibility, target highlighting, and explicit Inspector-close guidance; `619bab0` is the stable baseline for future polish
 - the user-designed Peridot logo, gilded logo, selected Adobe Stock filigree, homepage screenshot, and homepage mockup assets are stored in `assets/`; the Home workspace uses `assets/Peridot Logo Gilded Transparent.png` and `assets/Adobe Stock Filigree 1.png`; the additional licensed filigree assets `Adobe Stock Filigree 2.png`, `Adobe Stock Filigree 3.png`, `Adobe Stock Filigree Divider Set.png`, and `Adobe Stock Filigree Full Set.png` are retained for design reference/use

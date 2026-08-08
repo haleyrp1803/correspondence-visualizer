@@ -20,25 +20,43 @@ This document owns the detailed checkpoint, milestone chronology, deferred/archi
 ## 1. Current Synchronized Checkpoint
 
 ```text
-301a1e1 — Add universal runtime compatibility boundary
+134c67c — Refine upload review checkpoint
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
 
-This checkpoint closes **Phase 1 of the universal data architecture** on top of the canonical normalization and active genealogy work completed after the prior `619bab0` documentation baseline.
+This checkpoint marks the accepted page-by-page Phase 2 redesign of the correspondence/directed-record mapping workspace on top of the Phase 1 universal architecture.
 
 Current architectural significance:
 
-- correspondence imports now normalize through the canonical research model and continue into existing application consumers through the legacy compatibility adapter;
-- genealogy/person-centered imports are active, with dedicated mapping, validation, canonical normalization, and genealogy runtime projection;
-- the canonical dataset can represent entities, places, records, events, relationships, participations, evidence sources, assertions, temporal structure, and source/transformation provenance;
-- Phase 1 adds universal saved-variable/mapping definitions, generalized source-file/table/field descriptors, deterministic repeated-heading/transpose/table-connection transforms, and an explicit runtime-compatibility classifier;
-- broader universal datasets are allowed to remain canonical-only rather than being coerced into correspondence or genealogy runtime rows before a downstream consumer supports them;
-- the public universal-upload redesign and universal chart-builder work have **not** yet been implemented; they are the planned Phase 2 and Phase 3 work.
+- Phase 1 universal mapping/source/transformation/runtime-compatibility foundations remain intact;
+- the active production mapping shell has been generalized rather than replaced by a separate “Universal” profile;
+- single-table Preview records source orientation while preserving the uploaded visual table; Time uses Date/Beginning/Ending roles; Places uses repeatable place parts; Relations uses repeatable n-participant parts; Evidence retains Include/Ignore; Review repeats the user's assignments before validation;
+- workbook Places and Relations now use the same interaction model with sheet-qualified references;
+- Review reports one unified **Map** capability rather than separate point-map/route-map categories and treats accepted generalized place assignments as sufficient mapping readiness;
+- richer `placeParts` and `relationshipParts` are preserved in mapping state but are not yet authoritative throughout every legacy runtime/consumer path;
+- the next Phase 2 sequence is runtime-authority integration → validation/warning audit → representative end-to-end regression testing → repository-wide legacy upload/runtime retirement audit → Phase 2 closure;
+- Phase 3 chart-builder work should begin only after that architecture boundary is clean.
 
-The active correspondence and genealogy profiles remain compatibility/preset paths. They should be retired or collapsed only after a later universal mapper demonstrates that doing so loses no capability and produces a genuinely simpler architecture.
+The active Correspondence / Directed Record and Genealogy / Person-Centered profiles remain compatibility/specialization paths. They should be retired or collapsed only after the later retirement audit proves no capability loss and a genuine reduction in architectural complexity.
 
 ## 2. Recent Milestones, Newest First
+
+### Progressive universal upload redesign and Review checkpoint — 2026-08-08
+
+- **`e10c062` — `Synchronize documentation for universal data phase 1`** closed the Phase 1 documentation cycle before Phase 2 implementation began.
+- **`7588269` — `Add universal upload workflow prototype`**, **`157574e` — `Add editable universal mapping suggestions`**, **`3153861` — `Make universal sheet purposes operational`**, **`8b52af6` — `Add repeated data orientation mapping`**, **`2d96b1a` — `Add operational related sheet connections`**, and **`3b30367` — `Add reversible universal mapping edits`** built the intentionally complete experimental mapper and reversible mapping state.
+- Human testing showed that the experimental shell exposed internal architecture as a logic puzzle. The project changed direction: reuse the existing production role-mapper shell and generalize its human-facing grammar instead of polishing a separate six-step universal UI.
+- **`050e3ed` — `Mount universal mapper for interactive testing`** established the production test surface for that redesign.
+- **`cc43c9e` — `Improve upload data preview`**, **`14f48cb` — `Add upload table orientation guidance`**, and **`fb400db` — `Fix time examples for row-oriented tables`** established source-faithful Preview behavior plus orientation-aware downstream mapping/examples.
+- **`0aa0c21` — `Improve temporal data mapping workflow`** simplified Time to Date, Beginning date, and Ending date with plain-language guidance and source examples.
+- **`90a3a3b` — `Generalize place mapping workflow`** replaced point/route user classification with repeatable Place A/B/C mappings, per-place role source, optional coordinates, and workbook parity.
+- **`967b293` — `Generalize relationship mapping workflow`** replaced binary Source/Target UI assumptions with repeatable Part A/B/C participants, per-part roles, optional relationship metadata, and workbook parity.
+- **`0ae7e03` — `Refine evidence mapping workflow`** retained the successful Include/Ignore Evidence model, added source examples/readability improvements, and prevented structurally mapped fields from being duplicated as Evidence.
+- **`134c67c` — `Refine upload review checkpoint`** made Review a summary + validation + correction checkpoint, repeated user assignments, collapsed point/route map readiness into one **Map** status, and stopped missing legacy Source/Target concepts from overriding accepted generalized place/relationship mappings in the Review presentation.
+- The remaining warning system still contains legacy correspondence/workbook assumptions. That audit is intentionally deferred until generalized mappings are authoritative in the runtime.
+- Prepared this bounded core-documentation synchronization against `134c67c` before moving the authoritative-runtime work to a fresh conversation.
+
 
 ### Universal mapping/source foundation and runtime compatibility boundary — 2026-08-07
 
@@ -469,6 +487,22 @@ This is the single authoritative place in the documentation for the cumulative c
 
 | Date | Commit | Message | Branch/tag decoration |
 |---|---|---|---|
+| 2026-08-08 | `134c67c` | Refine upload review checkpoint | (HEAD -> main, origin/main, origin/HEAD) |
+| 2026-08-08 | `0ae7e03` | Refine evidence mapping workflow |  |
+| 2026-08-08 | `967b293` | Generalize relationship mapping workflow |  |
+| 2026-08-08 | `90a3a3b` | Generalize place mapping workflow |  |
+| 2026-08-08 | `fb400db` | Fix time examples for row-oriented tables |  |
+| 2026-08-08 | `14f48cb` | Add upload table orientation guidance |  |
+| 2026-08-08 | `0aa0c21` | Improve temporal data mapping workflow |  |
+| 2026-08-08 | `cc43c9e` | Improve upload data preview |  |
+| 2026-08-08 | `050e3ed` | Mount universal mapper for interactive testing |  |
+| 2026-08-08 | `3b30367` | Add reversible universal mapping edits |  |
+| 2026-08-08 | `2d96b1a` | Add operational related sheet connections |  |
+| 2026-08-08 | `8b52af6` | Add repeated data orientation mapping |  |
+| 2026-08-08 | `3153861` | Make universal sheet purposes operational |  |
+| 2026-08-08 | `157574e` | Add editable universal mapping suggestions |  |
+| 2026-08-08 | `7588269` | Add universal upload workflow prototype |  |
+| 2026-08-07 | `e10c062` | Synchronize documentation for universal data phase 1 |  |
 | 2026-08-07 | `301a1e1` | Add universal runtime compatibility boundary | (HEAD -> main, origin/main, origin/HEAD) |
 | 2026-08-07 | `ebcd7d0` | Add universal transformation helpers |  |
 | 2026-08-07 | `eda0b88` | Add generalized source sheet model |  |

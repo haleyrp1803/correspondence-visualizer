@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-Peridot is an open, research-oriented web application for exploring humanistic data through maps, networks, timelines, charts, advanced search, exports, and evidence dossiers. Its mature first use case is correspondence data based on the creator's dissertation research, and its active import system now also includes a person-centered genealogy profile alongside role-based support for point/site data, chart-first time series, and generic evidence records. Underneath those workflows, Peridot now uses a canonical normalized research model and has completed the first internal phase of a broader universal-mapping architecture; the generalized universal-upload interface itself remains future work.
+Peridot is an open, research-oriented web application for exploring humanistic data through maps, networks, timelines, charts, advanced search, exports, and evidence dossiers. Its mature first use case is correspondence data based on the creator's dissertation research, and its active import system also includes a person-centered genealogy profile alongside increasingly general support for point/site data, chart-first time series, generic evidence records, and multi-sheet workbooks. Underneath those workflows, Peridot uses a canonical normalized research model. Its Phase 2 upload redesign now exposes a progressive, human-readable mapping workflow for Preview, Time, Places, Relations, Evidence, and Review; the next architectural step is to make those generalized assignments authoritative throughout normalization and runtime consumption rather than relying on legacy correspondence-shaped compatibility fields.
 
 Peridot was created by Haley Price in direct and continuous collaboration with ChatGPT. There is a robust AI disclosure and discussion of AI ethics (and ethical concerns) on the tool's "Learn More About Peridot" page where credit is documented. Please go there for more details. For the purposes of README, it bears mentioning that the reason the documentation is so meticulous (and so robotic) is because Price made ChatGPT record every single decision, commit, redirection, success, and failure throughout Peridot's development so that the full record of labor would be documented and disclosed. This paragraph was written by Price (hi!) but the remainder of the documentation was written by ChatGPT under exacting human direction and quality assurance supervision.
 
@@ -32,7 +32,7 @@ This document owns public orientation, user-facing workflows, installation, data
 Current synchronized checkpoint:
 
 ```text
-301a1e1 — Add universal runtime compatibility boundary
+134c67c — Refine upload review checkpoint
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
@@ -96,7 +96,9 @@ Manage Your Data provides template download, a unified CSV / TSV / XLSX / XLS up
 
 The correspondence/directed-record workflow remains organized around Preview, Sheets when relevant, Time, Places, Relations, Evidence, and Review. The genealogy workflow uses Preview, Identity, Parents, Partners, Life events, Places, Attributes, and Review so one person row can generate canonical entities, life events, and family relationships without inventing movement between places.
 
-Users explicitly choose or accept mappings; Peridot does not silently normalize names, places, dates, relationships, or controlled vocabularies. Workbook correspondence imports continue to use user-configured unique-ID joins rather than row-order matching. The broader universal-mapping foundation now exists internally, but the future progressive universal-upload interface for arbitrary sheet purposes, repeated headings, and editable mappings is not yet the public workflow.
+Users explicitly choose or accept mappings; Peridot does not silently normalize names, places, dates, relationships, or controlled vocabularies. The current general mapping workflow uses plain-language, reversible assignments: Preview preserves the source table as uploaded while recording orientation; Time maps date/beginning/ending roles; Places supports repeatable Place A/B/C assignments with optional coordinates and role sources; Relations supports repeatable Part A/B/C participants with per-part roles; Evidence retains Include/Ignore and display-label choices; and Review repeats the user's assignments before reporting current tool availability. Multi-sheet workbooks use the same Places and Relations interaction model with sheet-qualified field references. Workbook assembly still uses user-configured unique-ID joins rather than row-order matching.
+
+This generalized mapping UI is now active, but its richer place/relationship assignments are not yet authoritative across every downstream runtime consumer. The next Phase 2 work is the runtime-integration boundary: generalized mappings should feed canonical normalization directly, with legacy correspondence-shaped projections retained only where a current consumer still demonstrably requires them.
 
 ### 3.3 Visualize
 
@@ -415,8 +417,7 @@ Coordinates and dates are not required for upload. The validation summary report
 
 - Inspector
 - Search
-- Point Map
-- Route Map
+- Map
 - People Network / Force-Directed Network
 - Timeline
 - Chart Visualizations
@@ -426,7 +427,7 @@ Incomplete records can still remain useful for evidence preservation, Search, or
 
 Peridot does **not** clean or standardize person names, place names, dates, topics, relationships, languages, titles, or other user-entered values. Charts, filters, and labels use uploaded values exactly as entered. Users who want cleaner networks or less fragmented Analytics categories should standardize their data before upload.
 
-For correspondence/directed-record arbitrary tables and workbooks, the mapping workflow asks users to describe field roles rather than forcing every column to match the public correspondence template. Current steps include Preview, workbook Sheets, Time, Places, Relations, Evidence, and final Review. This allows datasets such as point/site tables to map one location per row and render in Place Map even when they have no source-target people and therefore do not populate People Network or Force-Directed views.
+For correspondence/directed-record arbitrary tables and workbooks, the mapping workflow asks users to describe field roles rather than forcing every column to match the public correspondence template. Current steps include Preview, workbook Sheets where applicable, Time, Places, Relations, Evidence, and final Review. Place mapping is repeatable rather than divided into point-versus-route modes, and relationship mapping supports two or more participants rather than requiring every relationship to be reduced to Source/Target. Review repeats the accepted assignments as a final double-check before import. This allows datasets such as point/site tables to map one location per row and remain valid even when they have no relationship data and therefore do not populate network views.
 
 For genealogy/person-centered imports, the specialized mapping path asks for stable person identity, parent references, partner references, birth/death information, places, optional attributes, and final review. Birth and death locations remain life-event places; Peridot does not infer a journey between them. The canonical normalized model preserves these person-centered structures directly rather than flattening them into correspondence rows.
 
@@ -459,7 +460,7 @@ A typical workflow is:
 3. Choose **Use sample data** or **Upload my data**.
 4. If uploading data, use the Data workspace to download the template or upload a CSV/TSV/XLSX/XLS table/workbook.
 5. Use the mapping workspace if the uploaded file needs column or workbook mapping.
-6. Map fields by role: identify records, map time, map places, map relationships if present, choose evidence/analysis fields, and review capabilities.
+6. Map fields through the progressive workflow: review the source table, map time, add any place roles, add any relationship participants, choose Evidence fields with Include/Ignore, and double-check the assignments on Review.
 7. For workbooks, configure the primary sheet, unique-ID joins, role mappings, and selected evidence/Analytics fields.
 8. Review the upload validation popup and persistent latest-upload summary.
 9. Open Visualizations and choose **Place Map**, **People Network**, **Force-Directed**, or **Chart Visualizations**.
@@ -497,7 +498,7 @@ Implemented Advanced Search controls include keyword, person, place, Route Filte
 
 Peridot is an active research prototype. It can preserve and expose useful incomplete records, but not every dataset supports every visualization. Network views require mapped source-target relationships; map views require usable location information; Timeline and chart behavior depend on available temporal and analytic fields.
 
-Phase 1 of the universal data architecture is complete internally: Peridot can describe saved variables, field assignments, sheet purposes, repeated-heading groups, table connections, generalized source tables/fields, deterministic transformations, and runtime compatibility boundaries. The public upload interface has **not** yet been generalized around that foundation. Complex workbooks with repeated headings or multiple sheet purposes may therefore still require the existing profile-specific workflows until Phase 2 is implemented.
+Phase 1 of the universal data architecture is complete internally, and the main correspondence/directed-record mapping shell has now been generalized through the Phase 2 page-by-page redesign. The remaining limitation is architectural rather than primarily visual: some import assembly, validation, warning, and visualization-runtime paths still rely on legacy correspondence-shaped fields. Review now treats generalized place assignments as sufficient for one unified **Map** readiness status, but the broader warning/validation system still requires an explicit audit against the new mapping model. Until the runtime integration and retirement audit are complete, some generalized assignments may be preserved correctly in mapping state before every downstream consumer uses them natively.
 
 Two technical audits remain deferred: Search dataset coverage/scope and Timeline playback × Analytics scope. Until those audits are complete, interface language should distinguish loaded, applied/filtered, timeline-visible, selected, charted, and exported data rather than implying that every surface handles scope identically.
 
