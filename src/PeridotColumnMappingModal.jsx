@@ -25,12 +25,12 @@ import {
 } from './peridotGenealogyMapping.js';
 import { buildPeridotCsvValidationSummary } from './peridotCsvValidation.js';
 import {
-  applyPeridotColumnMapping,
   buildInitialPeridotColumnMappingState,
   CUSTOM_INSPECTOR_FIELD_DEFAULTS,
   PERIDOT_CORE_FIELD_DEFINITIONS,
   validatePeridotColumnMapping,
 } from './peridotColumnMapping.js';
+import { applyPeridotGeneralizedColumnMapping } from './peridotGeneralizedMappingRuntime.js';
 import {
   buildPeridotRowsFromWorkbookMapping,
   buildWorkbookCustomFieldSelectionsForSheet,
@@ -1979,6 +1979,17 @@ export function PeridotColumnMappingModal({
       ...Object.values(stripDisplayDateMapping(temporalMapping || {})),
       ...Object.values(pointMapping || {}),
       ...Object.values(routeCoordinatePairMapping || {}),
+      ...(placeParts || []).flatMap((part) => [
+        part?.placeColumn,
+        part?.roleMode === 'column' ? part?.roleColumn : '',
+        part?.coordinatePairColumn,
+        part?.latitudeColumn,
+        part?.longitudeColumn,
+      ]),
+      ...(relationshipParts || []).flatMap((part) => [
+        part?.participantColumn,
+        part?.roleMode === 'column' ? part?.roleColumn : '',
+      ]),
     ].filter(Boolean));
     const structuralSelections = customFieldSelections.map((selection) => (
       mappedCoreColumns.has(selection.sourceColumn)
@@ -1986,7 +1997,7 @@ export function PeridotColumnMappingModal({
         : selection
     ));
     return applyRelationshipMetadataSelections(structuralSelections, relationshipMetadataMapping);
-  }, [coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, relationshipMetadataMapping, customFieldSelections]);
+  }, [coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, placeParts, relationshipParts, relationshipMetadataMapping, customFieldSelections]);
 
   const validation = useMemo(
     () => validatePeridotColumnMapping(headers, {
@@ -2001,15 +2012,18 @@ export function PeridotColumnMappingModal({
   );
 
   const mappedRows = useMemo(
-    () => applyPeridotColumnMapping(rows, {
+    () => applyPeridotGeneralizedColumnMapping(rows, {
+      tableOrientation,
+      placeParts,
+      relationshipParts,
+      relationshipMetadataMapping,
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
       pointMapping,
       routeCoordinatePairMapping,
-      relationshipMetadataMapping,
       customFieldSelections: effectiveCustomSelections,
     }),
-    [rows, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
+    [rows, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
   );
 
   const validationSummary = useMemo(

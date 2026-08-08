@@ -608,3 +608,325 @@ export function normalizePeridotCorrespondenceRows(rows = [], options = {}) {
     capabilities,
   });
 }
+
+function makeGeneralizedTemporalAssertion(observation = {}) {
+  const temporal = observation.temporal || {};
+  const startValue = asText(temporal.dateStart);
+  const endValue = asText(temporal.dateEnd);
+  const displayValue = asText(temporal.displayDate);
+
+  if (startValue || endValue) {
+    return parsePeridotTemporalRange({ startValue, endValue, displayValue });
+  }
+
+  const dateValue = asText(temporal.date) || displayValue;
+  return dateValue ? parsePeridotTemporalValue(dateValue) : null;
+}
+
+function generalizedObservationHasContent(observation = {}) {
+  const temporal = observation.temporal || {};
+  const relationship = observation.relationship || {};
+  return Boolean(
+    observation.participants?.length
+    || observation.places?.length
+    || observation.evidenceFields?.some((field) => asText(field?.value))
+    || asText(relationship.type)
+    || asText(relationship.label)
+    || asText(temporal.date)
+    || asText(temporal.dateStart)
+    || asText(temporal.dateEnd)
+  );
+}
+
+function makeGeneralizedRecordLabel(observation = {}, index = 0) {
+  const participants = observation.participants || [];
+  const temporal = observation.temporal || {};
+  const date = asText(temporal.displayDate) || asText(temporal.date) || asText(temporal.dateStart);
+  const participantLabel = participants.slice(0, 3).map((part) => asText(part.value)).filter(Boolean).join(' · ');
+  const placeLabel = asText(observation.places?.[0]?.label);
+  const base = participantLabel || placeLabel || `Record ${index + 1}`;
+  return `${base}${date ? ` · ${date}` : ''}`;
+}
+
+/**
+ * Normalize rows whose user-confirmed generalized mapping has already been
+ * applied. Unlike normalizePeridotCorrespondenceRows(), this path does not use
+ * Source/Target/Point/Route fields to determine canonical meaning. Those fields
+ * may coexist on the row only as a downstream legacy compatibility projection.
+ */
+export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
+  const datasetId = asText(options.datasetId) || 'peridot-generalized-mapped-dataset';
+  const datasetLabel = asText(options.datasetLabel) || asText(options.sourceFileName) || 'Peridot mapped dataset';
+  const sourceFileId = asText(options.sourceFileId) || datasetId;
+  const sourceFileName = asText(options.sourceFileName) || '';
+  const sourceSheet = asText(options.sourceSheet) || 'Uploaded table';
+
+  const entitiesByLabel = new Map();
+  const placesByIdentity = new Map();
+  const records = [];
+  const participations = [];
+  const evidenceSources = [];
+  const assertions = [];
+  const acceptedRowNumbers = [];
+  const unsupportedRowNumbers = [];
+
+  function ensureGeneralizedEntity(participant, row, rowIndex) {
+    const label = asText(participant?.value);
+    if (!label) return '';
+    if (!entitiesByLabel.has(label)) {
+      entitiesByLabel.set(label, makePeridotEntity({
+        id: makeEntityId(datasetId, label),
+        entityType: PERIDOT_ENTITY_TYPES.AGENT,
+        subtype: 'mapped-participant',
+        label,
+        attributes: {
+          identityPolicy: 'exact-entered-label',
+        },
+        provenance: makeRowProvenance({
+          row,
+          rowIndex,
+          sourceFileId,
+          sourceFileName,
+          sourceSheet,
+          sourceColumns: unique([participant?.sourceColumn, participant?.roleSourceColumn]),
+          transformation: 'Create exact-label Agent from user-confirmed generalized relationship participant.',
+        }),
+      }));
+    }
+    return entitiesByLabel.get(label).id;
+  }
+
+  function ensureGeneralizedPlace(place, row, rowIndex) {
+    const label = asText(place?.label);
+    const latitude = place?.latitude === null || place?.latitude === undefined || place?.latitude === '' ? null : Number(place.latitude);
+    const longitude = place?.longitude === null || place?.longitude === undefined || place?.longitude === '' ? null : Number(place.longitude);
+    const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+    if (!label && !hasCoordinates) return '';
+
+    const effectiveLabel = label || `Unlabeled ${asText(place?.role) || 'mapped'} place`;
+    const identityKey = buildPlaceIdentityKey({
+      label: effectiveLabel,
+      latitude: hasCoordinates ? latitude : null,
+      longitude: hasCoordinates ? longitude : null,
+      role: asText(place?.role) || 'mapped-place',
+    });
+
+    if (!placesByIdentity.has(identityKey)) {
+      placesByIdentity.set(identityKey, makePeridotPlace({
+        id: makePlaceId(datasetId, identityKey),
+        label: effectiveLabel,
+        placeType: 'user-mapped-place',
+        latitude: hasCoordinates ? latitude : Number.NaN,
+        longitude: hasCoordinates ? longitude : Number.NaN,
+        attributes: compactObject({
+          roleHint: asText(place?.role),
+          generatedLabel: !label,
+          identityPolicy: 'exact-label-coordinate-and-role',
+        }),
+        provenance: makeRowProvenance({
+          row,
+          rowIndex,
+          sourceFileId,
+          sourceFileName,
+          sourceSheet,
+          sourceColumns: unique([
+            place?.sourceColumn,
+            place?.roleSourceColumn,
+            ...(place?.coordinateSourceColumns || []),
+          ]),
+          transformation: 'Create Place from user-confirmed generalized place assignment.',
+        }),
+      }));
+    }
+
+    return placesByIdentity.get(identityKey).id;
+  }
+
+  rows.forEach((row = {}, rowIndex) => {
+    const observation = row?.generalizedObservation;
+    if (!observation || !generalizedObservationHasContent(observation)) {
+      unsupportedRowNumbers.push(rowIndex + 2);
+      return;
+    }
+    acceptedRowNumbers.push(rowIndex + 2);
+
+    const recordId = makePeridotCanonicalId({
+      itemType: 'record',
+      datasetId,
+      sourceSheet,
+      sourceRowNumber: rowIndex + 2,
+      role: 'mapped-observation',
+    });
+
+    const participantEntries = (observation.participants || []).map((participant) => ({
+      participant,
+      entityId: ensureGeneralizedEntity(participant, row, rowIndex),
+    })).filter((entry) => entry.entityId);
+
+    const placeEntries = (observation.places || []).map((place) => ({
+      place,
+      placeId: ensureGeneralizedPlace(place, row, rowIndex),
+    })).filter((entry) => entry.placeId);
+
+    const evidenceFields = (observation.evidenceFields || []).filter((field) => asText(field?.value));
+    let evidenceSourceId = '';
+    if (evidenceFields.length) {
+      evidenceSourceId = makePeridotCanonicalId({
+        itemType: 'evidence',
+        datasetId,
+        sourceSheet,
+        sourceRowNumber: rowIndex + 2,
+        role: 'mapped-evidence',
+      });
+      evidenceSources.push(makePeridotEvidenceSource({
+        id: evidenceSourceId,
+        sourceType: 'user-mapped-evidence',
+        citation: evidenceFields.map((field) => `${asText(field.label)}: ${asText(field.value)}`).join(' · '),
+        attributes: {
+          fields: evidenceFields.map((field) => ({ ...field })),
+        },
+        provenance: makeRowProvenance({
+          row,
+          rowIndex,
+          sourceFileId,
+          sourceFileName,
+          sourceSheet,
+          sourceColumns: evidenceFields.map((field) => field.sourceColumn),
+          transformation: 'Preserve user-confirmed evidence fields on the mapped observation.',
+          status: PERIDOT_PROVENANCE_STATUS.IMPORTED_DIRECTLY,
+        }),
+      }));
+    }
+
+    const temporalAssertion = makeGeneralizedTemporalAssertion(observation);
+    const relationship = observation.relationship || {};
+
+    records.push(makePeridotRecord({
+      id: recordId,
+      recordType: 'generalized-mapped-observation',
+      label: makeGeneralizedRecordLabel(observation, rowIndex),
+      temporalAssertion,
+      participantIds: participantEntries.map((entry) => entry.entityId),
+      placeReferenceIds: placeEntries.map((entry) => entry.placeId),
+      evidenceSourceIds: evidenceSourceId ? [evidenceSourceId] : [],
+      attributes: compactObject({
+        relationshipType: asText(relationship.type),
+        relationshipLabel: asText(relationship.label),
+        participantRoles: participantEntries.map(({ participant, entityId }) => ({
+          entityId,
+          role: asText(participant.role),
+          sourceColumn: asText(participant.sourceColumn),
+        })),
+        placeRoles: placeEntries.map(({ place, placeId }) => ({
+          placeId,
+          role: asText(place.role),
+          sourceColumn: asText(place.sourceColumn),
+        })),
+        customFields: Object.fromEntries(evidenceFields.map((field) => [asText(field.label), field.value])),
+        ignoredUploadedColumns: Array.isArray(row.ignoredUploadedColumns) ? [...row.ignoredUploadedColumns] : [],
+        originalMappedRow: { ...row },
+      }),
+      provenance: makeRowProvenance({
+        row,
+        rowIndex,
+        sourceFileId,
+        sourceFileName,
+        sourceSheet,
+        transformation: 'Create canonical Record directly from user-confirmed generalized mapping semantics.',
+      }),
+    }));
+
+    participantEntries.forEach(({ participant, entityId }, participantIndex) => {
+      participations.push(makePeridotParticipation({
+        id: `${recordId}:participation:${participantIndex + 1}`,
+        subjectId: entityId,
+        targetType: PERIDOT_TARGET_TYPES.RECORD,
+        targetId: recordId,
+        role: asText(participant.role) || `participant-${participantIndex + 1}`,
+        temporalAssertion,
+        provenance: makeRowProvenance({
+          row,
+          rowIndex,
+          sourceFileId,
+          sourceFileName,
+          sourceSheet,
+          sourceColumns: unique([participant.sourceColumn, participant.roleSourceColumn]),
+          transformation: 'Create typed participation from user-confirmed generalized relationship part.',
+        }),
+      }));
+    });
+
+    placeEntries.forEach(({ place, placeId }, placeIndex) => {
+      assertions.push(makePeridotAssertion({
+        id: `${recordId}:assertion:place:${placeIndex + 1}`,
+        subjectId: recordId,
+        predicate: `mapped-place:${asText(place.role) || `place-${placeIndex + 1}`}`,
+        objectId: placeId,
+        evidenceSourceIds: evidenceSourceId ? [evidenceSourceId] : [],
+        temporalAssertion,
+        attributes: {
+          mappedRole: asText(place.role),
+          sourceColumn: asText(place.sourceColumn),
+        },
+        provenance: makeRowProvenance({
+          row,
+          rowIndex,
+          sourceFileId,
+          sourceFileName,
+          sourceSheet,
+          sourceColumns: unique([place.sourceColumn, place.roleSourceColumn, ...(place.coordinateSourceColumns || [])]),
+          transformation: 'Create typed place assertion from user-confirmed generalized place assignment.',
+        }),
+      }));
+    });
+  });
+
+  const baseDataset = makePeridotNormalizedDataset({
+    datasetId,
+    datasetLabel,
+    importedAt: asText(options.importedAt),
+    sourceManifest: {
+      sourceFileId,
+      sourceFileName,
+      sourceSheet,
+      totalRowCount: rows.length,
+      acceptedRowCount: acceptedRowNumbers.length,
+      unsupportedRowCount: unsupportedRowNumbers.length,
+      acceptedRowNumbers,
+      unsupportedRowNumbers,
+      sourceShape: 'generalized-user-mapped-observations',
+    },
+    mappingProfile: {
+      id: PERIDOT_CORRESPONDENCE_PROFILE_ID,
+      version: PERIDOT_CORRESPONDENCE_PROFILE_VERSION,
+      label: 'Correspondence / Directed Record',
+      primaryRowType: 'generalized-mapped-observation',
+      identityPolicy: 'exact-entered-labels; no automatic reconciliation',
+      semanticAuthority: 'user-confirmed-generalized-mapping',
+      userConfirmed: true,
+    },
+    entities: Array.from(entitiesByLabel.values()),
+    places: Array.from(placesByIdentity.values()),
+    records,
+    events: [],
+    relationships: [],
+    participations,
+    evidenceSources,
+    assertions,
+  });
+
+  const validation = validatePeridotNormalizedDataset(baseDataset);
+  const baseCapabilities = deriveDatasetCapabilities(baseDataset);
+  const capabilities = Object.freeze({
+    ...baseCapabilities,
+    networkReady: records.some((record) => (
+      participations.filter((participation) => participation.targetId === record.id).length >= 2
+    )),
+  });
+
+  return makePeridotNormalizedDataset({
+    ...baseDataset,
+    validation,
+    capabilities,
+  });
+}

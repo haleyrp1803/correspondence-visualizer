@@ -87,7 +87,8 @@ import { PERIDOT_TEMPLATE_COLUMNS } from './peridotCsvSchema.js';
 import { buildPeridotCanonicalRuntimeModel } from './peridotCanonicalRuntimeModel.js';
 import { buildPeridotGenealogyRuntimeModel } from './peridotGenealogyRuntimeModel.js';
 import { buildPeridotCsvValidationSummary } from './peridotCsvValidation.js';
-import { applyPeridotColumnMapping, buildInitialPeridotColumnMappingState } from './peridotColumnMapping.js';
+import { buildInitialPeridotColumnMappingState } from './peridotColumnMapping.js';
+import { applyPeridotGeneralizedColumnMapping } from './peridotGeneralizedMappingRuntime.js';
 import { parsePeridotTableFile, summarizePeridotWorkbook } from './peridotWorkbookParsing.js';
 import { buildInitialPeridotWorkbookMappingState, buildPeridotRowsFromWorkbookMapping, validatePeridotWorkbookMapping } from './peridotWorkbookMapping.js';
 import { PeridotColumnMappingModal } from './PeridotColumnMappingModal.jsx';
@@ -4079,7 +4080,7 @@ export default function EuropeNetworkMapApp() {
     }
   };
 
-  const handleSaveColumnMappingState = ({ datasetProfileId, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
+  const handleSaveColumnMappingState = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
     setColumnMappingStaging((current) => {
       if (!current || current.status !== 'ready') return current;
 
@@ -4120,6 +4121,10 @@ export default function EuropeNetworkMapApp() {
         mappingState: {
           ...(current.mappingState || {}),
           datasetProfileId: resolvePeridotDatasetProfileId(datasetProfileId || current.datasetProfileId),
+          tableOrientation: tableOrientation || current.mappingState?.tableOrientation || 'columns',
+          placeParts: placeParts || current.mappingState?.placeParts || [],
+          relationshipParts: relationshipParts || current.mappingState?.relationshipParts || [],
+          relationshipMetadataMapping: relationshipMetadataMapping || current.mappingState?.relationshipMetadataMapping || {},
           coreMapping: coreMapping || current.mappingState?.coreMapping || {},
           temporalMapping: temporalMapping || current.mappingState?.temporalMapping || {},
           pointMapping: pointMapping || current.mappingState?.pointMapping || {},
@@ -4132,7 +4137,7 @@ export default function EuropeNetworkMapApp() {
     });
   };
 
-  const handleConfirmColumnMappingImport = ({ datasetProfileId, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
+  const handleConfirmColumnMappingImport = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
     if (!columnMappingStaging || columnMappingStaging.status !== 'ready') return;
     const activeDatasetProfileId = resolvePeridotDatasetProfileId(
       datasetProfileId
@@ -4291,8 +4296,15 @@ export default function EuropeNetworkMapApp() {
       const nextTemporalMapping = temporalMapping || columnMappingStaging.mappingState?.temporalMapping || {};
       const nextPointMapping = pointMapping || columnMappingStaging.mappingState?.pointMapping || {};
       const nextRouteCoordinatePairMapping = routeCoordinatePairMapping || columnMappingStaging.mappingState?.routeCoordinatePairMapping || {};
+      const nextPlaceParts = placeParts || columnMappingStaging.mappingState?.placeParts || [];
+      const nextRelationshipParts = relationshipParts || columnMappingStaging.mappingState?.relationshipParts || [];
+      const nextRelationshipMetadataMapping = relationshipMetadataMapping || columnMappingStaging.mappingState?.relationshipMetadataMapping || {};
       const nextCustomFieldSelections = customFieldSelections || columnMappingStaging.mappingState?.customFieldSelections || [];
-      const mappedRows = applyPeridotColumnMapping(columnMappingStaging.rows || [], {
+      const mappedRows = applyPeridotGeneralizedColumnMapping(columnMappingStaging.rows || [], {
+        tableOrientation: tableOrientation || columnMappingStaging.mappingState?.tableOrientation || 'columns',
+        placeParts: nextPlaceParts,
+        relationshipParts: nextRelationshipParts,
+        relationshipMetadataMapping: nextRelationshipMetadataMapping,
         coreMapping: nextCoreMapping,
         temporalMapping: nextTemporalMapping,
         pointMapping: nextPointMapping,

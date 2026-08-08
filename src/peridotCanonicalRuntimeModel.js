@@ -7,7 +7,7 @@
  * adapter, so this module is the single controlled migration boundary.
  */
 
-import { normalizePeridotCorrespondenceRows } from './peridotCorrespondenceProfile.js';
+import { normalizePeridotCorrespondenceRows, normalizePeridotGeneralizedMappedRows } from './peridotCorrespondenceProfile.js';
 import { buildPeridotLegacyCompatibilityModel } from './peridotLegacyCompatibilityAdapter.js';
 
 function asText(value) {
@@ -40,7 +40,12 @@ export function buildPeridotCanonicalRuntimeModel(rows = [], options = {}) {
   const sourceSheet = asText(options.sourceSheet) || 'Uploaded table';
   const datasetId = asText(options.datasetId) || makeCanonicalDatasetId(fileLabel, sourceKind);
 
-  const canonicalDataset = normalizePeridotCorrespondenceRows(sourceRows, {
+  const hasGeneralizedMapping = sourceRows.some((row) => row?.generalizedObservation);
+  const normalizeCanonicalRows = hasGeneralizedMapping
+    ? normalizePeridotGeneralizedMappedRows
+    : normalizePeridotCorrespondenceRows;
+
+  const canonicalDataset = normalizeCanonicalRows(sourceRows, {
     datasetId,
     datasetLabel: `${fileLabel} canonical dataset`,
     sourceFileId: asText(options.sourceFileId) || makeCanonicalDatasetId(fileLabel, `${sourceKind}:file`),
@@ -71,7 +76,9 @@ export function buildPeridotCanonicalRuntimeModel(rows = [], options = {}) {
     ...legacyRuntime,
     canonicalDataset,
     normalizationSource: Object.freeze({
-      mode: 'canonical-through-legacy-adapter',
+      mode: hasGeneralizedMapping
+        ? 'canonical-generalized-mapping-through-legacy-adapter'
+        : 'canonical-through-legacy-adapter',
       datasetId: canonicalDataset.datasetId,
       mappingProfileId: canonicalDataset.mappingProfile?.id || '',
       mappingProfileVersion: canonicalDataset.mappingProfile?.version || '',
