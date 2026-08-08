@@ -522,8 +522,7 @@ function refreshWorkbookCustomSelections({ workbookModel, workbookMapping, previ
 const REVIEW_CAPABILITY_ITEMS = Object.freeze([
   Object.freeze({ label: 'Inspector', key: 'inspectorReady' }),
   Object.freeze({ label: 'Search', key: 'searchReady' }),
-  Object.freeze({ label: 'Point map', key: 'pointMapReady' }),
-  Object.freeze({ label: 'Route map', key: 'routeMapReady' }),
+  Object.freeze({ label: 'Map', key: 'mapReady' }),
   Object.freeze({ label: 'Network', key: 'networkReady' }),
   Object.freeze({ label: 'Timeline', key: 'timelineReady' }),
   Object.freeze({ label: 'Charts', key: 'chartReady' }),
@@ -544,8 +543,15 @@ function getReviewTotalRows(capabilityAudit, fallbackTotal = 0) {
   return capabilityAudit?.dataset?.totalRows || fallbackTotal || 0;
 }
 
-function getReviewCapabilityCount(capabilityAudit, key) {
-  return capabilityAudit?.dataset?.capabilityCounts?.[key] ?? 0;
+function getReviewCapabilityCount(capabilityAudit, key, { mapReady = false, totalRows = 0 } = {}) {
+  const counts = capabilityAudit?.dataset?.capabilityCounts || {};
+
+  if (key === 'mapReady') {
+    if (mapReady && totalRows > 0) return totalRows;
+    return Math.max(counts.pointMapReady ?? 0, counts.routeMapReady ?? 0);
+  }
+
+  return counts[key] ?? 0;
 }
 
 function getReviewCapabilityStatus(count, totalRows) {
@@ -668,7 +674,7 @@ function ReviewImportSummaryStrip({ acceptedRecords = 0, warningCount = 0 }) {
   );
 }
 
-function ReviewStatusPanel({ acceptedRecords = 0, warningCount = 0, capabilityAudit }) {
+function ReviewStatusPanel({ acceptedRecords = 0, warningCount = 0, capabilityAudit, mapReady = false }) {
   const totalRows = getReviewTotalRows(capabilityAudit, acceptedRecords);
 
   return (
@@ -692,7 +698,7 @@ function ReviewStatusPanel({ acceptedRecords = 0, warningCount = 0, capabilityAu
       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">Tool availability</div>
       <div className="mt-1.5 grid gap-1.5">
         {REVIEW_CAPABILITY_ITEMS.map((item) => {
-          const count = getReviewCapabilityCount(capabilityAudit, item.key);
+          const count = getReviewCapabilityCount(capabilityAudit, item.key, { mapReady, totalRows });
           const status = getReviewCapabilityStatus(count, totalRows);
           return (
             <div
@@ -748,20 +754,451 @@ function ReviewWarningsCard({ warnings = [], validationIssues = [] }) {
 }
 
 
-function ReviewStep({ validation, summary, mappedPreviewRows, headers, capabilityAudit }) {
-  const warnings = summary?.warnings || [];
-  const acceptedRecords = summary?.acceptedRecordCount ?? mappedPreviewRows.length;
-  const validationIssues = validation?.isValid ? [] : (validation?.issues || []);
+const REVIEW_TEMPORAL_LABELS = Object.freeze({
+  Date: 'Date',
+  Date_Start: 'Beginning date',
+  Date_End: 'Ending date',
+});
+
+function ReviewAssignmentIntro() {
+  return (
+    <div className="peridot-mapping-intro-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4">
+      <div className="text-lg font-bold leading-tight text-[var(--panel-card-text)]">
+        Here is how Peridot will use your data.
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+        Review these assignments before importing. If something looks wrong, return to any earlier step above to change the mapping.
+      </p>
+    </div>
+  );
+}
+
+function ReviewAssignmentLine({ label, value, detail = '' }) {
+  return (
+    <div className="grid gap-1 border-t border-[var(--panel-card-border)] py-2 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(8rem,0.38fr)_minmax(0,0.62fr)]">
+      <div className="text-sm font-semibold text-[var(--panel-card-text)]">{label}</div>
+      <div className="min-w-0 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+        <span className="font-semibold text-[var(--panel-card-text)]">{value || 'Unassigned'}</span>
+        {detail ? <span> · {detail}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function ReviewAssignmentSection({ title, children }) {
+  return (
+    <section className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-4">
+      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">{title}</div>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+function getSingleTableStructuralColumnsForReview({
+  coreMapping = {},
+  temporalMapping = {},
+  placeParts = [],
+  relationshipParts = [],
+  relationshipMetadataMapping = {},
+}) {
+  const columns = new Set([
+    ...Object.values(coreMapping || {}),
+    ...Object.values(temporalMapping || {}),
+    ...Object.values(relationshipMetadataMapping || {}),
+  ].filter(Boolean));
+
+  for (const part of placeParts || []) {
+    [
+      part?.placeColumn,
+      part?.roleMode === 'column' ? part?.roleColumn : '',
+      part?.coordinateMode === 'pair' ? part?.coordinatePairColumn : '',
+      part?.coordinateMode === 'separate' ? part?.latitudeColumn : '',
+      part?.coordinateMode === 'separate' ? part?.longitudeColumn : '',
+    ].filter(Boolean).forEach((column) => columns.add(column));
+  }
+
+  for (const part of relationshipParts || []) {
+    [
+      part?.participantColumn,
+      part?.roleMode === 'column' ? part?.roleColumn : '',
+    ].filter(Boolean).forEach((column) => columns.add(column));
+  }
+
+  return columns;
+}
+
+function summarizeEvidenceSelections(selections = [], structuralColumns = new Set()) {
+  let included = 0;
+  let ignored = 0;
+
+  for (const selection of selections || []) {
+    const structural = structuralColumns.has(selection?.sourceColumn);
+    const action = structural
+      ? CUSTOM_INSPECTOR_FIELD_DEFAULTS.ignore
+      : normalizeAction(selection?.action);
+
+    if (action === CUSTOM_INSPECTOR_FIELD_DEFAULTS.ignore) ignored += 1;
+    else included += 1;
+  }
+
+  return { included, ignored };
+}
+
+function formatSingleRole(part = {}) {
+  if (part?.roleMode === 'column') {
+    return part?.roleColumn ? `role from ${part.roleColumn}` : 'role column unassigned';
+  }
+  return part?.participantColumn ? 'role from column heading' : 'role unassigned';
+}
+
+function SingleTableReviewAssignments({
+  coreMapping = {},
+  temporalMapping = {},
+  placeParts = [],
+  relationshipParts = [],
+  relationshipMetadataMapping = {},
+  customFieldSelections = [],
+}) {
+  const structuralColumns = getSingleTableStructuralColumnsForReview({
+    coreMapping,
+    temporalMapping,
+    placeParts,
+    relationshipParts,
+    relationshipMetadataMapping,
+  });
+  const evidence = summarizeEvidenceSelections(customFieldSelections, structuralColumns);
+  const assignedPlaces = (placeParts || []).filter((part) => part?.placeColumn);
+  const assignedRelationships = (relationshipParts || []).filter((part) => part?.participantColumn);
 
   return (
-    <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <ReviewStatusPanel
-          acceptedRecords={acceptedRecords}
-          warningCount={getReviewWarningDisplayCount(warnings, validationIssues)}
-          capabilityAudit={capabilityAudit}
-        />
-        <ReviewWarningsCard warnings={warnings} validationIssues={validationIssues} />
+    <div className="space-y-4">
+      <ReviewAssignmentIntro />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReviewAssignmentSection title="Time">
+          {Object.entries(REVIEW_TEMPORAL_LABELS).map(([field, label]) => (
+            <ReviewAssignmentLine
+              key={field}
+              label={label}
+              value={temporalMapping?.[field] || ''}
+            />
+          ))}
+        </ReviewAssignmentSection>
+
+        <ReviewAssignmentSection title="Places">
+          {assignedPlaces.length ? assignedPlaces.map((part, index) => {
+            const letter = String.fromCharCode(65 + index);
+            let coordinateDetail = '';
+            if (part?.coordinateMode === 'pair' && part?.coordinatePairColumn) {
+              coordinateDetail = `coordinates from ${part.coordinatePairColumn}`;
+            } else if (part?.coordinateMode === 'separate' && (part?.latitudeColumn || part?.longitudeColumn)) {
+              coordinateDetail = `coordinates from ${[part?.latitudeColumn, part?.longitudeColumn].filter(Boolean).join(' + ')}`;
+            }
+
+            return (
+              <ReviewAssignmentLine
+                key={`review-place-${index}`}
+                label={`Place ${letter}`}
+                value={part.placeColumn}
+                detail={[formatSingleRole({
+                  participantColumn: part.placeColumn,
+                  roleMode: part.roleMode,
+                  roleColumn: part.roleColumn,
+                }), coordinateDetail].filter(Boolean).join(' · ')}
+              />
+            );
+          }) : (
+            <p className="text-sm leading-relaxed text-[var(--panel-card-muted-text)]">No place assignments.</p>
+          )}
+        </ReviewAssignmentSection>
+
+        <ReviewAssignmentSection title="Relations">
+          {assignedRelationships.length ? assignedRelationships.map((part, index) => {
+            const letter = String.fromCharCode(65 + index);
+            return (
+              <ReviewAssignmentLine
+                key={`review-relation-${index}`}
+                label={`Part ${letter}`}
+                value={part.participantColumn}
+                detail={formatSingleRole(part)}
+              />
+            );
+          }) : (
+            <p className="text-sm leading-relaxed text-[var(--panel-card-muted-text)]">No relationship assignments.</p>
+          )}
+
+          {relationshipMetadataMapping?.Relationship_Type ? (
+            <ReviewAssignmentLine label="Relationship type" value={relationshipMetadataMapping.Relationship_Type} />
+          ) : null}
+          {relationshipMetadataMapping?.Relationship_Label ? (
+            <ReviewAssignmentLine label="Relationship label" value={relationshipMetadataMapping.Relationship_Label} />
+          ) : null}
+        </ReviewAssignmentSection>
+
+        <ReviewAssignmentSection title="Evidence">
+          <ReviewAssignmentLine
+            label="Additional fields"
+            value={`${evidence.included} included`}
+            detail={`${evidence.ignored} ignored`}
+          />
+        </ReviewAssignmentSection>
+      </div>
+    </div>
+  );
+}
+
+function workbookRefLabel(ref = {}) {
+  if (!ref?.sheetName || !ref?.columnName) return '';
+  return `${ref.sheetName} — ${ref.columnName}`;
+}
+
+function workbookRefKey(ref = {}) {
+  if (!ref?.sheetName || !ref?.columnName) return '';
+  return `${ref.sheetName}::${ref.columnName}`;
+}
+
+function getWorkbookStructuralRefsForReview(workbookMapping = {}) {
+  const refs = new Set();
+
+  const add = (ref) => {
+    const key = workbookRefKey(ref);
+    if (key) refs.add(key);
+  };
+
+  [
+    ...Object.values(workbookMapping.coreMappings || {}),
+    ...Object.values(workbookMapping.temporalMappings || {}),
+    ...Object.values(workbookMapping.relationshipMetadataMappings || {}),
+    ...Object.values(workbookMapping.pointMappings || {}),
+    ...Object.values(workbookMapping.routeCoordinatePairMappings || {}),
+  ].forEach(add);
+
+  for (const part of workbookMapping.placeParts || []) {
+    [
+      part?.placeRef,
+      part?.roleMode === 'column' ? part?.roleRef : null,
+      part?.coordinateMode === 'pair' ? part?.coordinatePairRef : null,
+      part?.coordinateMode === 'separate' ? part?.latitudeRef : null,
+      part?.coordinateMode === 'separate' ? part?.longitudeRef : null,
+    ].forEach(add);
+  }
+
+  for (const part of workbookMapping.relationshipParts || []) {
+    [
+      part?.participantRef,
+      part?.roleMode === 'column' ? part?.roleRef : null,
+    ].forEach(add);
+  }
+
+  return refs;
+}
+
+function summarizeWorkbookEvidenceSelections(workbookMapping = {}) {
+  const structuralRefs = getWorkbookStructuralRefsForReview(workbookMapping);
+  let included = 0;
+  let ignored = 0;
+
+  for (const selection of workbookMapping.customFieldSelections || []) {
+    const ref = getWorkbookSelectionRef(selection);
+    const structural = structuralRefs.has(workbookRefKey(ref));
+    const action = structural
+      ? CUSTOM_INSPECTOR_FIELD_DEFAULTS.ignore
+      : normalizeAction(selection?.action);
+
+    if (action === CUSTOM_INSPECTOR_FIELD_DEFAULTS.ignore) ignored += 1;
+    else included += 1;
+  }
+
+  return { included, ignored };
+}
+
+function formatWorkbookRole(part = {}) {
+  if (part?.roleMode === 'column') {
+    const role = workbookRefLabel(part?.roleRef);
+    return role ? `role from ${role}` : 'role column unassigned';
+  }
+  return workbookRefLabel(part?.participantRef) ? 'role from column heading' : 'role unassigned';
+}
+
+function WorkbookReviewAssignments({ workbookMapping = {} }) {
+  const evidence = summarizeWorkbookEvidenceSelections(workbookMapping);
+  const assignedPlaces = (workbookMapping.placeParts || []).filter((part) => workbookRefLabel(part?.placeRef));
+  const assignedRelationships = (workbookMapping.relationshipParts || []).filter((part) => workbookRefLabel(part?.participantRef));
+  const temporal = workbookMapping.temporalMappings || {};
+  const relationshipMetadata = workbookMapping.relationshipMetadataMappings || {};
+
+  return (
+    <div className="space-y-4">
+      <ReviewAssignmentIntro />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReviewAssignmentSection title="Time">
+          {Object.entries(REVIEW_TEMPORAL_LABELS).map(([field, label]) => (
+            <ReviewAssignmentLine
+              key={field}
+              label={label}
+              value={workbookRefLabel(temporal?.[field])}
+            />
+          ))}
+        </ReviewAssignmentSection>
+
+        <ReviewAssignmentSection title="Places">
+          {assignedPlaces.length ? assignedPlaces.map((part, index) => {
+            const letter = String.fromCharCode(65 + index);
+            let coordinateDetail = '';
+            if (part?.coordinateMode === 'pair' && workbookRefLabel(part?.coordinatePairRef)) {
+              coordinateDetail = `coordinates from ${workbookRefLabel(part.coordinatePairRef)}`;
+            } else if (part?.coordinateMode === 'separate') {
+              const refs = [workbookRefLabel(part?.latitudeRef), workbookRefLabel(part?.longitudeRef)].filter(Boolean);
+              if (refs.length) coordinateDetail = `coordinates from ${refs.join(' + ')}`;
+            }
+
+            return (
+              <ReviewAssignmentLine
+                key={`workbook-review-place-${index}`}
+                label={`Place ${letter}`}
+                value={workbookRefLabel(part.placeRef)}
+                detail={[formatWorkbookRole({
+                  participantRef: part.placeRef,
+                  roleMode: part.roleMode,
+                  roleRef: part.roleRef,
+                }), coordinateDetail].filter(Boolean).join(' · ')}
+              />
+            );
+          }) : (
+            <p className="text-sm leading-relaxed text-[var(--panel-card-muted-text)]">No place assignments.</p>
+          )}
+        </ReviewAssignmentSection>
+
+        <ReviewAssignmentSection title="Relations">
+          {assignedRelationships.length ? assignedRelationships.map((part, index) => {
+            const letter = String.fromCharCode(65 + index);
+            return (
+              <ReviewAssignmentLine
+                key={`workbook-review-relation-${index}`}
+                label={`Part ${letter}`}
+                value={workbookRefLabel(part.participantRef)}
+                detail={formatWorkbookRole(part)}
+              />
+            );
+          }) : (
+            <p className="text-sm leading-relaxed text-[var(--panel-card-muted-text)]">No relationship assignments.</p>
+          )}
+
+          {workbookRefLabel(relationshipMetadata?.Relationship_Type) ? (
+            <ReviewAssignmentLine label="Relationship type" value={workbookRefLabel(relationshipMetadata.Relationship_Type)} />
+          ) : null}
+          {workbookRefLabel(relationshipMetadata?.Relationship_Label) ? (
+            <ReviewAssignmentLine label="Relationship label" value={workbookRefLabel(relationshipMetadata.Relationship_Label)} />
+          ) : null}
+        </ReviewAssignmentSection>
+
+        <ReviewAssignmentSection title="Evidence">
+          <ReviewAssignmentLine
+            label="Additional fields"
+            value={`${evidence.included} included`}
+            detail={`${evidence.ignored} ignored`}
+          />
+        </ReviewAssignmentSection>
+      </div>
+    </div>
+  );
+}
+
+function hasAssignedSinglePlaceParts(placeParts = []) {
+  return (placeParts || []).some((part) => Boolean(part?.placeColumn));
+}
+
+function hasAssignedSingleRelationshipParts(relationshipParts = []) {
+  return (relationshipParts || []).some((part) => Boolean(part?.participantColumn));
+}
+
+function hasAssignedWorkbookPlaceParts(placeParts = []) {
+  return (placeParts || []).some((part) => Boolean(part?.placeRef?.sheetName && part?.placeRef?.columnName));
+}
+
+function hasAssignedWorkbookRelationshipParts(relationshipParts = []) {
+  return (relationshipParts || []).some((part) => Boolean(part?.participantRef?.sheetName && part?.participantRef?.columnName));
+}
+
+function filterLegacyMappingMessages(items = [], { hasPlaces = false, hasRelationships = false } = {}) {
+  return (items || []).filter((item) => {
+    const message = String(item?.message || '');
+    if (
+      hasRelationships
+      && (
+        /Source_Name/i.test(message)
+        || /Target_Name/i.test(message)
+        || /source[- ]side.*target[- ]side.*relationship/i.test(message)
+      )
+    ) {
+      return false;
+    }
+
+    if (
+      hasPlaces
+      && (
+        /source[- ]side.*place/i.test(message)
+        || /target[- ]side.*place/i.test(message)
+      )
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+
+function ReviewStep({
+  validation,
+  summary,
+  mappedPreviewRows,
+  headers,
+  capabilityAudit,
+  coreMapping,
+  temporalMapping,
+  placeParts,
+  relationshipParts,
+  relationshipMetadataMapping,
+  customFieldSelections,
+}) {
+  const generalizedState = {
+    hasPlaces: hasAssignedSinglePlaceParts(placeParts),
+    hasRelationships: hasAssignedSingleRelationshipParts(relationshipParts),
+  };
+  const warnings = filterLegacyMappingMessages(summary?.warnings || [], generalizedState);
+  const acceptedRecords = summary?.acceptedRecordCount ?? mappedPreviewRows.length;
+  const rawValidationIssues = validation?.isValid ? [] : (validation?.issues || []);
+  const validationIssues = filterLegacyMappingMessages(rawValidationIssues, generalizedState);
+
+  return (
+    <div className="space-y-4">
+      <SingleTableReviewAssignments
+        coreMapping={coreMapping}
+        temporalMapping={temporalMapping}
+        placeParts={placeParts}
+        relationshipParts={relationshipParts}
+        relationshipMetadataMapping={relationshipMetadataMapping}
+        customFieldSelections={customFieldSelections}
+      />
+
+      <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-4">
+        <div className="mb-4">
+          <div className="text-lg font-bold text-[var(--panel-card-text)]">What Peridot can do with this mapping</div>
+          <p className="mt-1 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            This check reports record acceptance, current tool availability, and any source values that may limit a visualization.
+          </p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <ReviewStatusPanel
+            acceptedRecords={acceptedRecords}
+            warningCount={getReviewWarningDisplayCount(warnings, validationIssues)}
+            capabilityAudit={capabilityAudit}
+            mapReady={generalizedState.hasPlaces}
+          />
+          <ReviewWarningsCard warnings={warnings} validationIssues={validationIssues} />
+        </div>
       </div>
     </div>
   );
@@ -1085,21 +1522,37 @@ function WorkbookRelationshipsMappingStep({ workbookModel, workbookMapping, onRe
   );
 }
 function WorkbookReviewStep({ workbookModel, workbookMapping, validation, summary, previewRows, capabilityAudit }) {
-  const issues = validation?.issues || [];
-  const errors = issues.filter((issue) => issue.severity === 'error');
-  const warnings = issues.filter((issue) => issue.severity !== 'error');
+  const generalizedState = {
+    hasPlaces: hasAssignedWorkbookPlaceParts(workbookMapping.placeParts),
+    hasRelationships: hasAssignedWorkbookRelationshipParts(workbookMapping.relationshipParts),
+  };
+  const rawIssues = validation?.issues || [];
+  const filteredIssues = filterLegacyMappingMessages(rawIssues, generalizedState);
+  const errors = filteredIssues.filter((issue) => issue.severity === 'error');
+  const warnings = filteredIssues.filter((issue) => issue.severity !== 'error');
   const acceptedRecords = summary?.totalRows ?? capabilityAudit?.dataset?.totalRows ?? previewRows.length;
   const validationIssues = [...errors, ...warnings];
 
   return (
-    <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <ReviewStatusPanel
-          acceptedRecords={acceptedRecords}
-          warningCount={getReviewWarningDisplayCount(warnings, validationIssues)}
-          capabilityAudit={capabilityAudit}
-        />
-        <ReviewWarningsCard warnings={warnings} validationIssues={validationIssues} />
+    <div className="space-y-4">
+      <WorkbookReviewAssignments workbookMapping={workbookMapping} />
+
+      <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-4">
+        <div className="mb-4">
+          <div className="text-lg font-bold text-[var(--panel-card-text)]">What Peridot can do with this mapping</div>
+          <p className="mt-1 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            This check reports record acceptance, current tool availability, and any source values that may limit a visualization.
+          </p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <ReviewStatusPanel
+            acceptedRecords={acceptedRecords}
+            warningCount={getReviewWarningDisplayCount(warnings, validationIssues)}
+            capabilityAudit={capabilityAudit}
+            mapReady={generalizedState.hasPlaces}
+          />
+          <ReviewWarningsCard warnings={warnings} validationIssues={validationIssues} />
+        </div>
       </div>
     </div>
   );
@@ -2322,6 +2775,12 @@ export function PeridotColumnMappingModal({
               mappedPreviewRows={mappedRows.slice(0, 5)}
               headers={PERIDOT_TEMPLATE_COLUMNS}
               capabilityAudit={mappedRowsCapabilityAudit}
+              coreMapping={coreMapping}
+              temporalMapping={temporalMapping}
+              placeParts={placeParts}
+              relationshipParts={relationshipParts}
+              relationshipMetadataMapping={relationshipMetadataMapping}
+              customFieldSelections={effectiveCustomSelections}
             />
           ) : null}
 
