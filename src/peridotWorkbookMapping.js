@@ -20,7 +20,7 @@
  * - define a workbook-aware mapping state for CSV/TSV/Excel workbook models;
  * - support Sheet + Column references instead of flat column-only mappings;
  * - define primary record sheet selection;
- * - define Letter_ID-based joins for multi-sheet letter-level assembly;
+ * - define explicit unique-ID joins for multi-sheet record assembly;
  * - allow person/place lookup joins by exact-match name/place keys;
  * - validate mapping rules before UI import wiring;
  * - keep this module pure and unmounted. No React state, no modal rendering,
@@ -32,9 +32,9 @@
  *   Source_Longitude, Target_Location, Target_Latitude, Target_Longitude.
  * - Peridot also supports optional temporal roles for Date_Start, Date_End,
  *   and Date_Display so datasets can preserve intervals or multiple dates.
- * - Single-sheet imports do not require Letter_ID.
- * - If users assemble letter-level record information from multiple Excel
- *   sheets, a true Letter_ID join is required.
+ * - The number of sheets in a workbook does not create a join requirement.
+ * - A shared unique-ID join is required only when the user's active semantic
+ *   mappings actually read record information from more than one sheet.
  * - Person names and place names may act as exact-match lookup keys.
  * - Exact-match person/place keys are intentionally not cleaned, normalized,
  *   translated, merged, or fuzzy-matched. Rome/Roma remain separate places.
@@ -117,8 +117,12 @@ export const PERIDOT_RECOMMENDED_PLACE_KEY_NAMES = Object.freeze([
 export const PERIDOT_EXACT_MATCH_LOOKUP_WARNING =
   'Peridot matches person and place keys exactly as written. Variants such as Rome/Roma, Florence/Firenze, or Suor Maria/Maria Maddalena will be treated as separate entities unless standardized before upload.';
 
-export const PERIDOT_LETTER_ID_REQUIREMENT_WARNING =
-  'Peridot requires a true Letter_ID when assembling letter-level record information from multiple workbook sheets. Row order is not used as the primary join strategy.';
+export const PERIDOT_CROSS_SHEET_ID_REQUIREMENT_WARNING =
+  'When mapped record information comes from multiple workbook sheets, Peridot requires an explicit shared unique-ID join. Row order is not used as the primary join strategy.';
+
+// Temporary export alias retained while older callers/tests may still import the
+// correspondence-era name. The user-facing requirement is now dataset-neutral.
+export const PERIDOT_LETTER_ID_REQUIREMENT_WARNING = PERIDOT_CROSS_SHEET_ID_REQUIREMENT_WARNING;
 
 function asText(value) {
   return String(value ?? '').trim();
@@ -643,7 +647,9 @@ export function buildInitialPeridotWorkbookMappingState(workbookModel, options =
 
   return Object.freeze({
     datasetProfileId: String(options.datasetProfileId || '').trim() || 'peridot.correspondence-directed-record',
-    mode: usableSheets.length <= 1 ? PERIDOT_WORKBOOK_MAPPING_MODES.singleSheet : PERIDOT_WORKBOOK_MAPPING_MODES.multiSheetLetterId,
+    // A workbook containing several sheets is not automatically a multi-sheet
+    // import. The active semantic mappings determine whether joins are needed.
+    mode: PERIDOT_WORKBOOK_MAPPING_MODES.singleSheet,
     primarySheetName,
     primaryLetterIdColumn: letterIdSuggestion?.columnName || '',
     primaryRecordSheetSuggestions: primarySuggestions,
@@ -667,7 +673,6 @@ export function buildInitialPeridotWorkbookMappingState(workbookModel, options =
       )
     ),
     warnings: Object.freeze([
-      PERIDOT_LETTER_ID_REQUIREMENT_WARNING,
       PERIDOT_EXACT_MATCH_LOOKUP_WARNING,
     ]),
   });
@@ -728,7 +733,6 @@ export function validatePeridotWorkbookMapping(workbookModel, mappingState = {})
   const usableSheets = getUsableWorkbookSheets(workbookModel);
   const primarySheetName = asText(mappingState.primarySheetName);
   const primarySheet = getWorkbookSheet(workbookModel, primarySheetName);
-  const mode = mappingState.mode || (usableSheets.length <= 1 ? PERIDOT_WORKBOOK_MAPPING_MODES.singleSheet : PERIDOT_WORKBOOK_MAPPING_MODES.multiSheetLetterId);
   const coreMappings = mappingState.coreMappings || {};
   const temporalMappings = mappingState.temporalMappings || {};
   const pointMappings = mappingState.pointMappings || {};
@@ -803,27 +807,20 @@ export function validatePeridotWorkbookMapping(workbookModel, mappingState = {})
   const mappedSheets = getMappedWorkbookSemanticSheets(mappingState);
   const nonPrimaryMappedSheets = mappedSheets.filter((sheetName) => sheetName !== primarySheetName);
 
-  if (usableSheets.length > 1 && nonPrimaryMappedSheets.length > 0 && mode !== PERIDOT_WORKBOOK_MAPPING_MODES.multiSheetLetterId) {
-    issues.push({
-      code: 'multi_sheet_mapping_requires_letter_id_mode',
-      severity: 'error',
-      message: 'Core fields mapped from multiple sheets require Letter_ID-based workbook assembly.',
-      sheets: mappedSheets,
-    });
-  }
-
-  if (usableSheets.length > 1 && (nonPrimaryMappedSheets.length > 0 || mode === PERIDOT_WORKBOOK_MAPPING_MODES.multiSheetLetterId)) {
+  // Cross-sheet requirements are driven by what the user actually mapped, not
+  // by how many auxiliary/reference sheets happen to exist in the workbook.
+  if (nonPrimaryMappedSheets.length > 0) {
     if (!asText(mappingState.primaryLetterIdColumn)) {
       issues.push({
-        code: 'missing_primary_letter_id',
+        code: 'missing_primary_join_id',
         severity: 'error',
-        message: 'Choose a Letter_ID column on the primary record sheet before combining letter-level data from multiple sheets.',
+        message: 'Choose the shared unique ID column on the primary record sheet before combining mapped data from multiple sheets.',
       });
     } else if (!columnExists(workbookModel, makeWorkbookColumnRef(primarySheetName, mappingState.primaryLetterIdColumn))) {
       issues.push({
-        code: 'invalid_primary_letter_id',
+        code: 'invalid_primary_join_id',
         severity: 'error',
-        message: `Primary Letter_ID column “${mappingState.primaryLetterIdColumn}” is not present on sheet “${primarySheetName}”.`,
+        message: `Primary unique ID column “${mappingState.primaryLetterIdColumn}” is not present on sheet “${primarySheetName}”.`,
       });
     }
 
@@ -839,9 +836,9 @@ export function validatePeridotWorkbookMapping(workbookModel, mappingState = {})
 
       if (!hasJoin) {
         issues.push({
-          code: 'missing_letter_id_join_for_mapped_sheet',
+          code: 'missing_unique_id_join_for_mapped_sheet',
           severity: 'error',
-          message: `Sheet “${sheetName}” is used for core mappings but has no Letter_ID join to primary sheet “${primarySheetName}”.`,
+          message: `Sheet “${sheetName}” supplies mapped data but has no explicit unique-ID join to primary sheet “${primarySheetName}”.`,
           sheetName,
         });
       }
@@ -849,8 +846,8 @@ export function validatePeridotWorkbookMapping(workbookModel, mappingState = {})
   }
 
   (mappingState.letterLevelJoins || []).forEach((join, index) => {
-    const fromIssue = getReferenceValidationIssue(workbookModel, join?.from, 'letter_join_from', `Letter_ID join ${index + 1} source`);
-    const toIssue = getReferenceValidationIssue(workbookModel, join?.to, 'letter_join_to', `Letter_ID join ${index + 1} target`);
+    const fromIssue = getReferenceValidationIssue(workbookModel, join?.from, 'record_join_from', `Unique-ID join ${index + 1} source`);
+    const toIssue = getReferenceValidationIssue(workbookModel, join?.to, 'record_join_to', `Unique-ID join ${index + 1} target`);
     if (fromIssue) issues.push({ ...fromIssue, severity: 'error' });
     if (toIssue) issues.push({ ...toIssue, severity: 'error' });
   });
@@ -877,10 +874,13 @@ export function validatePeridotWorkbookMapping(workbookModel, mappingState = {})
       severity: 'warning',
       message: PERIDOT_EXACT_MATCH_LOOKUP_WARNING,
     });
+  }
+
+  if (nonPrimaryMappedSheets.length > 0) {
     issues.push({
-      code: 'letter_id_requirement',
+      code: 'cross_sheet_id_requirement',
       severity: 'warning',
-      message: PERIDOT_LETTER_ID_REQUIREMENT_WARNING,
+      message: PERIDOT_CROSS_SHEET_ID_REQUIREMENT_WARNING,
     });
   }
 
