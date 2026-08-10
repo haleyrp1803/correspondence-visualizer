@@ -296,6 +296,11 @@ export function normalizePeridotTemplateRowForGeography(
     customInspectorFields,
     ignoredUploadedColumns: Array.isArray(row?.ignoredUploadedColumns) ? [...row.ignoredUploadedColumns] : [],
     originalUploadedRow: row?.originalUploadedRow ? { ...row.originalUploadedRow } : null,
+    // Preserve the authoritative generalized mapping semantics through the
+    // temporary legacy runtime adapter. Network and other generalized
+    // consumers must not have to reconstruct relationship meaning from
+    // Source/Target compatibility fields after import.
+    generalizedObservation: row?.generalizedObservation || null,
     originalTemplateRow: { ...(row || {}) },
   };
 }
@@ -354,6 +359,11 @@ export function normalizePeridotTemplateRowForLetter(
     customInspectorFields,
     ignoredUploadedColumns: Array.isArray(row?.ignoredUploadedColumns) ? [...row.ignoredUploadedColumns] : [],
     originalUploadedRow: row?.originalUploadedRow ? { ...row.originalUploadedRow } : null,
+    // Preserve the authoritative generalized mapping semantics through the
+    // temporary legacy runtime adapter. Network and other generalized
+    // consumers must not have to reconstruct relationship meaning from
+    // Source/Target compatibility fields after import.
+    generalizedObservation: row?.generalizedObservation || null,
     originalTemplateRow: { ...(row || {}) },
   };
 }

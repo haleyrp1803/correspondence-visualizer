@@ -272,8 +272,8 @@ function CapabilitySummaryWorkspace({ availability, onOpenSearch }) {
       value: availability.hasNetwork ? `${numberLabel(availability.networkEdgeCount)} relationships` : 'Not available',
       ready: availability.hasNetwork,
       note: availability.hasNetwork
-        ? 'Source-target entity records have relationship roles and can be explored as networks.'
-        : 'No mapped source-target entity relationships are available in the current scope.',
+        ? 'Explicitly mapped entity relationships are available and can be explored as networks.'
+        : 'No explicitly mapped entity relationships are available in the current scope.',
     },
     {
       label: 'Charts',
@@ -691,10 +691,14 @@ export function PeridotVisualizationsWorkspace({
     routeCount: 0,
     networkNodeCount: 0,
     networkEdgeCount: 0,
+    geographicNetworkNodeCount: 0,
+    geographicNetworkEdgeCount: 0,
     chartFieldCount: 0,
     hasPointMap: false,
     hasRouteMap: false,
     hasNetwork: false,
+    hasForceNetwork: false,
+    hasEntityNetwork: false,
     hasCharts: false,
     hasExploreData: false,
     ...(visualizationAvailability || {}),
@@ -820,7 +824,7 @@ export function PeridotVisualizationsWorkspace({
       unavailableTitle: 'Map by Location is not available for this dataset.',
       why: 'This dataset does not contain mapped point-place, point-coordinate, source-target place, or source-target coordinate-pair roles in the current scope. Records may still be valid for networks, charts, search, Inspector, or export.',
       availableInstead: [
-        availability.hasNetwork ? 'Map by Person / Entity' : null,
+        availability.hasEntityNetwork ? 'Map by Person / Entity' : null,
         availability.hasCharts ? 'Chart Visualizations' : null,
         availability.hasExploreData ? 'Explore Your Data' : null,
       ].filter(Boolean),
@@ -828,10 +832,12 @@ export function PeridotVisualizationsWorkspace({
     [VISUALIZATION_TOOLS.ENTITY_NETWORK]: {
       label: 'Map by Person / Entity',
       category: 'Network Visualizations',
-      available: availability.hasNetwork,
+      available: availability.hasEntityNetwork,
       action: onSelectPeopleNetwork,
       unavailableTitle: 'Map by Person / Entity is not available for this dataset.',
-      why: 'This dataset does not contain mapped source-target entity relationship fields in the current scope. That is expected for point/site, catalogue, and time-series datasets, which may still be valid for location maps, charts, search, Inspector, and export.',
+      why: availability.hasNetwork
+        ? 'This dataset contains entity relationships, but no relationship currently has usable mapped geographic anchors for both connected entities. Use the Force-Directed Network to explore the relationships without geographic positioning.'
+        : 'This dataset does not contain explicitly mapped entity relationships in the current scope. That is expected for point/site, catalogue, and time-series datasets, which may still be valid for location maps, charts, search, Inspector, and export.',
       availableInstead: [
         availability.hasPointMap || availability.hasRouteMap ? 'Map by Location' : null,
         availability.hasCharts ? 'Chart Visualizations' : null,
@@ -841,10 +847,10 @@ export function PeridotVisualizationsWorkspace({
     [VISUALIZATION_TOOLS.FORCE_NETWORK]: {
       label: 'Force-Directed Network',
       category: 'Network Visualizations',
-      available: availability.hasNetwork,
+      available: availability.hasForceNetwork,
       action: onSelectForceDirected,
       unavailableTitle: 'Force-Directed Network is not available for this dataset.',
-      why: 'Force-directed layouts require mapped source-target entity relationships. This dataset can still be valid for location maps, charts, search, Inspector, and export even when it does not contain network data.',
+      why: 'Force-directed layouts require explicitly mapped entity relationships. This dataset can still be valid for location maps, charts, search, Inspector, and export even when it does not contain network data.',
       availableInstead: [
         availability.hasPointMap || availability.hasRouteMap ? 'Map by Location' : null,
         availability.hasCharts ? 'Chart Visualizations' : null,
@@ -860,7 +866,7 @@ export function PeridotVisualizationsWorkspace({
       why: 'No active records or chartable fields are available for charting in the current scope.',
       availableInstead: [
         availability.hasPointMap || availability.hasRouteMap ? 'Map by Location' : null,
-        availability.hasNetwork ? 'Map by Person / Entity' : null,
+        availability.hasEntityNetwork ? 'Map by Person / Entity' : null,
         availability.hasExploreData ? 'Explore Your Data' : null,
       ].filter(Boolean),
     },
@@ -873,7 +879,7 @@ export function PeridotVisualizationsWorkspace({
       why: '',
       availableInstead: [],
     },
-  }), [availability.hasCharts, availability.hasExploreData, availability.hasNetwork, availability.hasPointMap, availability.hasRouteMap, onOpenAnalytics, onOpenExplore, onSelectForceDirected, onSelectPeopleNetwork, onSelectPlaceMap]);
+  }), [availability.hasCharts, availability.hasEntityNetwork, availability.hasExploreData, availability.hasForceNetwork, availability.hasNetwork, availability.hasPointMap, availability.hasRouteMap, onOpenAnalytics, onOpenExplore, onSelectForceDirected, onSelectPeopleNetwork, onSelectPlaceMap]);
 
   const selectedDefinition = toolDefinitions[selectedTool] || toolDefinitions[VISUALIZATION_TOOLS.CAPABILITY_SUMMARY];
   const activeVisualizationLabel = selectedDefinition.label;

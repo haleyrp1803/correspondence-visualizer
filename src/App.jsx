@@ -52,6 +52,7 @@ import {
   revokeObjectUrl,
 } from './exportHelpers';
 import { buildForcePersonPositions } from './personForceLayoutHelpers';
+import { derivePeridotEntityNetworkSemantics } from './peridotEntityNetwork.js';
 import { InspectorConnectedCorrespondents } from './InspectorConnectedCorrespondents';
 import { InspectorPersonPlaces } from './InspectorPersonPlaces';
 import { InspectorBackButton } from './InspectorBackButton';
@@ -808,56 +809,45 @@ function computePersonEdgeWidth(count) {
   return Math.max(0.6, Math.min(4.2, 0.6 + Math.pow(count, 0.72) * 0.42));
 }
 
-// Person-network graph builder for the alternate analytic view.
+// Person-network graph builder shared by geographic and force-directed layouts.
+// Relationship semantics are derived in peridotEntityNetwork.js so layout no
+// longer determines (or reconstructs) what the user's relationships mean.
 function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQuery = '') {
   const personMap = new Map();
-  const edgeMap = new Map();
+  const { relationships, locations } = derivePeridotEntityNetworkSemantics(rows);
 
-  rows.forEach((row) => {
-    const source = row.sourcePerson;
-    const target = row.targetPerson;
-    if (!source || !target) return;
+  relationships.forEach((relationship) => {
+    [relationship.source, relationship.target].forEach((person) => {
+      if (!personMap.has(person)) {
+        personMap.set(person, { id: person, label: person, appearances: 0, locationCounts: new Map() });
+      }
+      personMap.get(person).appearances += relationship.count;
+    });
+  });
 
-    if (!personMap.has(source)) {
-      personMap.set(source, { id: source, label: source, appearances: 0, locationCounts: new Map() });
+  locations.forEach((location) => {
+    const person = location.person;
+    if (!personMap.has(person)) {
+      personMap.set(person, { id: person, label: person, appearances: 0, locationCounts: new Map() });
     }
-    if (!personMap.has(target)) {
-      personMap.set(target, { id: target, label: target, appearances: 0, locationCounts: new Map() });
-    }
-
-    const sourcePerson = personMap.get(source);
-    const targetPerson = personMap.get(target);
-    sourcePerson.appearances += 1;
-    targetPerson.appearances += 1;
-
-    if (validCoord(row.sourceLat, row.sourceLon) && !(row.sourceLat === 0 && row.sourceLon === 0)) {
-      const key = `${row.sourceLoc}__${row.sourceLat}__${row.sourceLon}`;
-      sourcePerson.locationCounts.set(key, (sourcePerson.locationCounts.get(key) || 0) + 1);
-    }
-    if (validCoord(row.targetLat, row.targetLon) && !(row.targetLat === 0 && row.targetLon === 0)) {
-      const key = `${row.targetLoc}__${row.targetLat}__${row.targetLon}`;
-      targetPerson.locationCounts.set(key, (targetPerson.locationCounts.get(key) || 0) + 1);
-    }
-
-    const edgeKey = `${source}-->${target}`;
-    if (!edgeMap.has(edgeKey)) {
-      edgeMap.set(edgeKey, { id: edgeKey, source, target, count: 0, dates: new Set(), rows: [] });
-    }
-    const edge = edgeMap.get(edgeKey);
-    edge.count += 1;
-    if (row.date) edge.dates.add(row.date);
-    edge.rows.push(row);
+    const key = `${location.label}__${location.latitude}__${location.longitude}`;
+    const personRecord = personMap.get(person);
+    personRecord.locationCounts.set(key, (personRecord.locationCounts.get(key) || 0) + 1);
   });
 
   const q = searchQuery.trim().toLowerCase();
-  const filteredEdgeRecords = Array.from(edgeMap.values()).filter((edge) => {
+  const filteredEdgeRecords = relationships.filter((edge) => {
     if (edge.count < minCount) return false;
     if (!q) return true;
     const haystack = [
       edge.source,
       edge.target,
-      ...Array.from(edge.dates),
-      ...edge.rows.flatMap((row) => [row.sourceLoc, row.targetLoc, row.sourcePerson, row.targetPerson]),
+      edge.relationshipType,
+      edge.relationshipLabel,
+      edge.sourceRole,
+      edge.targetRole,
+      ...(edge.dates || []),
+      ...edge.rows.flatMap((row) => [row?.sourceLoc, row?.targetLoc, row?.sourcePerson, row?.targetPerson]),
     ]
       .join(' ')
       .toLowerCase();
@@ -958,6 +948,7 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
       const source = personById.get(edge.source);
       const target = personById.get(edge.target);
       if (!source || !target) return null;
+      const directionalGlyph = edge.direction === 'directed' ? '→' : '—';
       return {
         ...edge,
         sourceLabel: source.label,
@@ -965,10 +956,10 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
         path: curvedPath({ x: source.x, y: source.y }, { x: target.x, y: target.y }, layoutMode === 'geographic' ? 0.12 : 0.22),
         width: computePersonEdgeWidth(edge.count),
         letterMetadata: edge.rows,
-        samplePairs: [`${edge.source} → ${edge.target}`],
+        samplePairs: [`${edge.source} ${directionalGlyph} ${edge.target}`],
         sources: [edge.source],
         targets: [edge.target],
-        dates: Array.from(edge.dates),
+        dates: edge.dates || [],
       };
     })
     .filter(Boolean);
@@ -2465,6 +2456,18 @@ function SvgMap({
             <rect x={frame.x} y={frame.y} width={frame.w} height={frame.h} rx="16" />
           </clipPath>
 
+          <marker
+            id="peridot-directed-edge-arrow"
+            markerWidth="7"
+            markerHeight="7"
+            refX="6"
+            refY="3.5"
+            orient="auto"
+            markerUnits="strokeWidth"
+          >
+            <path d="M0,0 L7,3.5 L0,7 Z" fill="context-stroke" />
+          </marker>
+
           <filter id="map-paper-grain" x="-20%" y="-20%" width="140%" height="140%">
             <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="noise" />
             <feColorMatrix in="noise" type="saturate" values="0" result="monoNoise" />
@@ -2632,6 +2635,7 @@ function SvgMap({
                     vectorEffect="non-scaling-stroke"
                     strokeLinecap="round"
                     strokeDasharray={isAnimated ? 'none' : edge.count <= 2 ? '2.5 2' : 'none'}
+                    markerEnd={edge.direction === 'directed' ? 'url(#peridot-directed-edge-arrow)' : undefined}
                     onMouseEnter={(event) => onEdgeEnter(edge, getPointerPosition(event))}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -3581,9 +3585,13 @@ export default function EuropeNetworkMapApp() {
     () => buildGraph(filteredPlaces, filteredAggregatedEdges, mapViewportSize.width, mapViewportSize.height),
     [filteredPlaces, filteredAggregatedEdges, mapViewportSize.width, mapViewportSize.height]
   );
+  const entityNetworkSemantics = useMemo(
+    () => derivePeridotEntityNetworkSemantics(filteredRowsByTime),
+    [filteredRowsByTime]
+  );
   const personGraph = useMemo(
     () => buildPersonGraph(
-      filteredRowsByTime.filter((row) => row.sourcePerson && row.targetPerson),
+      filteredRowsByTime,
       mapViewportSize.width,
       mapViewportSize.height,
       personLayoutMode,
@@ -3615,8 +3623,44 @@ export default function EuropeNetworkMapApp() {
     const rowCount = filteredRowsByTime.length;
     const pointCount = places.length;
     const routeCount = filteredAggregatedEdges.length;
-    const networkNodeCount = personGraph.nodes?.length || 0;
-    const networkEdgeCount = personGraph.edges?.length || 0;
+    // Network availability is semantic, not layout-dependent. A dataset can
+    // contain valid entity relationships even when none of its entities has a
+    // geographic anchor. In that case the force-directed network must remain
+    // available while the geographic person/entity layout may have nothing to
+    // position.
+    const availableNetworkRelationships = (entityNetworkSemantics.relationships || [])
+      .filter((edge) => edge.count >= minCount);
+    const availableNetworkEntities = new Set();
+    availableNetworkRelationships.forEach((edge) => {
+      if (edge.source) availableNetworkEntities.add(edge.source);
+      if (edge.target) availableNetworkEntities.add(edge.target);
+    });
+    const networkNodeCount = availableNetworkEntities.size;
+    const networkEdgeCount = availableNetworkRelationships.length;
+
+    // Geographic person/entity networks have a stricter capability boundary
+    // than force-directed networks. A semantic relationship is sufficient for
+    // force layout, but a geographic network requires at least one relationship
+    // whose two endpoints can both be positioned from explicit mapped coordinates.
+    const geographicallyMappableEntities = new Set(
+      (entityNetworkSemantics.locations || [])
+        .filter((location) => Number.isFinite(Number(location.latitude)) && Number.isFinite(Number(location.longitude)))
+        .map((location) => location.person)
+        .filter(Boolean)
+    );
+    const geographicNetworkEdgeCount = availableNetworkRelationships.filter((edge) => (
+      geographicallyMappableEntities.has(edge.source)
+      && geographicallyMappableEntities.has(edge.target)
+    )).length;
+    const geographicNetworkNodeCount = new Set(
+      availableNetworkRelationships
+        .filter((edge) => (
+          geographicallyMappableEntities.has(edge.source)
+          && geographicallyMappableEntities.has(edge.target)
+        ))
+        .flatMap((edge) => [edge.source, edge.target])
+    ).size;
+
     const chartFieldCount = [
       ...(analyticsFields.barGroupOptions || []),
       ...(analyticsFields.segmentGroupOptions || []),
@@ -3632,14 +3676,18 @@ export default function EuropeNetworkMapApp() {
       routeCount,
       networkNodeCount,
       networkEdgeCount,
+      geographicNetworkNodeCount,
+      geographicNetworkEdgeCount,
       chartFieldCount,
       hasPointMap: pointCount > 0,
       hasRouteMap: routeCount > 0,
       hasNetwork: networkNodeCount > 0 && networkEdgeCount > 0,
+      hasForceNetwork: networkNodeCount > 0 && networkEdgeCount > 0,
+      hasEntityNetwork: geographicNetworkNodeCount > 0 && geographicNetworkEdgeCount > 0,
       hasCharts: rowCount > 0 && chartFieldCount > 0,
       hasExploreData: rowCount > 0,
     };
-  }, [analyticsFields, filteredAggregatedEdges.length, filteredRowsByTime.length, personGraph.edges, personGraph.nodes, places.length]);
+  }, [analyticsFields, entityNetworkSemantics, filteredAggregatedEdges.length, filteredRowsByTime.length, minCount, places.length]);
   const viewResetKey = useMemo(() => {
     const layoutKey = viewMode === 'person' ? `${viewMode}:${personLayoutMode}` : viewMode;
     return `${layoutKey}:${timelineMode}:${rangeStart}:${rangeEnd}`;
