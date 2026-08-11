@@ -14,6 +14,7 @@ function canonicalizeForComparison(value) {
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.keys(value)
+        .filter((key) => key !== 'temporalAssertions')
         .sort()
         .map((key) => [key, canonicalizeForComparison(value[key])])
     );
@@ -63,6 +64,12 @@ export function runPeridotCanonicalRuntimeSelfAudit() {
     completeRoundTrip: active.compatibility?.completeSourceRoundTrip === true,
     activeSourceMarkedCanonical:
       active.normalizationSource?.mode === 'canonical-through-legacy-adapter',
+    canonicalTemporalAssertionsReachGeographyRows:
+      Array.isArray(active.normalizedRows?.[0]?.temporalAssertions)
+      && active.normalizedRows[0].temporalAssertions.length === 1,
+    canonicalTemporalAssertionsReachLetterRows:
+      Array.isArray(active.normalizedLetters?.[0]?.temporalAssertions)
+      && active.normalizedLetters[0].temporalAssertions.length === 1,
   });
 
   return Object.freeze({

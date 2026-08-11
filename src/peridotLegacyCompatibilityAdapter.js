@@ -29,6 +29,50 @@ function getCanonicalRecordMappedRow(record = {}) {
   return mappedRow && typeof mappedRow === 'object' ? cloneRow(mappedRow) : null;
 }
 
+function canonicalTemporalAssertionsBySourceRow(dataset = {}) {
+  const bySourceRow = new Map();
+
+  (dataset.records || []).forEach((record) => {
+    const sourceRowNumber = sourceRowNumberForRecord(record);
+    if (!Number.isFinite(sourceRowNumber) || sourceRowNumber === Number.MAX_SAFE_INTEGER) return;
+
+    const assertions = Array.isArray(record?.temporalAssertions)
+      ? record.temporalAssertions
+      : (record?.temporalAssertion ? [record.temporalAssertion] : []);
+
+    bySourceRow.set(sourceRowNumber, assertions);
+  });
+
+  return bySourceRow;
+}
+
+function sourceRowNumberForLegacyRuntimeRow(row = {}) {
+  const recordId = asText(row?.recordId);
+  const match = recordId.match(/^peridot_record_(\d+)$/);
+  if (!match) return null;
+
+  const sourceIndex = Number(match[1]);
+  return Number.isInteger(sourceIndex) && sourceIndex > 0 ? sourceIndex + 1 : null;
+}
+
+function attachCanonicalTemporalAssertions(
+  rows = [],
+  assertionsBySourceRow = new Map(),
+  fallbackAssertionsByIndex = [],
+) {
+  return (rows || []).map((row, index) => {
+    const sourceRowNumber = sourceRowNumberForLegacyRuntimeRow(row);
+    const assertions = (sourceRowNumber ? assertionsBySourceRow.get(sourceRowNumber) : null)
+      || fallbackAssertionsByIndex[index]
+      || [];
+
+    return {
+      ...row,
+      temporalAssertions: Array.isArray(assertions) ? [...assertions] : [],
+    };
+  });
+}
+
 /**
  * Extract accepted correspondence-compatible rows from canonical Records.
  *
@@ -61,6 +105,25 @@ export function buildPeridotLegacyCompatibilityModel(dataset = {}, options = {})
   const reconstructedAcceptedRows = extractCorrespondenceRowsFromCanonicalDataset(dataset);
   const rowsForLegacyNormalization = suppliedSourceRows || reconstructedAcceptedRows;
   const legacyModel = normalizePeridotTemplateRows(rowsForLegacyNormalization);
+  const assertionsBySourceRow = canonicalTemporalAssertionsBySourceRow(dataset);
+  const reconstructedAssertionsByIndex = suppliedSourceRows
+    ? []
+    : [...(dataset.records || [])]
+      .filter((record) => record?.recordType === 'correspondence-or-directed-record')
+      .sort((a, b) => sourceRowNumberForRecord(a) - sourceRowNumberForRecord(b))
+      .map((record) => Array.isArray(record?.temporalAssertions)
+        ? record.temporalAssertions
+        : (record?.temporalAssertion ? [record.temporalAssertion] : []));
+  const normalizedRows = attachCanonicalTemporalAssertions(
+    legacyModel.normalizedRows,
+    assertionsBySourceRow,
+    reconstructedAssertionsByIndex,
+  );
+  const normalizedLetters = attachCanonicalTemporalAssertions(
+    legacyModel.normalizedLetters,
+    assertionsBySourceRow,
+    reconstructedAssertionsByIndex,
+  );
 
   const sourceManifest = dataset?.sourceManifest || {};
   const completeSourceRoundTrip = Boolean(suppliedSourceRows)
@@ -68,8 +131,10 @@ export function buildPeridotLegacyCompatibilityModel(dataset = {}, options = {})
 
   return {
     ...legacyModel,
+    normalizedRows,
+    normalizedLetters,
     compatibility: Object.freeze({
-      adapterVersion: '1.0.0-draft',
+      adapterVersion: '1.1.0-draft',
       sourceDatasetId: asText(dataset?.datasetId),
       sourceMappingProfileId: asText(dataset?.mappingProfile?.id),
       sourceMappingProfileVersion: asText(dataset?.mappingProfile?.version),
@@ -94,6 +159,7 @@ function canonicalizeForComparison(value) {
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.keys(value)
+        .filter((key) => key !== 'temporalAssertions')
         .sort()
         .map((key) => [key, canonicalizeForComparison(value[key])])
     );

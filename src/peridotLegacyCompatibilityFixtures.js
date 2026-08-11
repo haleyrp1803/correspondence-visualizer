@@ -83,6 +83,11 @@ export function runPeridotLegacyCompatibilitySelfAudit() {
       && fullSourceModel.allRows.length === 4,
     fullSourceUnsupportedFixtureParityPasses:
       fullSourceAudit.passed === true,
+    canonicalTemporalAssertionsBridgedToRuntimeRows:
+      Array.isArray(fullSourceModel.normalizedRows?.[0]?.temporalAssertions)
+      && fullSourceModel.normalizedRows[0].temporalAssertions.length === 1
+      && Array.isArray(fullSourceModel.normalizedLetters?.[0]?.temporalAssertions)
+      && fullSourceModel.normalizedLetters[0].temporalAssertions.length === 1,
   });
 
   return Object.freeze({

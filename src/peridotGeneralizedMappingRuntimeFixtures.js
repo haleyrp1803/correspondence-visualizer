@@ -18,6 +18,7 @@ export function runPeridotGeneralizedMappingRuntimeSelfAudit() {
       PlaceRole: 'origin',
       Coordinates: '43.7696, 11.2558',
       Date: '1614-05-03',
+      Lifespan: '1589–1631',
       RelationType: 'letter',
       Subject: 'Marriage',
     },
@@ -30,6 +31,7 @@ export function runPeridotGeneralizedMappingRuntimeSelfAudit() {
       PlaceRole: 'origin',
       Coordinates: '41.9028, 12.4964',
       Date: '1614-05-11',
+      Lifespan: '1568–1615',
       RelationType: 'letter',
       Subject: 'Court',
     },
@@ -50,7 +52,7 @@ export function runPeridotGeneralizedMappingRuntimeSelfAudit() {
         longitudeColumn: '',
       },
     ],
-    temporalMapping: { Date: 'Date', Date_Start: '', Date_End: '' },
+    temporalMapping: { Date: 'Date', Date_Range: 'Lifespan', Date_Start: '', Date_End: '' },
     relationshipMetadataMapping: { Relationship_Type: 'RelationType', Relationship_Label: '' },
     customFieldSelections: [
       { sourceColumn: 'Subject', label: 'Subject', action: 'include', analyticsEligible: true },
@@ -97,6 +99,13 @@ export function runPeridotGeneralizedMappingRuntimeSelfAudit() {
       firstRecord?.attributes?.customFields?.Subject === 'Marriage',
     temporalValuePreserved:
       Boolean(firstRecord?.temporalAssertion),
+    multipleTemporalAssertionsPreservedCanonically:
+      firstRecord?.temporalAssertions?.length === 2
+      && firstRecord.temporalAssertions[0]?.role === 'Date'
+      && firstRecord.temporalAssertions[1]?.role === 'Lifespan',
+    multipleTemporalAssertionsReachRuntimeRows:
+      runtime.normalizedRows?.[0]?.temporalAssertions?.length === 2
+      && runtime.normalizedLetters?.[0]?.temporalAssertions?.length === 2,
     staleLegacyParticipantMappingsIgnored:
       mappedRows[0]?.Source_Name === 'Maria'
       && mappedRows[0]?.Target_Name === 'Cosimo',
