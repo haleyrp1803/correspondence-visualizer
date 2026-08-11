@@ -3497,8 +3497,8 @@ export default function EuropeNetworkMapApp() {
   // 2. `filteredRowsForActiveFilters` applies committed Search & Filter
   //    conditions on top of that timeline window. This is the authoritative
   //    scope for Advanced Search Results and Refine facets.
-  // 3. `selectedRowsForPlayback` sorts that committed scope into playback order.
-  // 4. `filteredRowsByTime` applies only current playback progress. It is the
+  // 3. `selectedRowsForPlayback` derives assertion-level temporal entries from that committed scope and sorts them into playback order.
+  // 4. `filteredRowsByTime` deduplicates active temporal entries back to rows and applies only current playback progress. It is the
   //    narrower scope for graph/map/network rendering and visualization export.
   //
   // Playback must never redefine Search Results or Refine. Moving the playback
@@ -3740,7 +3740,7 @@ export default function EuropeNetworkMapApp() {
   const currentRangeLabel = timelineMonths.length && timelineMode === 'range'
     ? `${timelineMonths[Math.min(rangeStart, rangeEnd)] || '—'} to ${timelineMonths[Math.max(rangeStart, rangeEnd)] || '—'}`
     : 'All available dates';
-  const currentPlaybackLabel = playbackIndex >= 0 && selectedRowsForPlayback[playbackIndex] ? selectedRowsForPlayback[playbackIndex].date : 'not running';
+  const currentPlaybackLabel = playbackIndex >= 0 && selectedRowsForPlayback[playbackIndex] ? (selectedRowsForPlayback[playbackIndex].displayLabel || selectedRowsForPlayback[playbackIndex].row?.date || 'dated record') : 'not running';
   const hasActivePlayback = playbackIndex >= 0 && Boolean(selectedRowsForPlayback[playbackIndex]);
   const currentPlaybackSpeedLabel = playbackSpeedOptions.find((option) => option.value === playbackSpeed)?.label || 'Slow';
   const currentMinCountLabel = minCountOptions.find((option) => option.value === minCount)?.label || String(minCount);
@@ -3859,7 +3859,7 @@ export default function EuropeNetworkMapApp() {
 
   const exportNodesRows = useMemo(() => buildExportNodeRows(graph.nodes), [graph.nodes]);
 
-  const activePlaybackRow = hasActivePlayback ? selectedRowsForPlayback[playbackIndex] || null : null;
+  const activePlaybackRow = hasActivePlayback ? selectedRowsForPlayback[playbackIndex]?.row || null : null;
   const activeAnimationEdgeId = activePlaybackRow ? (viewMode === 'geographic' ? edgeKeyFromRow(activePlaybackRow) : `${activePlaybackRow.sourcePerson}-->${activePlaybackRow.targetPerson}`) : '';
   const activeAnimationNodeIds = useMemo(() => {
     if (!activePlaybackRow) return new Set();

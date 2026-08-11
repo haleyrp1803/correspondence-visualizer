@@ -1,73 +1,206 @@
 /*
  * Pure timeline and playback helpers.
- * 
- * This module builds available timeline boundaries, filters rows to a selected timeline window, sorts playback rows, and restricts visible rows to playback progress.
- * 
- * Important relationships:
- * - `App.jsx` uses these helpers to derive visible rows before map/network/chart rendering.
- * - `timelinePlaybackComponents.jsx` renders controls for the state derived here.
- * 
- * Maintenance cautions:
- * - Keep this file pure. UI events belong in components; date/window semantics belong here.
+ *
+ * Canonical runtime rows may carry multiple `temporalAssertions`. Timeline
+ * derivation treats those assertions as the authoritative chronology and uses
+ * legacy `parsedDate` only when a row has no canonical assertions (demo / old
+ * compatibility paths).
  *
  * Scope contract:
- * - `buildTimelineMonths` derives the selectable global timeline boundaries
- *   from the full normalized row set.
- * - `filterRowsByTimelineWindow` applies the global timeline range before
- *   Search & Filter text/entity narrowing.
- * - `buildPlaybackRows` determines playback order after global filters are
- *   already applied.
- * - `filterRowsForPlayback` is the final row narrowing step before graph
- *   derivation. It should never mutate rows or recompute graph state directly.
+ * - timeline boundaries derive from all positionable temporal assertions;
+ * - range filtering keeps a row when at least one enabled assertion intersects
+ *   the selected chronological window;
+ * - playback is assertion-level, so one row may contribute multiple temporal
+ *   entries, while visualization visibility is deduplicated back to rows;
+ * - this module never reparses source temporal strings.
  */
 
-export function buildTimelineMonths(rows) {
-  return Array.from(
-    new Set(
-      rows
-        .filter((row) => row.parsedDate?.isTimelineUsable && row.parsedDate?.monthKey)
-        .map((row) => row.parsedDate.monthKey)
-        .filter(Boolean)
-    )
-  ).sort();
+const DEFAULT_TEMPORAL_ROLE = 'Date';
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
 }
 
-// Apply the global timeline range to a candidate row set. The caller controls
-// whether this receives all normalized rows or a narrower scope; in current
-// App.jsx flow it receives `normalizedRows` before Search & Filter text/entity
-// filters are applied.
-export function filterRowsByTimelineWindow(rows, timelineMode, timelineMonths, rangeStart, rangeEnd) {
+function yearFromSortKey(sortKey) {
+  if (!Number.isFinite(sortKey)) return null;
+  const year = Math.floor(Math.abs(sortKey) / 10000);
+  return Number.isInteger(year) && year > 0 ? year : null;
+}
+
+function legacyAssertionFromRow(row) {
+  const parsed = row?.parsedDate;
+  if (!parsed?.isTimelineUsable || !Number.isFinite(parsed?.sortKey)) return null;
+  const year = Number(parsed?.year) || yearFromSortKey(parsed.sortKey);
+  if (!year) return null;
+  return {
+    id: `${row?.id || 'row'}__legacy-date`,
+    role: DEFAULT_TEMPORAL_ROLE,
+    sourceText: row?.date || parsed?.raw || '',
+    display: row?.date || parsed?.label || parsed?.raw || String(year),
+    temporalShape: 'point',
+    consistency: 'valid',
+    sortBounds: { start: parsed.sortKey, end: parsed.sortKey },
+    visualizationUsability: {
+      hasKnownYear: true,
+      timelinePositionable: true,
+      intervalSafe: false,
+      yearFilterUsable: true,
+    },
+    __legacyProjection: true,
+  };
+}
+
+export function getRowTemporalAssertions(row) {
+  const canonical = asArray(row?.temporalAssertions).filter(Boolean);
+  if (canonical.length) return canonical;
+  const legacy = legacyAssertionFromRow(row);
+  return legacy ? [legacy] : [];
+}
+
+function isAssertionChronologicallyUsable(assertion) {
+  if (!assertion) return false;
+  if (assertion?.consistency === 'backwards' || assertion?.temporalShape === 'inconsistent') return false;
+  if (!assertion?.visualizationUsability?.timelinePositionable) return false;
+  return Number.isFinite(assertion?.sortBounds?.start) || Number.isFinite(assertion?.sortBounds?.end);
+}
+
+function assertionRole(assertion) {
+  const role = String(assertion?.role ?? '').trim();
+  return role || DEFAULT_TEMPORAL_ROLE;
+}
+
+function roleEnabled(assertion, enabledRoles) {
+  if (!enabledRoles) return true;
+  const roles = enabledRoles instanceof Set ? enabledRoles : new Set(asArray(enabledRoles));
+  if (!roles.size) return false;
+  return roles.has(assertionRole(assertion));
+}
+
+function assertionWindowBounds(assertion) {
+  const rawStart = assertion?.sortBounds?.start;
+  const rawEnd = assertion?.sortBounds?.end;
+  const start = Number.isFinite(rawStart) ? rawStart : null;
+  const end = Number.isFinite(rawEnd) ? rawEnd : null;
+  return { start, end };
+}
+
+function assertionPlaybackSortKey(assertion) {
+  const { start, end } = assertionWindowBounds(assertion);
+  // Closed and open-end intervals enter playback at their known beginning.
+  // Open-start assertions have no defensible beginning, so use their known end.
+  return start ?? end ?? null;
+}
+
+function assertionIntersectsWindow(assertion, windowStart, windowEnd) {
+  if (!isAssertionChronologicallyUsable(assertion)) return false;
+  const { start, end } = assertionWindowBounds(assertion);
+  if (start === null && end === null) return false;
+  if (start === null) return end >= windowStart;
+  if (end === null) return start <= windowEnd;
+  return start <= windowEnd && end >= windowStart;
+}
+
+export function getAvailableTemporalRoles(rows) {
+  const roles = new Set();
+  asArray(rows).forEach((row) => {
+    getRowTemporalAssertions(row).forEach((assertion) => {
+      if (isAssertionChronologicallyUsable(assertion)) roles.add(assertionRole(assertion));
+    });
+  });
+  return Array.from(roles).sort((a, b) => a.localeCompare(b));
+}
+
+export function buildTimelineEntries(rows, { enabledRoles = null } = {}) {
+  const entries = [];
+  asArray(rows).forEach((row) => {
+    getRowTemporalAssertions(row).forEach((assertion, assertionIndex) => {
+      if (!isAssertionChronologicallyUsable(assertion) || !roleEnabled(assertion, enabledRoles)) return;
+      const playbackSortKey = assertionPlaybackSortKey(assertion);
+      if (!Number.isFinite(playbackSortKey)) return;
+      const { start, end } = assertionWindowBounds(assertion);
+      entries.push({
+        id: `${row?.id || 'row'}__temporal_${assertion?.id || assertionIndex}`,
+        row,
+        rowId: row?.id,
+        assertion,
+        role: assertionRole(assertion),
+        displayLabel: assertion?.display || assertion?.sourceText || row?.date || '',
+        playbackSortKey,
+        windowStart: start,
+        windowEnd: end,
+      });
+    });
+  });
+  return entries;
+}
+
+export function buildTimelineMonths(rows, options = {}) {
+  const years = new Set();
+  buildTimelineEntries(rows, options).forEach((entry) => {
+    const startYear = yearFromSortKey(entry.windowStart);
+    const endYear = yearFromSortKey(entry.windowEnd);
+    if (startYear) years.add(String(startYear));
+    if (endYear) years.add(String(endYear));
+  });
+  return Array.from(years).sort((a, b) => Number(a) - Number(b));
+}
+
+function yearWindowSortBounds(startYear, endYear) {
+  const start = Number(startYear);
+  const end = Number(endYear);
+  if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
+  return {
+    start: Math.min(start, end) * 10000 + 101,
+    end: Math.max(start, end) * 10000 + 1231,
+  };
+}
+
+// Apply the global timeline range to a candidate row set. A row survives when
+// at least one enabled canonical temporal assertion intersects the year window.
+export function filterRowsByTimelineWindow(rows, timelineMode, timelineMonths, rangeStart, rangeEnd, options = {}) {
   if (timelineMode === 'all' || !timelineMonths.length) return rows;
 
   const startIndex = Math.min(rangeStart, rangeEnd);
   const endIndex = Math.max(rangeStart, rangeEnd);
-  const startKey = timelineMonths[startIndex];
-  const endKey = timelineMonths[endIndex];
+  const bounds = yearWindowSortBounds(timelineMonths[startIndex], timelineMonths[endIndex]);
+  if (!bounds) return rows;
 
-  return rows.filter((row) => {
-    if (!row.parsedDate?.isTimelineUsable || !row.parsedDate.monthKey) return false;
-    return row.parsedDate.monthKey >= startKey && row.parsedDate.monthKey <= endKey;
-  });
+  return asArray(rows).filter((row) => getRowTemporalAssertions(row).some((assertion) => (
+    roleEnabled(assertion, options.enabledRoles)
+    && assertionIntersectsWindow(assertion, bounds.start, bounds.end)
+  )));
 }
 
-export function buildPlaybackRows(rowsInWindow) {
-  return rowsInWindow
-    .filter((row) => row.parsedDate?.isTimelineUsable)
+export function buildPlaybackEntries(rowsInWindow, options = {}) {
+  return buildTimelineEntries(rowsInWindow, options)
     .slice()
     .sort((a, b) => {
-      const aSort = a.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
-      const bSort = b.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
-      if (aSort !== bSort) return aSort - bSort;
-      return a.date.localeCompare(b.date);
+      if (a.playbackSortKey !== b.playbackSortKey) return a.playbackSortKey - b.playbackSortKey;
+      const roleOrder = a.role.localeCompare(b.role);
+      if (roleOrder !== 0) return roleOrder;
+      const labelOrder = String(a.displayLabel || '').localeCompare(String(b.displayLabel || ''));
+      if (labelOrder !== 0) return labelOrder;
+      return String(a.rowId || '').localeCompare(String(b.rowId || ''));
     });
 }
 
-// Restrict an already-filtered row set to the current playback prefix. This is
-// the last row-scope narrowing step before map/network graph derivation and
-// therefore indirectly controls header export scope for graph visualizations.
-export function filterRowsForPlayback(baseRows, playbackRows, playbackIndex) {
-  if (!playbackRows.length || playbackIndex < 0) return baseRows;
-  const visibleIds = new Set(playbackRows.slice(0, playbackIndex + 1).map((row) => row.id));
+// Compatibility export retained while App.jsx migrates nomenclature. The
+// returned collection is now assertion-level timeline entries, not bare rows.
+export function buildPlaybackRows(rowsInWindow, options = {}) {
+  return buildPlaybackEntries(rowsInWindow, options);
+}
+
+// Restrict an already-filtered row set to rows whose first eligible temporal
+// entry has become active. Multiple active assertions for one row never
+// duplicate that row in downstream visualization scope.
+export function filterRowsForPlayback(baseRows, playbackEntries, playbackIndex) {
+  if (!playbackEntries.length || playbackIndex < 0) return baseRows;
+  const visibleIds = new Set(
+    playbackEntries
+      .slice(0, playbackIndex + 1)
+      .map((entry) => entry?.rowId ?? entry?.row?.id ?? entry?.id)
+      .filter(Boolean),
+  );
   return baseRows.filter((row) => visibleIds.has(row.id));
 }
 
@@ -76,11 +209,7 @@ export function buildTimelineBoundaryOptions(timelineMonths, rangeStart, rangeEn
   const startYear = timelineMonths[rangeStart] || '';
   const endYear = timelineMonths[rangeEnd] || '';
 
-  return {
-    timelineYears,
-    startYear,
-    endYear,
-  };
+  return { timelineYears, startYear, endYear };
 }
 
 export function resolveTimelineBoundaryIndex(timelineMonths, boundary, year) {
