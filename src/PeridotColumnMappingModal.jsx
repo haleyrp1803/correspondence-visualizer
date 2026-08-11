@@ -31,6 +31,7 @@ import {
   validatePeridotColumnMapping,
 } from './peridotColumnMapping.js';
 import { applyPeridotGeneralizedColumnMapping } from './peridotGeneralizedMappingRuntime.js';
+import { normalizePeridotGeneralizedMappedRows } from './peridotCorrespondenceProfile.js';
 import {
   buildPeridotRowsFromWorkbookMapping,
   buildWorkbookCustomFieldSelectionsForSheet,
@@ -440,9 +441,9 @@ function IdentifyRecordsStep({ staging, previewRows, headers }) {
   );
 }
 
-function TimeMappingStep({ headers, rows, temporalMapping, onTemporalChange }) {
+function TimeMappingStep({ headers, rows, temporalMapping, temporalNoteMappings, onTemporalChange, onTemporalNoteChange }) {
   return (
-    <TemporalMappingTable headers={headers} rows={rows} temporalMapping={temporalMapping} onChange={onTemporalChange} />
+    <TemporalMappingTable headers={headers} rows={rows} temporalMapping={temporalMapping} temporalNoteMappings={temporalNoteMappings} onChange={onTemporalChange} onNoteChange={onTemporalNoteChange} />
   );
 }
 
@@ -757,6 +758,7 @@ function ReviewWarningsCard({ warnings = [], validationIssues = [] }) {
 
 const REVIEW_TEMPORAL_LABELS = Object.freeze({
   Date: 'Date',
+  Date_Range: 'Date range / timespan',
   Date_Start: 'Beginning date',
   Date_End: 'Ending date',
 });
@@ -1151,6 +1153,53 @@ function filterLegacyMappingMessages(items = [], { hasPlaces = false, hasRelatio
 }
 
 
+function summarizeTemporalAssertionsForReview(rows = [], datasetId = 'temporal-review') {
+  try {
+    const canonical = normalizePeridotGeneralizedMappedRows(rows, { datasetId });
+    const assertions = (canonical.records || []).flatMap((record) => record.temporalAssertions || (record.temporalAssertion ? [record.temporalAssertion] : []));
+    const count = (predicate) => assertions.filter(predicate).length;
+    const inconsistent = count((item) => item.consistency === 'backwards');
+    const unrecognized = count((item) => item.parsingStatus === 'unrecognized');
+    const warnings = [];
+    if (inconsistent) warnings.push({ message: `${inconsistent} temporal value${inconsistent === 1 ? '' : 's'} contain a start after the end. Peridot preserved the source order and marked ${inconsistent === 1 ? 'it' : 'them'} unsafe for ordinary interval visualization.` });
+    if (unrecognized) warnings.push({ message: `${unrecognized} temporal value${unrecognized === 1 ? '' : 's'} could not be interpreted safely. The original text will still be preserved in Inspector/export.` });
+    return Object.freeze({
+      total: assertions.length,
+      fullyPositionable: count((item) => item.visualizationUsability?.timelinePositionable && item.parsingStatus === 'parsed' && item.consistency !== 'backwards'),
+      reducedPrecision: count((item) => item.parsingStatus === 'partial'),
+      approximate: count((item) => String(item.temporalShape || '').startsWith('approximate')),
+      openEnded: count((item) => item.temporalShape === 'openInterval'),
+      noKnownYear: count((item) => item.parsingStatus !== 'unrecognized' && !item.visualizationUsability?.hasKnownYear),
+      inconsistent, unrecognized, warnings: Object.freeze(warnings),
+    });
+  } catch (error) {
+    return Object.freeze({ total: 0, fullyPositionable: 0, reducedPrecision: 0, approximate: 0, openEnded: 0, noKnownYear: 0, inconsistent: 0, unrecognized: 0, warnings: Object.freeze([]) });
+  }
+}
+
+function TemporalReviewSummary({ summary }) {
+  if (!summary?.total) return null;
+  const items = [
+    ['Temporal values', summary.total],
+    ['Positionable', summary.fullyPositionable],
+    ['Reduced precision', summary.reducedPrecision],
+    ['Approximate', summary.approximate],
+    ['Open-ended', summary.openEnded],
+    ['No known year', summary.noKnownYear],
+    ['Inconsistent', summary.inconsistent],
+    ['Unrecognized', summary.unrecognized],
+  ];
+  return (
+    <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3">
+      <div className="text-sm font-semibold text-[var(--panel-card-text)]">Temporal interpretation</div>
+      <p className="mt-1 text-xs leading-relaxed text-[var(--panel-card-muted-text)]">Peridot preserves the original temporal text. These counts describe machine-readable structure and do not interpret researcher note columns as visualization rules.</p>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {items.map(([label, value]) => <div key={label} className="rounded-lg border border-[var(--panel-card-border)] px-2 py-2"><div className="text-lg font-bold text-[var(--panel-card-text)]">{value}</div><div className="text-xs text-[var(--panel-card-muted-text)]">{label}</div></div>)}
+      </div>
+    </div>
+  );
+}
+
 function ReviewStep({
   validation,
   summary,
@@ -1163,12 +1212,13 @@ function ReviewStep({
   relationshipParts,
   relationshipMetadataMapping,
   customFieldSelections,
+  temporalReviewSummary,
 }) {
   const generalizedState = {
     hasPlaces: hasAssignedSinglePlaceParts(placeParts),
     hasRelationships: hasAssignedSingleRelationshipParts(relationshipParts),
   };
-  const warnings = filterLegacyMappingMessages(summary?.warnings || [], generalizedState);
+  const warnings = [...filterLegacyMappingMessages(summary?.warnings || [], generalizedState), ...(temporalReviewSummary?.warnings || [])];
   const acceptedRecords = summary?.acceptedRecordCount ?? mappedPreviewRows.length;
   const rawValidationIssues = validation?.isValid ? [] : (validation?.issues || []);
   const validationIssues = filterLegacyMappingMessages(rawValidationIssues, generalizedState);
@@ -1183,6 +1233,8 @@ function ReviewStep({
         relationshipMetadataMapping={relationshipMetadataMapping}
         customFieldSelections={customFieldSelections}
       />
+
+      <TemporalReviewSummary summary={temporalReviewSummary} />
 
       <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-4">
         <div className="mb-4">
@@ -1492,12 +1544,13 @@ function WorkbookIdentifyRecordsStep({ workbookModel, workbookMapping }) {
   );
 }
 
-function WorkbookTimeMappingStep({ workbookModel, workbookMapping, onTemporalChange }) {
+function WorkbookTimeMappingStep({ workbookModel, workbookMapping, onTemporalChange, onTemporalNoteChange }) {
   return (
     <WorkbookTemporalMappingTable
       workbookModel={workbookModel}
       workbookMapping={workbookMapping}
       onChange={onTemporalChange}
+      onNoteChange={onTemporalNoteChange}
     />
   );
 }
@@ -1523,7 +1576,7 @@ function WorkbookRelationshipsMappingStep({ workbookModel, workbookMapping, onRe
     />
   );
 }
-function WorkbookReviewStep({ workbookModel, workbookMapping, validation, summary, previewRows, capabilityAudit }) {
+function WorkbookReviewStep({ workbookModel, workbookMapping, validation, summary, previewRows, capabilityAudit, temporalReviewSummary }) {
   const generalizedState = {
     hasPlaces: hasAssignedWorkbookPlaceParts(workbookMapping.placeParts),
     hasRelationships: hasAssignedWorkbookRelationshipParts(workbookMapping.relationshipParts),
@@ -1531,13 +1584,15 @@ function WorkbookReviewStep({ workbookModel, workbookMapping, validation, summar
   const rawIssues = validation?.issues || [];
   const filteredIssues = filterLegacyMappingMessages(rawIssues, generalizedState);
   const errors = filteredIssues.filter((issue) => issue.severity === 'error');
-  const warnings = filteredIssues.filter((issue) => issue.severity !== 'error');
+  const warnings = [...filteredIssues.filter((issue) => issue.severity !== 'error'), ...(temporalReviewSummary?.warnings || [])];
   const acceptedRecords = summary?.totalRows ?? capabilityAudit?.dataset?.totalRows ?? previewRows.length;
   const validationIssues = [...errors, ...warnings];
 
   return (
     <div className="space-y-4">
       <WorkbookReviewAssignments workbookMapping={workbookMapping} />
+
+      <TemporalReviewSummary summary={temporalReviewSummary} />
 
       <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-4">
         <div className="mb-4">
@@ -1911,6 +1966,7 @@ export function PeridotColumnMappingModal({
   const [activeStep, setActiveStep] = useState(stepKeys[0]);
   const [coreMapping, setCoreMapping] = useState(mappingState.coreMapping || {});
   const [temporalMapping, setTemporalMapping] = useState(stripDisplayDateMapping(mappingState.temporalMapping || {}));
+  const [temporalNoteMappings, setTemporalNoteMappings] = useState(mappingState.temporalNoteMappings || {});
   const [pointMapping, setPointMapping] = useState(mappingState.pointMapping || {});
   const [routeCoordinatePairMapping, setRouteCoordinatePairMapping] = useState(mappingState.routeCoordinatePairMapping || {});
   const [placeParts, setPlaceParts] = useState(() => buildInitialPlaceParts(mappingState));
@@ -1947,6 +2003,7 @@ export function PeridotColumnMappingModal({
     setStepTransitionPhase('idle');
     setCoreMapping(mappingState.coreMapping || {});
     setTemporalMapping(stripDisplayDateMapping(mappingState.temporalMapping || {}));
+    setTemporalNoteMappings(mappingState.temporalNoteMappings || {});
     setPlaceParts(buildInitialPlaceParts(mappingState));
     setRelationshipParts(buildInitialRelationshipParts(mappingState));
     setRelationshipMetadataMapping(normalizeRelationshipMetadataMapping(mappingState.relationshipMetadataMapping || {}));
@@ -1987,6 +2044,7 @@ export function PeridotColumnMappingModal({
     const mappedCoreColumns = new Set([
       ...Object.values(coreMapping || {}),
       ...Object.values(stripDisplayDateMapping(temporalMapping || {})),
+      ...Object.values(temporalNoteMappings || {}).flat(),
       ...Object.values(pointMapping || {}),
       ...Object.values(routeCoordinatePairMapping || {}),
       ...(placeParts || []).flatMap((part) => [
@@ -2007,18 +2065,19 @@ export function PeridotColumnMappingModal({
         : selection
     ));
     return applyRelationshipMetadataSelections(structuralSelections, relationshipMetadataMapping);
-  }, [coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, placeParts, relationshipParts, relationshipMetadataMapping, customFieldSelections]);
+  }, [coreMapping, temporalMapping, temporalNoteMappings, pointMapping, routeCoordinatePairMapping, placeParts, relationshipParts, relationshipMetadataMapping, customFieldSelections]);
 
   const validation = useMemo(
     () => validatePeridotColumnMapping(headers, {
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
+      temporalNoteMappings,
       pointMapping,
       routeCoordinatePairMapping,
       relationshipMetadataMapping,
       customFieldSelections: effectiveCustomSelections,
     }),
-    [headers, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
+    [headers, coreMapping, temporalMapping, temporalNoteMappings, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
   );
 
   const mappedRows = useMemo(
@@ -2029,15 +2088,21 @@ export function PeridotColumnMappingModal({
       relationshipMetadataMapping,
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
+      temporalNoteMappings,
       pointMapping,
       routeCoordinatePairMapping,
       customFieldSelections: effectiveCustomSelections,
     }),
-    [rows, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
+    [rows, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
   );
 
   const validationSummary = useMemo(
     () => buildPeridotCsvValidationSummary(mappedRows, Object.keys(mappedRows[0] || Object.fromEntries(PERIDOT_TEMPLATE_COLUMNS.map((column) => [column, ''])))),
+    [mappedRows]
+  );
+
+  const temporalReviewSummary = useMemo(
+    () => summarizeTemporalAssertionsForReview(mappedRows, 'single-table-temporal-review'),
     [mappedRows]
   );
 
@@ -2064,6 +2129,11 @@ export function PeridotColumnMappingModal({
       return [];
     }
   }, [activeStep, isWorkbookMode, workbookModel, workbookMapping]);
+
+  const workbookTemporalReviewSummary = useMemo(
+    () => summarizeTemporalAssertionsForReview(workbookMappedRowsForAudit, 'workbook-temporal-review'),
+    [workbookMappedRowsForAudit]
+  );
 
   const mappedRowsCapabilityAudit = useMemo(() => {
     if (isWorkbookMode || activeStep !== 'review') return null;
@@ -2193,6 +2263,7 @@ export function PeridotColumnMappingModal({
     setTableOrientation(nextOrientation);
     setCoreMapping(nextInitialMapping.coreMapping || {});
     setTemporalMapping(stripDisplayDateMapping(nextInitialMapping.temporalMapping || {}));
+    setTemporalNoteMappings(nextInitialMapping.temporalNoteMappings || {});
     setPointMapping(nextInitialMapping.pointMapping || {});
     setRouteCoordinatePairMapping(nextInitialMapping.routeCoordinatePairMapping || {});
     setRelationshipMetadataMapping(normalizeRelationshipMetadataMapping({}));
@@ -2218,6 +2289,16 @@ export function PeridotColumnMappingModal({
       ...current,
       [field]: sourceColumn,
     }));
+  };
+
+  const handleTemporalNoteMappingChange = (field, noteIndex, sourceColumn) => {
+    setTemporalNoteMappings((current) => {
+      const next = [...(current?.[field] || [])];
+      if (sourceColumn === '__ADD__') next.push('');
+      else if (sourceColumn) next[noteIndex] = sourceColumn;
+      else if (noteIndex < next.length) next.splice(noteIndex, 1);
+      return { ...current, [field]: next };
+    });
   };
 
   const handlePointMappingChange = (field, sourceColumn) => {
@@ -2447,6 +2528,17 @@ export function PeridotColumnMappingModal({
     });
   };
 
+  const handleWorkbookTemporalNoteMappingChange = (field, noteIndex, ref) => {
+    setWorkbookMapping((current) => {
+      const currentNotes = current.temporalNoteMappings || {};
+      const next = [...(currentNotes[field] || [])];
+      if (ref?.__add) next.push({});
+      else if (ref?.sheetName && ref?.columnName) next[noteIndex] = ref;
+      else if (noteIndex < next.length) next.splice(noteIndex, 1);
+      return { ...current, temporalNoteMappings: { ...currentNotes, [field]: next } };
+    });
+  };
+
   const handleWorkbookPlacePartsChange = (placeParts) => {
     setWorkbookMapping((current) => ({
       ...current,
@@ -2631,6 +2723,7 @@ export function PeridotColumnMappingModal({
       relationshipParts,
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
+      temporalNoteMappings,
       pointMapping,
       routeCoordinatePairMapping,
       relationshipMetadataMapping,
@@ -2756,7 +2849,9 @@ export function PeridotColumnMappingModal({
               headers={headers}
               rows={rows}
               temporalMapping={stripDisplayDateMapping(temporalMapping)}
+              temporalNoteMappings={temporalNoteMappings}
               onTemporalChange={handleTemporalMappingChange}
+              onTemporalNoteChange={handleTemporalNoteMappingChange}
             />
           ) : null}
 
@@ -2806,6 +2901,7 @@ export function PeridotColumnMappingModal({
               relationshipParts={relationshipParts}
               relationshipMetadataMapping={relationshipMetadataMapping}
               customFieldSelections={effectiveCustomSelections}
+              temporalReviewSummary={temporalReviewSummary}
             />
           ) : null}
 
@@ -2839,6 +2935,7 @@ export function PeridotColumnMappingModal({
               workbookModel={workbookModel}
               workbookMapping={workbookMapping}
               onTemporalChange={handleWorkbookTemporalMappingChange}
+              onTemporalNoteChange={handleWorkbookTemporalNoteMappingChange}
             />
           ) : null}
 
@@ -2878,6 +2975,7 @@ export function PeridotColumnMappingModal({
               summary={workbookMappingSummary}
               previewRows={workbookMappedPreviewRows}
               capabilityAudit={workbookCapabilityAudit}
+              temporalReviewSummary={workbookTemporalReviewSummary}
             />
           ) : null}
           </>) : null}

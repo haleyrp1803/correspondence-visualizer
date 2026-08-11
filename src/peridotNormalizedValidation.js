@@ -176,14 +176,19 @@ function validateTemporalAssertions(dataset, issues) {
   const collections = ['records', 'events', 'relationships', 'participations', 'assertions'];
   collections.forEach((collection) => {
     (dataset?.[collection] || []).forEach((item) => {
-      const temporal = item.temporalAssertion;
-      if (!temporal) return;
-      const start = temporal.sortBounds?.start;
-      const end = temporal.sortBounds?.end;
-      if (Number.isFinite(start) && Number.isFinite(end) && start > end) {
-        issues.push(issue({ severity: PERIDOT_VALIDATION_SEVERITY.ERROR, code: 'reversed_temporal_range', collection, itemId: item.id, message: `Item “${item.id}” has a temporal start after its end.` }));
-      }
-      temporal.parseWarnings?.forEach((warning) => issues.push(issue({ severity: PERIDOT_VALIDATION_SEVERITY.WARNING, code: 'temporal_parse_warning', collection, itemId: item.id, message: warning })));
+      const temporals = Array.isArray(item.temporalAssertions) && item.temporalAssertions.length
+        ? item.temporalAssertions
+        : (item.temporalAssertion ? [item.temporalAssertion] : []);
+      temporals.forEach((temporal, temporalIndex) => {
+        if (!temporal) return;
+        if (temporal.consistency === 'backwards') {
+          issues.push(issue({ severity: PERIDOT_VALIDATION_SEVERITY.WARNING, code: 'reversed_temporal_range', collection, itemId: item.id, message: `Item “${item.id}” has a temporal assertion whose source start occurs after its end. Peridot preserved the source order and marked the interval unsafe for ordinary interval visualization.` }));
+        }
+        temporal.parseWarnings?.forEach((warning) => issues.push(issue({ severity: PERIDOT_VALIDATION_SEVERITY.WARNING, code: 'temporal_parse_warning', collection, itemId: item.id, message: temporal.role ? `${temporal.role}: ${warning}` : warning })));
+        if (temporal.parsingStatus === 'unrecognized') {
+          issues.push(issue({ severity: PERIDOT_VALIDATION_SEVERITY.WARNING, code: 'temporal_unrecognized', collection, itemId: item.id, message: `${temporal.role || `Temporal value ${temporalIndex + 1}`} was preserved but could not be positioned on a calendar safely.` }));
+        }
+      });
     });
   });
 }

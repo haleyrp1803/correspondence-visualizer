@@ -154,12 +154,14 @@ function titleCase(value) {
  * start/end interval; this helper keeps workbook imports aligned with ordinary
  * single-table imports by composing the readable display value automatically.
  */
-function composeDisplayDateValue(singleDate, dateStart, dateEnd, explicitDisplayDate) {
+function composeDisplayDateValue(singleDate, dateRange, dateStart, dateEnd, explicitDisplayDate) {
   const display = asText(explicitDisplayDate);
   const single = asText(singleDate);
+  const range = asText(dateRange);
   const start = asText(dateStart);
   const end = asText(dateEnd);
   if (display) return display;
+  if (range) return range;
   if (start && end) return `${start}–${end}`;
   if (start) return `${start}–`;
   if (end) return `–${end}`;
@@ -574,6 +576,7 @@ function getWorkbookSemanticRefs(mappingState = {}) {
     part?.roleMode === 'column' ? part?.roleRef : null,
   ]);
   const relationshipMetadataRefs = Object.values(mappingState.relationshipMetadataMappings || {});
+  const temporalNoteRefs = Object.values(mappingState.temporalNoteMappings || {}).flat();
   const evidenceRefs = (mappingState.customFieldSelections || []).map((selection) =>
     selection?.sourceRef || makeWorkbookColumnRef(selection?.sheetName, selection?.sourceColumn)
   );
@@ -581,6 +584,7 @@ function getWorkbookSemanticRefs(mappingState = {}) {
   return [
     ...Object.values(mappingState.coreMappings || {}),
     ...Object.values(mappingState.temporalMappings || {}),
+    ...temporalNoteRefs,
     ...Object.values(mappingState.pointMappings || {}),
     ...Object.values(mappingState.routeCoordinatePairMappings || {}),
     ...placeRefs,
@@ -657,6 +661,7 @@ export function buildInitialPeridotWorkbookMappingState(workbookModel, options =
     lookupSheetSuggestions: suggestLookupSheetRoles(workbookModel),
     coreMappings,
     temporalMappings,
+    temporalNoteMappings: {},
     pointMappings,
     routeCoordinatePairMappings,
     letterLevelJoinSuggestions: suggestedLetterLevelJoins,
@@ -735,6 +740,7 @@ export function validatePeridotWorkbookMapping(workbookModel, mappingState = {})
   const primarySheet = getWorkbookSheet(workbookModel, primarySheetName);
   const coreMappings = mappingState.coreMappings || {};
   const temporalMappings = mappingState.temporalMappings || {};
+  const temporalNoteMappings = mappingState.temporalNoteMappings || {};
   const pointMappings = mappingState.pointMappings || {};
   const routeCoordinatePairMappings = mappingState.routeCoordinatePairMappings || {};
 
@@ -782,6 +788,18 @@ export function validatePeridotWorkbookMapping(workbookModel, mappingState = {})
 
     const issue = getReferenceValidationIssue(workbookModel, ref, `temporal_${field}`, `Temporal field ${field}`);
     if (issue) issues.push({ ...issue, severity: 'error' });
+  });
+
+  Object.entries(temporalNoteMappings).forEach(([field, refs]) => {
+    if (!PERIDOT_TEMPORAL_FIELDS.includes(field)) {
+      issues.push({ code: 'unknown_temporal_note_field', severity: 'error', message: `${field} cannot receive temporal notes because it is not a supported temporal role.` });
+      return;
+    }
+    (Array.isArray(refs) ? refs : []).forEach((ref) => {
+      if (!isWorkbookColumnRefPresent(ref)) return;
+      const issue = getReferenceValidationIssue(workbookModel, ref, `temporal_note_${field}`, `Temporal note for ${field}`);
+      if (issue) issues.push({ ...issue, severity: 'error' });
+    });
   });
 
   Object.entries(pointMappings).forEach(([field, ref]) => {
@@ -1093,6 +1111,9 @@ function buildWorkbookGeneralizedRuntimeMapping(mappingState = {}) {
     })),
     temporalMapping: Object.fromEntries(
       Object.entries(mappingState.temporalMappings || {}).map(([field, ref]) => [field, workbookRefRuntimeKey(ref)])
+    ),
+    temporalNoteMappings: Object.fromEntries(
+      Object.entries(mappingState.temporalNoteMappings || {}).map(([field, refs]) => [field, (Array.isArray(refs) ? refs : []).map(workbookRefRuntimeKey).filter(Boolean)])
     ),
     relationshipMetadataMapping: Object.fromEntries(
       Object.entries(mappingState.relationshipMetadataMappings || {}).map(([field, ref]) => [field, workbookRefRuntimeKey(ref)])

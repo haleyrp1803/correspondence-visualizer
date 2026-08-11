@@ -26,6 +26,7 @@ import {
 } from './peridotNormalizationProvenance.js';
 import {
   parsePeridotTemporalRange,
+  parsePeridotTemporalSpan,
   parsePeridotTemporalValue,
 } from './peridotTemporalAssertions.js';
 import { parsePeridotCoordinatePair } from './peridotDataCapabilityAudit.js';
@@ -609,18 +610,34 @@ export function normalizePeridotCorrespondenceRows(rows = [], options = {}) {
   });
 }
 
-function makeGeneralizedTemporalAssertion(observation = {}) {
+function makeGeneralizedTemporalAssertions(observation = {}) {
   const temporal = observation.temporal || {};
+  const descriptors = Array.isArray(temporal.assertions) ? temporal.assertions : [];
+  const assertions = descriptors.map((descriptor) => {
+    const options = { role: asText(descriptor?.role), temporalNotes: descriptor?.notes || [] };
+    if (descriptor?.kind === 'span') return parsePeridotTemporalSpan(descriptor.sourceText, options);
+    if (descriptor?.kind === 'range') {
+      return parsePeridotTemporalRange({
+        startValue: descriptor.startValue,
+        endValue: descriptor.endValue,
+        displayValue: descriptor.sourceText,
+        role: options.role,
+        temporalNotes: options.temporalNotes,
+      });
+    }
+    return parsePeridotTemporalValue(descriptor?.sourceText, options);
+  }).filter(Boolean);
+
+  if (assertions.length) return assertions;
+
+  const rangeValue = asText(temporal.dateRange);
   const startValue = asText(temporal.dateStart);
   const endValue = asText(temporal.dateEnd);
   const displayValue = asText(temporal.displayDate);
-
-  if (startValue || endValue) {
-    return parsePeridotTemporalRange({ startValue, endValue, displayValue });
-  }
-
+  if (rangeValue) return [parsePeridotTemporalSpan(rangeValue)];
+  if (startValue || endValue) return [parsePeridotTemporalRange({ startValue, endValue, displayValue })];
   const dateValue = asText(temporal.date) || displayValue;
-  return dateValue ? parsePeridotTemporalValue(dateValue) : null;
+  return dateValue ? [parsePeridotTemporalValue(dateValue)] : [];
 }
 
 function generalizedObservationHasContent(observation = {}) {
@@ -633,6 +650,7 @@ function generalizedObservationHasContent(observation = {}) {
     || asText(relationship.type)
     || asText(relationship.label)
     || asText(temporal.date)
+    || asText(temporal.dateRange)
     || asText(temporal.dateStart)
     || asText(temporal.dateEnd)
   );
@@ -641,7 +659,7 @@ function generalizedObservationHasContent(observation = {}) {
 function makeGeneralizedRecordLabel(observation = {}, index = 0) {
   const participants = observation.participants || [];
   const temporal = observation.temporal || {};
-  const date = asText(temporal.displayDate) || asText(temporal.date) || asText(temporal.dateStart);
+  const date = asText(temporal.displayDate) || asText(temporal.date) || asText(temporal.dateRange) || asText(temporal.dateStart);
   const participantLabel = participants.slice(0, 3).map((part) => asText(part.value)).filter(Boolean).join(' · ');
   const placeLabel = asText(observation.places?.[0]?.label);
   const base = participantLabel || placeLabel || `Record ${index + 1}`;
@@ -798,7 +816,8 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
       }));
     }
 
-    const temporalAssertion = makeGeneralizedTemporalAssertion(observation);
+    const temporalAssertions = makeGeneralizedTemporalAssertions(observation);
+    const temporalAssertion = temporalAssertions[0] || null;
     const relationship = observation.relationship || {};
 
     records.push(makePeridotRecord({
@@ -806,6 +825,7 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
       recordType: 'generalized-mapped-observation',
       label: makeGeneralizedRecordLabel(observation, rowIndex),
       temporalAssertion,
+      temporalAssertions,
       participantIds: participantEntries.map((entry) => entry.entityId),
       placeReferenceIds: placeEntries.map((entry) => entry.placeId),
       evidenceSourceIds: evidenceSourceId ? [evidenceSourceId] : [],
@@ -844,6 +864,7 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
         targetId: recordId,
         role: asText(participant.role) || `participant-${participantIndex + 1}`,
         temporalAssertion,
+        temporalAssertions,
         provenance: makeRowProvenance({
           row,
           rowIndex,
@@ -868,6 +889,7 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
         objectId: placeId,
         evidenceSourceIds: evidenceSourceId ? [evidenceSourceId] : [],
         temporalAssertion,
+        temporalAssertions,
         attributes: {
           mappedRole: asText(place.role),
           subjectParticipantIndex: Number.isInteger(place.subjectParticipantIndex) ? place.subjectParticipantIndex : null,

@@ -10,7 +10,7 @@ import { makePeridotTemporalAssertion } from './peridotTemporalAssertions.js';
 import { makePeridotSavedVariables, makePeridotUniversalMappingDefinition } from './peridotUniversalMappingModel.js';
 import { makePeridotSourceManifest } from './peridotSourceModel.js';
 
-export const PERIDOT_NORMALIZED_SCHEMA_VERSION = '1.2.0-draft';
+export const PERIDOT_NORMALIZED_SCHEMA_VERSION = '1.3.0-draft';
 
 export const PERIDOT_NORMALIZED_COLLECTIONS = Object.freeze([
   'entities',
@@ -54,6 +54,11 @@ function asTextArray(value) {
 
 function asObject(value) {
   return Object.freeze(value && typeof value === 'object' && !Array.isArray(value) ? { ...value } : {});
+}
+
+function makeTemporalAssertionArray(values = [], fallback = null) {
+  const source = Array.isArray(values) && values.length ? values : (fallback ? [fallback] : []);
+  return Object.freeze(source.filter(Boolean).map((value) => makePeridotTemporalAssertion(value)));
 }
 
 function makeBaseItem({ id, label = '', attributes = {}, provenance = {} } = {}) {
@@ -137,6 +142,7 @@ export function makePeridotRecord({
   recordType = 'record',
   label = '',
   temporalAssertion = null,
+  temporalAssertions = [],
   participantIds = [],
   placeReferenceIds = [],
   attributes = {},
@@ -146,7 +152,8 @@ export function makePeridotRecord({
   return Object.freeze({
     ...makeBaseItem({ id, label, attributes, provenance }),
     recordType: asText(recordType) || 'record',
-    temporalAssertion: temporalAssertion ? makePeridotTemporalAssertion(temporalAssertion) : null,
+    temporalAssertion: temporalAssertion ? makePeridotTemporalAssertion(temporalAssertion) : (temporalAssertions?.[0] ? makePeridotTemporalAssertion(temporalAssertions[0]) : null),
+    temporalAssertions: makeTemporalAssertionArray(temporalAssertions, temporalAssertion),
     participantIds: asTextArray(participantIds),
     placeReferenceIds: asTextArray(placeReferenceIds),
     evidenceSourceIds: asTextArray(evidenceSourceIds),
@@ -158,6 +165,7 @@ export function makePeridotEvent({
   eventType,
   label = '',
   temporalAssertion = null,
+  temporalAssertions = [],
   participantIds = [],
   placeReferenceIds = [],
   attributes = {},
@@ -167,7 +175,8 @@ export function makePeridotEvent({
   return Object.freeze({
     ...makeBaseItem({ id, label, attributes, provenance }),
     eventType: asText(eventType),
-    temporalAssertion: temporalAssertion ? makePeridotTemporalAssertion(temporalAssertion) : null,
+    temporalAssertion: temporalAssertion ? makePeridotTemporalAssertion(temporalAssertion) : (temporalAssertions?.[0] ? makePeridotTemporalAssertion(temporalAssertions[0]) : null),
+    temporalAssertions: makeTemporalAssertionArray(temporalAssertions, temporalAssertion),
     participantIds: asTextArray(participantIds),
     placeReferenceIds: asTextArray(placeReferenceIds),
     evidenceSourceIds: asTextArray(evidenceSourceIds),
@@ -183,6 +192,7 @@ export function makePeridotRelationship({
   participantARole = '',
   participantBRole = '',
   temporalAssertion = null,
+  temporalAssertions = [],
   attributes = {},
   evidenceSourceIds = [],
   provenance = {},
@@ -196,7 +206,8 @@ export function makePeridotRelationship({
     participantBId: asText(participantBId),
     participantARole: asText(participantARole),
     participantBRole: asText(participantBRole),
-    temporalAssertion: temporalAssertion ? makePeridotTemporalAssertion(temporalAssertion) : null,
+    temporalAssertion: temporalAssertion ? makePeridotTemporalAssertion(temporalAssertion) : (temporalAssertions?.[0] ? makePeridotTemporalAssertion(temporalAssertions[0]) : null),
+    temporalAssertions: makeTemporalAssertionArray(temporalAssertions, temporalAssertion),
     evidenceSourceIds: asTextArray(evidenceSourceIds),
     derivation: derivation && typeof derivation === 'object' ? Object.freeze({ ...derivation }) : null,
   });
@@ -209,6 +220,7 @@ export function makePeridotParticipation({
   targetId,
   role,
   temporalAssertion = null,
+  temporalAssertions = [],
   attributes = {},
   provenance = {},
 } = {}) {
@@ -218,7 +230,8 @@ export function makePeridotParticipation({
     targetType: Object.values(PERIDOT_TARGET_TYPES).includes(targetType) ? targetType : asText(targetType),
     targetId: asText(targetId),
     role: asText(role),
-    temporalAssertion: temporalAssertion ? makePeridotTemporalAssertion(temporalAssertion) : null,
+    temporalAssertion: temporalAssertion ? makePeridotTemporalAssertion(temporalAssertion) : (temporalAssertions?.[0] ? makePeridotTemporalAssertion(temporalAssertions[0]) : null),
+    temporalAssertions: makeTemporalAssertionArray(temporalAssertions, temporalAssertion),
   });
 }
 
@@ -256,6 +269,7 @@ export function makePeridotAssertion({
   objectId = '',
   evidenceSourceIds = [],
   temporalAssertion = null,
+  temporalAssertions = [],
   attributes = {},
   provenance = {},
 } = {}) {
@@ -266,7 +280,8 @@ export function makePeridotAssertion({
     value,
     objectId: asText(objectId),
     evidenceSourceIds: asTextArray(evidenceSourceIds),
-    temporalAssertion: temporalAssertion ? makePeridotTemporalAssertion(temporalAssertion) : null,
+    temporalAssertion: temporalAssertion ? makePeridotTemporalAssertion(temporalAssertion) : (temporalAssertions?.[0] ? makePeridotTemporalAssertion(temporalAssertions[0]) : null),
+    temporalAssertions: makeTemporalAssertionArray(temporalAssertions, temporalAssertion),
   });
 }
 

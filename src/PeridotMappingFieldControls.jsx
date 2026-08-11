@@ -86,7 +86,7 @@ function RoleCell({ definition }) {
 /*
  * Renders the single-table temporal role assignments.
  *
- * The Time step is intentionally not a dense reference table. It has only three
+ * The Time step is intentionally not a dense reference table. It has only a few
  * visible decisions, so it uses a compact task-card layout: temporal roles on
  * the left, user column choices in the center, and one shared explanation panel
  * on the right. Date_Display is composed automatically from the selected single
@@ -128,6 +128,10 @@ const TEMPORAL_UI_COPY = Object.freeze({
     label: 'Date',
     description: 'A date associated with this row—for example a letter, transaction, observation, event, photograph, or court record.',
   }),
+  Date_Range: Object.freeze({
+    label: 'Date range / timespan',
+    description: 'Both ends of a period in one column—for example 1600–1640, a lifespan, reign, appointment, journey, or another interval.',
+  }),
   Date_Start: Object.freeze({
     label: 'Beginning date',
     description: 'When something begins—for example birth, inception, departure, opening, appointment, construction, or the beginning of a period.',
@@ -144,7 +148,7 @@ function TemporalIntro() {
       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">Time</div>
       <div className="mt-1 text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">When does the information in each row take place?</div>
       <p className="mt-2 text-sm leading-relaxed">
-        Choose any columns that tell Peridot when a record, event, person, place, object, measurement, or other item belongs in time. Your data may use one, several, or none of these.
+        Choose any columns that tell Peridot when a record, event, person, place, object, measurement, or other item belongs in time. Peridot reads the date or timespan itself and preserves partial, approximate, open-ended, and incomplete values whenever it can do so safely.
       </p>
       <p className="mt-2 text-sm leading-relaxed">
         <span className="font-semibold text-[var(--panel-card-text)]">Examples:</span> date on a letter, timeframe of a journey, publication date, lifespans, etc.
@@ -153,7 +157,7 @@ function TemporalIntro() {
   );
 }
 
-export function TemporalMappingTable({ headers, rows = [], temporalMapping = {}, onChange }) {
+export function TemporalMappingTable({ headers, rows = [], temporalMapping = {}, temporalNoteMappings = {}, onChange, onNoteChange }) {
   return (
     <div className="space-y-3">
       <TemporalIntro />
@@ -191,6 +195,20 @@ export function TemporalMappingTable({ headers, rows = [], temporalMapping = {},
                         ))}
                       </select>
                       <TemporalExamples values={examples} />
+                      <div className="mt-3 border-t border-[var(--panel-card-border)] pt-3">
+                        <div className="text-xs font-semibold text-[var(--muted-text)]">Related temporal notes (optional)</div>
+                        <p className="mt-1 text-xs leading-relaxed text-[var(--panel-card-muted-text)]">Preserved with this temporal value without changing how Peridot interprets the date.</p>
+                        {(temporalNoteMappings?.[definition.key] || []).map((noteColumn, noteIndex) => (
+                          <div key={`${definition.key}-note-${noteIndex}`} className="mt-2 flex gap-2">
+                            <select value={noteColumn || ''} onChange={(event) => onNoteChange?.(definition.key, noteIndex, event.target.value)} className={SOURCE_SELECT_CLASS}>
+                              <option value="">Unassigned</option>
+                              {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+                            </select>
+                            <button type="button" onClick={() => onNoteChange?.(definition.key, noteIndex, '')} className="rounded-lg border border-[var(--input-border)] px-2 text-xs text-[var(--panel-card-muted-text)]">Remove</button>
+                          </div>
+                        ))}
+                        <button type="button" onClick={() => onNoteChange?.(definition.key, (temporalNoteMappings?.[definition.key] || []).length, '__ADD__')} className="mt-3 rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add related note column</button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -213,7 +231,7 @@ function TemporalUsagePanel() {
         Temporal information is used in Peridot’s timeline, search and filter, charts, Inspector, and export.
       </p>
       <p className="mt-3">
-        Peridot will display the selected single date, or compose a date span from Date start and Date end.
+        Each mapped temporal field remains a separate temporal assertion. Optional note columns—such as certainty, completeness, transcription, or project-specific qualifiers—are preserved without being treated as commands about visualization.
       </p>
     </aside>
   );
@@ -1454,9 +1472,9 @@ export function WorkbookRelationshipMappingPanel({ workbookModel, workbookMappin
  * Renders workbook temporal mappings. Workbook mappings differ from ordinary
  * table mappings because each role points to a sheet/column pair rather than a
  * single flat uploaded column name. The visual pattern mirrors the single-table
- * Time step: three visible date decisions plus one shared usage note.
+ * Time step with one shared usage note.
  */
-export function WorkbookTemporalMappingTable({ workbookModel, workbookMapping, onChange }) {
+export function WorkbookTemporalMappingTable({ workbookModel, workbookMapping, onChange, onNoteChange }) {
   const temporalMappings = workbookMapping.temporalMappings || {};
 
   return (
@@ -1492,6 +1510,16 @@ export function WorkbookTemporalMappingTable({ workbookModel, workbookMapping, o
                         onChange={(ref) => onChange(definition.key, ref)}
                       />
                       <TemporalExamples values={examples} />
+                      <div className="mt-3 border-t border-[var(--panel-card-border)] pt-3">
+                        <div className="text-xs font-semibold text-[var(--muted-text)]">Related temporal notes (optional)</div>
+                        {(workbookMapping.temporalNoteMappings?.[definition.key] || []).map((noteRef, noteIndex) => (
+                          <div key={`${definition.key}-workbook-note-${noteIndex}`} className="mt-2 flex gap-2">
+                            <WorkbookFieldSelect workbookModel={workbookModel} currentRef={noteRef || {}} onChange={(ref) => onNoteChange?.(definition.key, noteIndex, ref)} />
+                            <button type="button" onClick={() => onNoteChange?.(definition.key, noteIndex, null)} className="rounded-lg border border-[var(--input-border)] px-2 text-xs text-[var(--panel-card-muted-text)]">Remove</button>
+                          </div>
+                        ))}
+                        <button type="button" onClick={() => onNoteChange?.(definition.key, (workbookMapping.temporalNoteMappings?.[definition.key] || []).length, { __add: true })} className="mt-3 rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add related note column</button>
+                      </div>
                     </div>
                   </div>
                 );

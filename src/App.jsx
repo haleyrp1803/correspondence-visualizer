@@ -4128,7 +4128,7 @@ export default function EuropeNetworkMapApp() {
     }
   };
 
-  const handleSaveColumnMappingState = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
+  const handleSaveColumnMappingState = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
     setColumnMappingStaging((current) => {
       if (!current || current.status !== 'ready') return current;
 
@@ -4175,6 +4175,7 @@ export default function EuropeNetworkMapApp() {
           relationshipMetadataMapping: relationshipMetadataMapping || current.mappingState?.relationshipMetadataMapping || {},
           coreMapping: coreMapping || current.mappingState?.coreMapping || {},
           temporalMapping: temporalMapping || current.mappingState?.temporalMapping || {},
+          temporalNoteMappings: temporalNoteMappings || current.mappingState?.temporalNoteMappings || {},
           pointMapping: pointMapping || current.mappingState?.pointMapping || {},
           routeCoordinatePairMapping: routeCoordinatePairMapping || current.mappingState?.routeCoordinatePairMapping || {},
           customFieldSelections: customFieldSelections || current.mappingState?.customFieldSelections || [],
@@ -4185,7 +4186,7 @@ export default function EuropeNetworkMapApp() {
     });
   };
 
-  const handleConfirmColumnMappingImport = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
+  const handleConfirmColumnMappingImport = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
     if (!columnMappingStaging || columnMappingStaging.status !== 'ready') return;
     const activeDatasetProfileId = resolvePeridotDatasetProfileId(
       datasetProfileId
@@ -4342,6 +4343,7 @@ export default function EuropeNetworkMapApp() {
 
       const nextCoreMapping = coreMapping || columnMappingStaging.mappingState?.coreMapping || {};
       const nextTemporalMapping = temporalMapping || columnMappingStaging.mappingState?.temporalMapping || {};
+      const nextTemporalNoteMappings = temporalNoteMappings || columnMappingStaging.mappingState?.temporalNoteMappings || {};
       const nextPointMapping = pointMapping || columnMappingStaging.mappingState?.pointMapping || {};
       const nextRouteCoordinatePairMapping = routeCoordinatePairMapping || columnMappingStaging.mappingState?.routeCoordinatePairMapping || {};
       const nextPlaceParts = placeParts || columnMappingStaging.mappingState?.placeParts || [];
@@ -4355,6 +4357,7 @@ export default function EuropeNetworkMapApp() {
         relationshipMetadataMapping: nextRelationshipMetadataMapping,
         coreMapping: nextCoreMapping,
         temporalMapping: nextTemporalMapping,
+        temporalNoteMappings: nextTemporalNoteMappings,
         pointMapping: nextPointMapping,
         routeCoordinatePairMapping: nextRouteCoordinatePairMapping,
         customFieldSelections: nextCustomFieldSelections,

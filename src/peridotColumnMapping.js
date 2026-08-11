@@ -71,12 +71,14 @@ export const PERIDOT_CORE_FIELDS = Object.freeze([
 
 export const PERIDOT_TEMPORAL_FIELDS = Object.freeze([
   'Date',
+  'Date_Range',
   'Date_Start',
   'Date_End',
   'Date_Display',
 ]);
 
 export const PERIDOT_INTERVAL_TEMPORAL_FIELDS = Object.freeze([
+  'Date_Range',
   'Date_Start',
   'Date_End',
   'Date_Display',
@@ -405,6 +407,34 @@ export const PERIDOT_TEMPORAL_FIELD_DEFINITIONS = Object.freeze([
       'document date',
       'event date',
       'record date',
+    ]),
+  }),
+  Object.freeze({
+    key: 'Date_Range',
+    label: 'Date range / timespan',
+    description:
+      'One column containing both ends of a temporal interval, such as a lifespan, reign, period of activity, journey, appointment, or other timespan.',
+    usedFor: Object.freeze([
+      PERIDOT_FIELD_CAPABILITIES.timeline,
+      PERIDOT_FIELD_CAPABILITIES.searchFilter,
+      PERIDOT_FIELD_CAPABILITIES.analytics,
+      PERIDOT_FIELD_CAPABILITIES.inspector,
+      PERIDOT_FIELD_CAPABILITIES.export,
+    ]),
+    acceptedFormat:
+      'Two years or full dates separated by an en dash, em dash, “to”, “through”, or “until”; YYYY-YYYY is also accepted. Examples: 1600–1640, 12 March 1600–4 July 1640, 1600-03-12 to 1640-07-04.',
+    commonNames: Object.freeze([
+      'date range',
+      'timespan',
+      'time span',
+      'date span',
+      'lifespan',
+      'life span',
+      'years active',
+      'active years',
+      'period',
+      'term',
+      'reign',
     ]),
   }),
   Object.freeze({
@@ -752,7 +782,8 @@ export function buildInitialPeridotTemporalMapping(headers = [], coreMapping = {
     const normalized = normalizeColumnName(header);
     return normalized === 'date' || normalized === 'letter date' || normalized === 'document date' || normalized === 'record date' || normalized === 'event date';
   }) || '';
-  const intervalDetected = Boolean(suggestions.Date_Start?.sourceColumn || suggestions.Date_End?.sourceColumn);
+  const dateRange = suggestions.Date_Range?.sourceColumn || '';
+  const intervalDetected = Boolean(dateRange || suggestions.Date_Start?.sourceColumn || suggestions.Date_End?.sourceColumn);
   const singleDate = intervalDetected
     ? exactDateHeader
     : (suggestions.Date?.sourceColumn || coreMapping?.Date || exactDateHeader || '');
@@ -761,8 +792,9 @@ export function buildInitialPeridotTemporalMapping(headers = [], coreMapping = {
 
   return Object.freeze({
     Date: singleDate,
-    Date_Start: startDate && startDate !== singleDate ? startDate : '',
-    Date_End: endDate && endDate !== singleDate && endDate !== startDate ? endDate : '',
+    Date_Range: dateRange && dateRange !== singleDate ? dateRange : '',
+    Date_Start: startDate && startDate !== singleDate && startDate !== dateRange ? startDate : '',
+    Date_End: endDate && endDate !== singleDate && endDate !== dateRange && endDate !== startDate ? endDate : '',
     Date_Display: suggestions.Date_Display?.sourceColumn || '',
   });
 }
@@ -808,12 +840,14 @@ export function buildInitialPeridotRouteCoordinatePairMapping(headers = [], core
   return Object.freeze(Object.fromEntries(PERIDOT_ROUTE_COORDINATE_PAIR_FIELDS.map((field) => [field, suggestions[field]?.sourceColumn || ''])));
 }
 
-function composeDisplayDateValue(singleDate, dateStart, dateEnd, explicitDisplayDate) {
+function composeDisplayDateValue(singleDate, dateRange, dateStart, dateEnd, explicitDisplayDate) {
   const display = asText(explicitDisplayDate);
   const single = asText(singleDate);
+  const range = asText(dateRange);
   const start = asText(dateStart);
   const end = asText(dateEnd);
   if (display) return display;
+  if (range) return range;
   if (start && end) return `${start}–${end}`;
   if (start) return `${start}–`;
   if (end) return `–${end}`;
@@ -959,12 +993,14 @@ export function applyCoreMappingToRow(uploadedRow = {}, coreMapping = {}, tempor
   });
 
   const explicitSingleDate = getMappedValue(uploadedRow, temporalMapping.Date);
+  const dateRange = getMappedValue(uploadedRow, temporalMapping.Date_Range);
   const dateStart = getMappedValue(uploadedRow, temporalMapping.Date_Start);
   const dateEnd = getMappedValue(uploadedRow, temporalMapping.Date_End);
   const dateDisplay = getMappedValue(uploadedRow, temporalMapping.Date_Display);
-  const composedDisplayDate = composeDisplayDateValue(explicitSingleDate || mappedRow.Date, dateStart, dateEnd, dateDisplay);
+  const composedDisplayDate = composeDisplayDateValue(explicitSingleDate || mappedRow.Date, dateRange, dateStart, dateEnd, dateDisplay);
 
   if (explicitSingleDate) mappedRow.Date = explicitSingleDate;
+  if (!mappedRow.Date && dateRange) mappedRow.Date = dateRange;
   if (!mappedRow.Date && dateStart) mappedRow.Date = dateStart;
   if (!mappedRow.Date && dateDisplay) mappedRow.Date = dateDisplay;
   if (!mappedRow.Date && dateEnd) mappedRow.Date = dateEnd;
@@ -1027,6 +1063,7 @@ export function buildCustomInspectorFieldsForRow(uploadedRow = {}, customFieldSe
 export function applyPeridotColumnMapping(rows = [], mapping = {}) {
   const coreMapping = mapping.coreMapping || {};
   const temporalMapping = mapping.temporalMapping || {};
+  const temporalNoteMappings = mapping.temporalNoteMappings || {};
   const pointMapping = mapping.pointMapping || {};
   const routeCoordinatePairMapping = mapping.routeCoordinatePairMapping || {};
   const customFieldSelections = mapping.customFieldSelections || [];
@@ -1037,7 +1074,7 @@ export function applyPeridotColumnMapping(rows = [], mapping = {}) {
       .filter(Boolean)
   );
   const mappedCoreColumns = new Set(
-    [...Object.values(coreMapping), ...Object.values(temporalMapping), ...Object.values(pointMapping), ...Object.values(routeCoordinatePairMapping)]
+    [...Object.values(coreMapping), ...Object.values(temporalMapping), ...Object.values(temporalNoteMappings).flat(), ...Object.values(pointMapping), ...Object.values(routeCoordinatePairMapping)]
       .map(asText)
       .filter(Boolean)
   );
@@ -1069,6 +1106,7 @@ export function validatePeridotColumnMapping(headers = [], mapping = {}) {
   const available = new Set(getUniqueHeaders(headers));
   const coreMapping = mapping.coreMapping || {};
   const temporalMapping = mapping.temporalMapping || {};
+  const temporalNoteMappings = mapping.temporalNoteMappings || {};
   const pointMapping = mapping.pointMapping || {};
   const routeCoordinatePairMapping = mapping.routeCoordinatePairMapping || {};
   const customFieldSelections = mapping.customFieldSelections || [];
@@ -1112,6 +1150,19 @@ export function validatePeridotColumnMapping(headers = [], mapping = {}) {
     }
   });
 
+
+  Object.entries(temporalNoteMappings).forEach(([field, sourceColumns]) => {
+    if (!PERIDOT_TEMPORAL_FIELDS.includes(field)) {
+      issues.push({ code: 'unknown_temporal_note_field', field, message: `${field} cannot receive temporal notes because it is not a supported temporal role.` });
+      return;
+    }
+    (Array.isArray(sourceColumns) ? sourceColumns : []).forEach((sourceColumn) => {
+      if (asText(sourceColumn) && !available.has(sourceColumn)) issues.push({
+        code: 'missing_temporal_note_source_column', field, sourceColumn,
+        message: `The temporal note column “${sourceColumn}” is not present in the uploaded table.`,
+      });
+    });
+  });
   Object.entries(pointMapping).forEach(([field, sourceColumn]) => {
     if (!PERIDOT_POINT_FIELDS.includes(field)) {
       issues.push({ code: 'unknown_point_field', field, message: `${field} is not one of the supported Peridot point-location roles.` });
@@ -1191,6 +1242,7 @@ export function buildInitialPeridotColumnMappingState(headers = [], rows = [], o
     routeCoordinatePairSuggestions,
     coreMapping: Object.freeze(coreMapping),
     temporalMapping: Object.freeze(temporalMapping),
+    temporalNoteMappings: Object.freeze({}),
     pointMapping: Object.freeze(pointMapping),
     routeCoordinatePairMapping: Object.freeze(routeCoordinatePairMapping),
     customFieldSelections,
