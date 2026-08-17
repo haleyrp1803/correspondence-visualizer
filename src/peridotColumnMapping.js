@@ -56,6 +56,7 @@
 
 import { PERIDOT_TEMPLATE_COLUMNS } from './peridotCsvSchema.js';
 import { buildInitialPeridotGenealogyMappingState } from './peridotGenealogyMapping.js';
+import { buildTemporalAssertionMappingsFromLegacy, getTemporalAssertionSourceColumns } from './peridotTemporalMapping.js';
 
 export const PERIDOT_CORE_FIELDS = Object.freeze([
   'Date',
@@ -1064,6 +1065,7 @@ export function applyPeridotColumnMapping(rows = [], mapping = {}) {
   const coreMapping = mapping.coreMapping || {};
   const temporalMapping = mapping.temporalMapping || {};
   const temporalNoteMappings = mapping.temporalNoteMappings || {};
+  const temporalAssertionMappings = mapping.temporalAssertionMappings || [];
   const pointMapping = mapping.pointMapping || {};
   const routeCoordinatePairMapping = mapping.routeCoordinatePairMapping || {};
   const customFieldSelections = mapping.customFieldSelections || [];
@@ -1074,7 +1076,7 @@ export function applyPeridotColumnMapping(rows = [], mapping = {}) {
       .filter(Boolean)
   );
   const mappedCoreColumns = new Set(
-    [...Object.values(coreMapping), ...Object.values(temporalMapping), ...Object.values(temporalNoteMappings).flat(), ...Object.values(pointMapping), ...Object.values(routeCoordinatePairMapping)]
+    [...Object.values(coreMapping), ...Object.values(temporalMapping), ...Object.values(temporalNoteMappings).flat(), ...getTemporalAssertionSourceColumns(temporalAssertionMappings), ...Object.values(pointMapping), ...Object.values(routeCoordinatePairMapping)]
       .map(asText)
       .filter(Boolean)
   );
@@ -1107,6 +1109,7 @@ export function validatePeridotColumnMapping(headers = [], mapping = {}) {
   const coreMapping = mapping.coreMapping || {};
   const temporalMapping = mapping.temporalMapping || {};
   const temporalNoteMappings = mapping.temporalNoteMappings || {};
+  const temporalAssertionMappings = mapping.temporalAssertionMappings || [];
   const pointMapping = mapping.pointMapping || {};
   const routeCoordinatePairMapping = mapping.routeCoordinatePairMapping || {};
   const customFieldSelections = mapping.customFieldSelections || [];
@@ -1163,6 +1166,10 @@ export function validatePeridotColumnMapping(headers = [], mapping = {}) {
       });
     });
   });
+  getTemporalAssertionSourceColumns(temporalAssertionMappings).forEach((sourceColumn) => {
+    if (asText(sourceColumn) && !available.has(sourceColumn)) issues.push({ code: 'missing_temporal_assertion_source_column', sourceColumn, message: `The temporal assertion column “${sourceColumn}” is not present in the uploaded table.` });
+  });
+
   Object.entries(pointMapping).forEach(([field, sourceColumn]) => {
     if (!PERIDOT_POINT_FIELDS.includes(field)) {
       issues.push({ code: 'unknown_point_field', field, message: `${field} is not one of the supported Peridot point-location roles.` });
@@ -1243,6 +1250,7 @@ export function buildInitialPeridotColumnMappingState(headers = [], rows = [], o
     coreMapping: Object.freeze(coreMapping),
     temporalMapping: Object.freeze(temporalMapping),
     temporalNoteMappings: Object.freeze({}),
+    temporalAssertionMappings: Object.freeze(buildTemporalAssertionMappingsFromLegacy(temporalMapping, {})),
     pointMapping: Object.freeze(pointMapping),
     routeCoordinatePairMapping: Object.freeze(routeCoordinatePairMapping),
     customFieldSelections,

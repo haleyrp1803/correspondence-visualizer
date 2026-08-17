@@ -31,6 +31,7 @@ import {
   validatePeridotColumnMapping,
 } from './peridotColumnMapping.js';
 import { applyPeridotGeneralizedColumnMapping } from './peridotGeneralizedMappingRuntime.js';
+import { buildTemporalAssertionMappingsFromLegacy, deriveLegacyTemporalMapping, getTemporalAssertionSourceColumns, normalizeTemporalAssertionMappings, temporalAssertionMappingHasSource } from './peridotTemporalMapping.js';
 import { normalizePeridotGeneralizedMappedRows } from './peridotCorrespondenceProfile.js';
 import {
   buildPeridotRowsFromWorkbookMapping,
@@ -38,6 +39,7 @@ import {
   getLetterIdJoinMatchSummary,
   getUsableWorkbookSheets,
   getWorkbookMappingSummary,
+  getWorkbookTemporalAssertionRefs,
   getWorkbookSheet,
   makeLetterIdJoin,
   makeWorkbookColumnRef,
@@ -441,10 +443,8 @@ function IdentifyRecordsStep({ staging, previewRows, headers }) {
   );
 }
 
-function TimeMappingStep({ headers, rows, temporalMapping, temporalNoteMappings, onTemporalChange, onTemporalNoteChange }) {
-  return (
-    <TemporalMappingTable headers={headers} rows={rows} temporalMapping={temporalMapping} temporalNoteMappings={temporalNoteMappings} onChange={onTemporalChange} onNoteChange={onTemporalNoteChange} />
-  );
+function TimeMappingStep({ headers, rows, temporalAssertions, relationshipParts, onTemporalAssertionsChange }) {
+  return <TemporalMappingTable headers={headers} rows={rows} temporalAssertions={temporalAssertions} relationshipParts={relationshipParts} onAssertionsChange={onTemporalAssertionsChange} />;
 }
 
 function PlacesMappingStep({ headers, rows, placeParts, relationshipParts, onPlacePartsChange }) {
@@ -486,6 +486,8 @@ function refreshWorkbookCustomSelections({ workbookModel, workbookMapping, previ
     previousSelections.map((selection) => [makeWorkbookSelectionKey(selection), selection])
   );
 
+  const temporalRefKeys = new Set(workbookTemporalAssertionRefs(workbookMapping.temporalAssertionMappings || []).map((ref) => `${ref.sheetName}::${ref.columnName}`));
+
   return selectedSheets.flatMap((sheetName) => {
     const suggestedSelections = buildWorkbookCustomFieldSelectionsForSheet(
       workbookModel,
@@ -496,7 +498,7 @@ function refreshWorkbookCustomSelections({ workbookModel, workbookMapping, previ
       workbookMapping.routeCoordinatePairMappings || {}
     );
 
-    return suggestedSelections.map((selection) => {
+    return suggestedSelections.filter((selection) => !temporalRefKeys.has(`${selection.sheetName}::${selection.sourceColumn}`)).map((selection) => {
       const key = makeWorkbookSelectionKey(selection);
       const previous = previousByKey.get(key);
       const nextSelection = previous
@@ -676,7 +678,7 @@ function ReviewImportSummaryStrip({ acceptedRecords = 0, warningCount = 0 }) {
   );
 }
 
-function ReviewStatusPanel({ acceptedRecords = 0, warningCount = 0, capabilityAudit, mapReady = false }) {
+function ReviewStatusPanel({ acceptedRecords = 0, warningCount = 0, capabilityAudit, mapReady = false, timelineReadyCount = null }) {
   const totalRows = getReviewTotalRows(capabilityAudit, acceptedRecords);
 
   return (
@@ -700,7 +702,9 @@ function ReviewStatusPanel({ acceptedRecords = 0, warningCount = 0, capabilityAu
       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">Tool availability</div>
       <div className="mt-1.5 grid gap-1.5">
         {REVIEW_CAPABILITY_ITEMS.map((item) => {
-          const count = getReviewCapabilityCount(capabilityAudit, item.key, { mapReady, totalRows });
+          const count = item.key === 'timelineReady' && Number.isFinite(timelineReadyCount)
+            ? timelineReadyCount
+            : getReviewCapabilityCount(capabilityAudit, item.key, { mapReady, totalRows });
           const status = getReviewCapabilityStatus(count, totalRows);
           return (
             <div
@@ -800,6 +804,7 @@ function ReviewAssignmentSection({ title, children }) {
 function getSingleTableStructuralColumnsForReview({
   coreMapping = {},
   temporalMapping = {},
+  temporalAssertionsMapping = [],
   placeParts = [],
   relationshipParts = [],
   relationshipMetadataMapping = {},
@@ -854,9 +859,39 @@ function formatSingleRole(part = {}) {
   return part?.participantColumn ? 'role from column heading' : 'role unassigned';
 }
 
+function temporalMappingSourceSummary(mapping = {}, workbook = false) {
+  const fmt = (value) => workbook ? workbookRefLabel(value) : String(value || '').trim();
+  const parts = (prefix = '') => [
+    ['year', mapping[prefix ? `${prefix}YearColumn` : 'yearColumn']],
+    ['month', mapping[prefix ? `${prefix}MonthColumn` : 'monthColumn']],
+    ['day', mapping[prefix ? `${prefix}DayColumn` : 'dayColumn']],
+  ].filter(([, value]) => fmt(value)).map(([label, value]) => `${label}: ${fmt(value)}`).join(' · ');
+  if (mapping.kind === 'period') {
+    if (mapping.sourceMode === 'single') return fmt(mapping.column);
+    const start = mapping.startMode === 'parts' ? parts('start') : fmt(mapping.startColumn);
+    const end = mapping.endMode === 'parts' ? parts('end') : fmt(mapping.endColumn);
+    return [start ? `Beginning ${start}` : '', end ? `Ending ${end}` : ''].filter(Boolean).join(' · ');
+  }
+  return mapping.sourceMode === 'parts' ? parts('') : fmt(mapping.column);
+}
+
+function singleTemporalSubjectDetail(mapping = {}, relationshipParts = []) {
+  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'This row / record as a whole';
+  const part = relationshipParts[mapping.subjectParticipantIndex];
+  return part?.participantColumn ? `Describes ${part.participantColumn}` : `Describes relationship part ${mapping.subjectParticipantIndex + 1}`;
+}
+
+function workbookTemporalSubjectDetail(mapping = {}, relationshipParts = []) {
+  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'This row / record as a whole';
+  const part = relationshipParts[mapping.subjectParticipantIndex];
+  const ref = part?.participantRef || {};
+  return ref?.columnName ? `Describes ${ref.sheetName} — ${ref.columnName}` : `Describes relationship part ${mapping.subjectParticipantIndex + 1}`;
+}
+
 function SingleTableReviewAssignments({
   coreMapping = {},
   temporalMapping = {},
+  temporalAssertionsMapping = [],
   placeParts = [],
   relationshipParts = [],
   relationshipMetadataMapping = {},
@@ -879,13 +914,9 @@ function SingleTableReviewAssignments({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ReviewAssignmentSection title="Time">
-          {Object.entries(REVIEW_TEMPORAL_LABELS).map(([field, label]) => (
-            <ReviewAssignmentLine
-              key={field}
-              label={label}
-              value={temporalMapping?.[field] || ''}
-            />
-          ))}
+          {(temporalAssertionsMapping || []).filter((mapping) => temporalMappingSourceSummary(mapping)).length
+            ? (temporalAssertionsMapping || []).filter((mapping) => temporalMappingSourceSummary(mapping)).map((mapping, index) => <ReviewAssignmentLine key={mapping.id || index} label={mapping.role || `Time ${index + 1}`} value={temporalMappingSourceSummary(mapping)} detail={`${mapping.kind === 'period' ? 'Period / range' : 'Date'} · ${singleTemporalSubjectDetail(mapping, relationshipParts)}`} />)
+            : <ReviewAssignmentLine label="Time" value="Unassigned" />}
         </ReviewAssignmentSection>
 
         <ReviewAssignmentSection title="Places">
@@ -1036,13 +1067,9 @@ function WorkbookReviewAssignments({ workbookMapping = {} }) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ReviewAssignmentSection title="Time">
-          {Object.entries(REVIEW_TEMPORAL_LABELS).map(([field, label]) => (
-            <ReviewAssignmentLine
-              key={field}
-              label={label}
-              value={workbookRefLabel(temporal?.[field])}
-            />
-          ))}
+          {(workbookMapping.temporalAssertionMappings || []).filter((mapping) => temporalMappingSourceSummary(mapping, true)).length
+            ? (workbookMapping.temporalAssertionMappings || []).filter((mapping) => temporalMappingSourceSummary(mapping, true)).map((mapping, index) => <ReviewAssignmentLine key={mapping.id || index} label={mapping.role || `Time ${index + 1}`} value={temporalMappingSourceSummary(mapping, true)} detail={`${mapping.kind === 'period' ? 'Period / range' : 'Date'} · ${workbookTemporalSubjectDetail(mapping, workbookMapping.relationshipParts || [])}`} />)
+            : <ReviewAssignmentLine label="Time" value="Unassigned" />}
         </ReviewAssignmentSection>
 
         <ReviewAssignmentSection title="Places">
@@ -1124,7 +1151,7 @@ function hasAssignedWorkbookRelationshipParts(relationshipParts = []) {
   return (relationshipParts || []).some((part) => Boolean(part?.participantRef?.sheetName && part?.participantRef?.columnName));
 }
 
-function filterLegacyMappingMessages(items = [], { hasPlaces = false, hasRelationships = false } = {}) {
+function filterLegacyMappingMessages(items = [], { hasPlaces = false, hasRelationships = false, hasTemporalAssertions = false } = {}) {
   return (items || []).filter((item) => {
     const message = String(item?.message || '');
     if (
@@ -1148,6 +1175,17 @@ function filterLegacyMappingMessages(items = [], { hasPlaces = false, hasRelatio
       return false;
     }
 
+    if (
+      hasTemporalAssertions
+      && (
+        /missing Date values/i.test(message)
+        || /have Date values/i.test(message)
+        || /sortable dates or intervals/i.test(message)
+      )
+    ) {
+      return false;
+    }
+
     return true;
   });
 }
@@ -1158,14 +1196,23 @@ function summarizeTemporalAssertionsForReview(rows = [], datasetId = 'temporal-r
     const canonical = normalizePeridotGeneralizedMappedRows(rows, { datasetId });
     const assertions = (canonical.records || []).flatMap((record) => record.temporalAssertions || (record.temporalAssertion ? [record.temporalAssertion] : []));
     const count = (predicate) => assertions.filter(predicate).length;
+    const positionable = (item) => item.visualizationUsability?.timelinePositionable && item.parsingStatus !== 'unrecognized' && item.consistency !== 'backwards';
     const inconsistent = count((item) => item.consistency === 'backwards');
     const unrecognized = count((item) => item.parsingStatus === 'unrecognized');
+    const positionableRecords = (canonical.records || []).filter((record) => (record.temporalAssertions || []).some(positionable)).length;
+    const recordsWithTemporalEvidence = (canonical.records || []).filter((record) => (record.temporalAssertions || []).length > 0).length;
+    const recordsWithoutTemporalEvidence = Math.max(0, (canonical.records || []).length - recordsWithTemporalEvidence);
     const warnings = [];
+    if (recordsWithoutTemporalEvidence) warnings.push({ message: `${recordsWithoutTemporalEvidence} record${recordsWithoutTemporalEvidence === 1 ? '' : 's'} contain no mapped date or period. ${recordsWithoutTemporalEvidence === 1 ? 'It will not' : 'They will not'} participate in timeline playback or date-range filtering.` });
     if (inconsistent) warnings.push({ message: `${inconsistent} temporal value${inconsistent === 1 ? '' : 's'} contain a start after the end. Peridot preserved the source order and marked ${inconsistent === 1 ? 'it' : 'them'} unsafe for ordinary interval visualization.` });
     if (unrecognized) warnings.push({ message: `${unrecognized} temporal value${unrecognized === 1 ? '' : 's'} could not be interpreted safely. The original text will still be preserved in Inspector/export.` });
     return Object.freeze({
       total: assertions.length,
-      fullyPositionable: count((item) => item.visualizationUsability?.timelinePositionable && item.parsingStatus === 'parsed' && item.consistency !== 'backwards'),
+      recordCount: (canonical.records || []).length,
+      positionableRecords,
+      recordsWithTemporalEvidence,
+      recordsWithoutTemporalEvidence,
+      fullyPositionable: count(positionable),
       reducedPrecision: count((item) => item.parsingStatus === 'partial'),
       approximate: count((item) => String(item.temporalShape || '').startsWith('approximate')),
       openEnded: count((item) => item.temporalShape === 'openInterval'),
@@ -1208,6 +1255,7 @@ function ReviewStep({
   capabilityAudit,
   coreMapping,
   temporalMapping,
+  temporalAssertionsMapping,
   placeParts,
   relationshipParts,
   relationshipMetadataMapping,
@@ -1217,6 +1265,7 @@ function ReviewStep({
   const generalizedState = {
     hasPlaces: hasAssignedSinglePlaceParts(placeParts),
     hasRelationships: hasAssignedSingleRelationshipParts(relationshipParts),
+    hasTemporalAssertions: (temporalAssertionsMapping || []).some((mapping) => temporalAssertionMappingHasSource(mapping)),
   };
   const warnings = [...filterLegacyMappingMessages(summary?.warnings || [], generalizedState), ...(temporalReviewSummary?.warnings || [])];
   const acceptedRecords = summary?.acceptedRecordCount ?? mappedPreviewRows.length;
@@ -1228,6 +1277,7 @@ function ReviewStep({
       <SingleTableReviewAssignments
         coreMapping={coreMapping}
         temporalMapping={temporalMapping}
+        temporalAssertionsMapping={temporalAssertionsMapping}
         placeParts={placeParts}
         relationshipParts={relationshipParts}
         relationshipMetadataMapping={relationshipMetadataMapping}
@@ -1249,6 +1299,7 @@ function ReviewStep({
             warningCount={getReviewWarningDisplayCount(warnings, validationIssues)}
             capabilityAudit={capabilityAudit}
             mapReady={generalizedState.hasPlaces}
+            timelineReadyCount={temporalReviewSummary?.positionableRecords}
           />
           <ReviewWarningsCard warnings={warnings} validationIssues={validationIssues} />
         </div>
@@ -1544,15 +1595,8 @@ function WorkbookIdentifyRecordsStep({ workbookModel, workbookMapping }) {
   );
 }
 
-function WorkbookTimeMappingStep({ workbookModel, workbookMapping, onTemporalChange, onTemporalNoteChange }) {
-  return (
-    <WorkbookTemporalMappingTable
-      workbookModel={workbookModel}
-      workbookMapping={workbookMapping}
-      onChange={onTemporalChange}
-      onNoteChange={onTemporalNoteChange}
-    />
-  );
+function WorkbookTimeMappingStep({ workbookModel, workbookMapping, onTemporalAssertionsChange }) {
+  return <WorkbookTemporalMappingTable workbookModel={workbookModel} workbookMapping={workbookMapping} onAssertionsChange={onTemporalAssertionsChange} />;
 }
 
 function WorkbookPlacesMappingStep({ workbookModel, placeParts, relationshipParts, onPlacePartsChange }) {
@@ -1580,6 +1624,7 @@ function WorkbookReviewStep({ workbookModel, workbookMapping, validation, summar
   const generalizedState = {
     hasPlaces: hasAssignedWorkbookPlaceParts(workbookMapping.placeParts),
     hasRelationships: hasAssignedWorkbookRelationshipParts(workbookMapping.relationshipParts),
+    hasTemporalAssertions: getWorkbookTemporalAssertionRefs(workbookMapping.temporalAssertionMappings || []).length > 0,
   };
   const rawIssues = validation?.issues || [];
   const filteredIssues = filterLegacyMappingMessages(rawIssues, generalizedState);
@@ -1607,6 +1652,7 @@ function WorkbookReviewStep({ workbookModel, workbookMapping, validation, summar
             warningCount={getReviewWarningDisplayCount(warnings, validationIssues)}
             capabilityAudit={capabilityAudit}
             mapReady={generalizedState.hasPlaces}
+            timelineReadyCount={temporalReviewSummary?.positionableRecords}
           />
           <ReviewWarningsCard warnings={warnings} validationIssues={validationIssues} />
         </div>
@@ -1735,6 +1781,39 @@ function stripWorkbookDisplayDateMapping(workbookMapping = {}) {
   };
 }
 
+
+function buildInitialWorkbookTemporalAssertions(mappingState = {}) {
+  if (Array.isArray(mappingState.temporalAssertionMappings) && mappingState.temporalAssertionMappings.length) {
+    return mappingState.temporalAssertionMappings.map((mapping) => ({ ...mapping, noteColumns: [...(mapping.noteColumns || [])] }));
+  }
+  const temporal = mappingState.temporalMappings || {};
+  const notes = mappingState.temporalNoteMappings || {};
+  const result = [];
+  if (temporal.Date?.sheetName && temporal.Date?.columnName) result.push({ id:'legacy-date', role:temporal.Date.columnName, kind:'date', sourceMode:'single', column:temporal.Date, noteColumns:notes.Date || [] });
+  if (temporal.Date_Range?.sheetName && temporal.Date_Range?.columnName) result.push({ id:'legacy-range', role:temporal.Date_Range.columnName, kind:'period', sourceMode:'single', column:temporal.Date_Range, noteColumns:notes.Date_Range || [] });
+  if ((temporal.Date_Start?.sheetName && temporal.Date_Start?.columnName) || (temporal.Date_End?.sheetName && temporal.Date_End?.columnName)) result.push({ id:'legacy-start-end', role:[temporal.Date_Start?.columnName,temporal.Date_End?.columnName].filter(Boolean).join(' / ') || 'Date interval', kind:'period', sourceMode:'endpoints', startMode:'single', startColumn:temporal.Date_Start || makeWorkbookColumnRef('',''), endMode:'single', endColumn:temporal.Date_End || makeWorkbookColumnRef('',''), noteColumns:[...(notes.Date_Start||[]),...(notes.Date_End||[])] });
+  return result.length ? result : [{ id:'time-1', role:'', kind:'date', sourceMode:'single', column:makeWorkbookColumnRef('',''), noteColumns:[], subjectParticipantIndex:null }];
+}
+
+function workbookTemporalAssertionRefs(mappings = []) {
+  const refs=[]; const add=(ref)=>{ if(ref?.sheetName&&ref?.columnName) refs.push(ref); };
+  (mappings||[]).forEach((mapping)=>{ ['column','yearColumn','monthColumn','dayColumn','startColumn','startYearColumn','startMonthColumn','startDayColumn','endColumn','endYearColumn','endMonthColumn','endDayColumn'].forEach((key)=>add(mapping?.[key])); (mapping?.noteColumns||[]).forEach(add); });
+  return refs;
+}
+
+function deriveWorkbookLegacyTemporalMappings(mappings = []) {
+  const empty=()=>makeWorkbookColumnRef('','');
+  const result={ Date:empty(), Date_Range:empty(), Date_Start:empty(), Date_End:empty(), Date_Display:empty() };
+  (mappings||[]).forEach((mapping)=>{
+    if(mapping.kind==='date' && mapping.sourceMode==='single' && !result.Date?.columnName && mapping.column?.columnName) result.Date=mapping.column;
+    if(mapping.kind==='period' && mapping.sourceMode==='single' && !result.Date_Range?.columnName && mapping.column?.columnName) result.Date_Range=mapping.column;
+    if(mapping.kind==='period' && mapping.sourceMode==='endpoints') {
+      if(mapping.startMode==='single' && !result.Date_Start?.columnName && mapping.startColumn?.columnName) result.Date_Start=mapping.startColumn;
+      if(mapping.endMode==='single' && !result.Date_End?.columnName && mapping.endColumn?.columnName) result.Date_End=mapping.endColumn;
+    }
+  });
+  return result;
+}
 
 function buildInitialWorkbookPlaceParts(mappingState = {}) {
   const saved = Array.isArray(mappingState.placeParts) ? mappingState.placeParts : [];
@@ -1967,6 +2046,7 @@ export function PeridotColumnMappingModal({
   const [coreMapping, setCoreMapping] = useState(mappingState.coreMapping || {});
   const [temporalMapping, setTemporalMapping] = useState(stripDisplayDateMapping(mappingState.temporalMapping || {}));
   const [temporalNoteMappings, setTemporalNoteMappings] = useState(mappingState.temporalNoteMappings || {});
+  const [temporalAssertionsMapping, setTemporalAssertionsMapping] = useState(() => normalizeTemporalAssertionMappings(mappingState.temporalAssertionMappings?.length ? mappingState.temporalAssertionMappings : buildTemporalAssertionMappingsFromLegacy(stripDisplayDateMapping(mappingState.temporalMapping || {}), mappingState.temporalNoteMappings || {}))); 
   const [pointMapping, setPointMapping] = useState(mappingState.pointMapping || {});
   const [routeCoordinatePairMapping, setRouteCoordinatePairMapping] = useState(mappingState.routeCoordinatePairMapping || {});
   const [placeParts, setPlaceParts] = useState(() => buildInitialPlaceParts(mappingState));
@@ -1977,6 +2057,7 @@ export function PeridotColumnMappingModal({
     ...stripWorkbookDisplayDateMapping(mappingState),
     placeParts: buildInitialWorkbookPlaceParts(mappingState),
     relationshipParts: buildInitialWorkbookRelationshipParts(mappingState),
+    temporalAssertionMappings: buildInitialWorkbookTemporalAssertions(mappingState),
   }));
   const [genealogyFieldMapping, setGenealogyFieldMapping] = useState(
     isWorkbookMode
@@ -2004,6 +2085,7 @@ export function PeridotColumnMappingModal({
     setCoreMapping(mappingState.coreMapping || {});
     setTemporalMapping(stripDisplayDateMapping(mappingState.temporalMapping || {}));
     setTemporalNoteMappings(mappingState.temporalNoteMappings || {});
+    setTemporalAssertionsMapping(normalizeTemporalAssertionMappings(mappingState.temporalAssertionMappings?.length ? mappingState.temporalAssertionMappings : buildTemporalAssertionMappingsFromLegacy(stripDisplayDateMapping(mappingState.temporalMapping || {}), mappingState.temporalNoteMappings || {})));
     setPlaceParts(buildInitialPlaceParts(mappingState));
     setRelationshipParts(buildInitialRelationshipParts(mappingState));
     setRelationshipMetadataMapping(normalizeRelationshipMetadataMapping(mappingState.relationshipMetadataMapping || {}));
@@ -2020,6 +2102,7 @@ export function PeridotColumnMappingModal({
             ...stripWorkbookDisplayDateMapping(mappingState || {}),
             placeParts: buildInitialWorkbookPlaceParts(mappingState || {}),
             relationshipParts: buildInitialWorkbookRelationshipParts(mappingState || {}),
+            temporalAssertionMappings: buildInitialWorkbookTemporalAssertions(mappingState || {}),
             relationshipMetadataMappings: normalizeWorkbookRelationshipMetadataMappings(mappingState.relationshipMetadataMappings || {}),
             customFieldSelections: applyWorkbookRelationshipMetadataSelections(
               refreshWorkbookCustomSelections({
@@ -2030,7 +2113,7 @@ export function PeridotColumnMappingModal({
               normalizeWorkbookRelationshipMetadataMappings(mappingState.relationshipMetadataMappings || {})
             ),
           }
-        : { ...stripWorkbookDisplayDateMapping(mappingState || {}), placeParts: buildInitialWorkbookPlaceParts(mappingState || {}) }
+        : { ...stripWorkbookDisplayDateMapping(mappingState || {}), placeParts: buildInitialWorkbookPlaceParts(mappingState || {}), temporalAssertionMappings: buildInitialWorkbookTemporalAssertions(mappingState || {}) }
     );
     setShowCancelConfirmation(false);
   }, [open, staging?.stagedAt]);
@@ -2040,11 +2123,17 @@ export function PeridotColumnMappingModal({
     stepTransitionTimeoutsRef.current = [];
   }, []);
 
+  useEffect(() => {
+    setTemporalMapping(stripDisplayDateMapping(deriveLegacyTemporalMapping(temporalAssertionsMapping)));
+    setTemporalNoteMappings({});
+  }, [temporalAssertionsMapping]);
+
   const effectiveCustomSelections = useMemo(() => {
     const mappedCoreColumns = new Set([
       ...Object.values(coreMapping || {}),
       ...Object.values(stripDisplayDateMapping(temporalMapping || {})),
       ...Object.values(temporalNoteMappings || {}).flat(),
+      ...getTemporalAssertionSourceColumns(temporalAssertionsMapping),
       ...Object.values(pointMapping || {}),
       ...Object.values(routeCoordinatePairMapping || {}),
       ...(placeParts || []).flatMap((part) => [
@@ -2065,19 +2154,20 @@ export function PeridotColumnMappingModal({
         : selection
     ));
     return applyRelationshipMetadataSelections(structuralSelections, relationshipMetadataMapping);
-  }, [coreMapping, temporalMapping, temporalNoteMappings, pointMapping, routeCoordinatePairMapping, placeParts, relationshipParts, relationshipMetadataMapping, customFieldSelections]);
+  }, [coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionsMapping, pointMapping, routeCoordinatePairMapping, placeParts, relationshipParts, relationshipMetadataMapping, customFieldSelections]);
 
   const validation = useMemo(
     () => validatePeridotColumnMapping(headers, {
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
       temporalNoteMappings,
+      temporalAssertionMappings: temporalAssertionsMapping,
       pointMapping,
       routeCoordinatePairMapping,
       relationshipMetadataMapping,
       customFieldSelections: effectiveCustomSelections,
     }),
-    [headers, coreMapping, temporalMapping, temporalNoteMappings, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
+    [headers, coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionsMapping, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
   );
 
   const mappedRows = useMemo(
@@ -2089,11 +2179,12 @@ export function PeridotColumnMappingModal({
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
       temporalNoteMappings,
+      temporalAssertionMappings: temporalAssertionsMapping,
       pointMapping,
       routeCoordinatePairMapping,
       customFieldSelections: effectiveCustomSelections,
     }),
-    [rows, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
+    [rows, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionsMapping, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
   );
 
   const validationSummary = useMemo(
@@ -2192,9 +2283,9 @@ export function PeridotColumnMappingModal({
 
   const singleStepLabels = {
     preview: 'Preview',
+    relationships: 'Relations',
     time: 'Time',
     places: 'Places',
-    relationships: 'Relations',
     evidence: 'Evidence',
     review: 'Review',
   };
@@ -2202,9 +2293,9 @@ export function PeridotColumnMappingModal({
   const workbookStepLabels = {
     'workbook-preview': 'Preview',
     'workbook-setup': 'Sheets',
+    'workbook-relationships': 'Relations',
     'workbook-time': 'Time',
     'workbook-places': 'Places',
-    'workbook-relationships': 'Relations',
     'workbook-evidence': 'Evidence',
     'workbook-review': 'Review',
   };
@@ -2264,6 +2355,7 @@ export function PeridotColumnMappingModal({
     setCoreMapping(nextInitialMapping.coreMapping || {});
     setTemporalMapping(stripDisplayDateMapping(nextInitialMapping.temporalMapping || {}));
     setTemporalNoteMappings(nextInitialMapping.temporalNoteMappings || {});
+    setTemporalAssertionsMapping(normalizeTemporalAssertionMappings(nextInitialMapping.temporalAssertionMappings?.length ? nextInitialMapping.temporalAssertionMappings : buildTemporalAssertionMappingsFromLegacy(stripDisplayDateMapping(nextInitialMapping.temporalMapping || {}), nextInitialMapping.temporalNoteMappings || {})));
     setPointMapping(nextInitialMapping.pointMapping || {});
     setRouteCoordinatePairMapping(nextInitialMapping.routeCoordinatePairMapping || {});
     setRelationshipMetadataMapping(normalizeRelationshipMetadataMapping({}));
@@ -2298,6 +2390,15 @@ export function PeridotColumnMappingModal({
       else if (sourceColumn) next[noteIndex] = sourceColumn;
       else if (noteIndex < next.length) next.splice(noteIndex, 1);
       return { ...current, [field]: next };
+    });
+  };
+
+  const handleTemporalAssertionsChange = (nextMappingsOrUpdater) => {
+    setTemporalAssertionsMapping((currentMappings) => {
+      const nextMappings = typeof nextMappingsOrUpdater === 'function'
+        ? nextMappingsOrUpdater(currentMappings)
+        : nextMappingsOrUpdater;
+      return normalizeTemporalAssertionMappings(nextMappings);
     });
   };
 
@@ -2336,6 +2437,7 @@ export function PeridotColumnMappingModal({
         primaryLetterIdColumn: suggestedPrimaryId,
         coreMappings: nextCoreMappings,
         temporalMappings: nextTemporalMappings,
+        temporalAssertionMappings: buildInitialWorkbookTemporalAssertions({ temporalMappings: nextTemporalMappings }),
         pointMappings: nextPointMappings,
         routeCoordinatePairMappings: nextRouteCoordinatePairMappings,
         relationshipMetadataMappings: normalizeWorkbookRelationshipMetadataMappings({}),
@@ -2539,6 +2641,17 @@ export function PeridotColumnMappingModal({
     });
   };
 
+  const handleWorkbookTemporalAssertionsChange = (nextMappingsOrUpdater) => {
+    setWorkbookMapping((current) => {
+      const currentMappings = current.temporalAssertionMappings || [];
+      const nextMappings = typeof nextMappingsOrUpdater === 'function'
+        ? nextMappingsOrUpdater(currentMappings)
+        : nextMappingsOrUpdater;
+      const nextMapping = { ...current, temporalAssertionMappings: nextMappings, temporalMappings: deriveWorkbookLegacyTemporalMappings(nextMappings), temporalNoteMappings: {} };
+      return { ...nextMapping, customFieldSelections: refreshWorkbookCustomSelections({ workbookModel, workbookMapping: nextMapping, previousSelections: current.customFieldSelections || [] }) };
+    });
+  };
+
   const handleWorkbookPlacePartsChange = (placeParts) => {
     setWorkbookMapping((current) => ({
       ...current,
@@ -2724,6 +2837,7 @@ export function PeridotColumnMappingModal({
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
       temporalNoteMappings,
+      temporalAssertionMappings: temporalAssertionsMapping,
       pointMapping,
       routeCoordinatePairMapping,
       relationshipMetadataMapping,
@@ -2848,10 +2962,9 @@ export function PeridotColumnMappingModal({
             <TimeMappingStep
               headers={headers}
               rows={rows}
-              temporalMapping={stripDisplayDateMapping(temporalMapping)}
-              temporalNoteMappings={temporalNoteMappings}
-              onTemporalChange={handleTemporalMappingChange}
-              onTemporalNoteChange={handleTemporalNoteMappingChange}
+              temporalAssertions={temporalAssertionsMapping}
+              relationshipParts={relationshipParts}
+              onTemporalAssertionsChange={handleTemporalAssertionsChange}
             />
           ) : null}
 
@@ -2897,6 +3010,7 @@ export function PeridotColumnMappingModal({
               capabilityAudit={mappedRowsCapabilityAudit}
               coreMapping={coreMapping}
               temporalMapping={temporalMapping}
+              temporalAssertionsMapping={temporalAssertionsMapping}
               placeParts={placeParts}
               relationshipParts={relationshipParts}
               relationshipMetadataMapping={relationshipMetadataMapping}
@@ -2934,8 +3048,7 @@ export function PeridotColumnMappingModal({
             <WorkbookTimeMappingStep
               workbookModel={workbookModel}
               workbookMapping={workbookMapping}
-              onTemporalChange={handleWorkbookTemporalMappingChange}
-              onTemporalNoteChange={handleWorkbookTemporalNoteMappingChange}
+              onTemporalAssertionsChange={handleWorkbookTemporalAssertionsChange}
             />
           ) : null}
 

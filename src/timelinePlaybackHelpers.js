@@ -17,6 +17,11 @@
 
 const DEFAULT_TEMPORAL_ROLE = 'Date';
 
+export const PERIDOT_TIMELINE_PLAYBACK_MODES = Object.freeze({
+  CUMULATIVE: 'cumulative',
+  CO_CURRENT: 'co-current',
+});
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -100,6 +105,85 @@ function assertionIntersectsWindow(assertion, windowStart, windowEnd) {
   return start <= windowEnd && end >= windowStart;
 }
 
+
+export function getRowTimelineCapability(row) {
+  const canonical = asArray(row?.temporalAssertions).filter(Boolean);
+  const assertions = canonical.length ? canonical : getRowTemporalAssertions(row);
+  const positionableAssertions = assertions.filter(isAssertionChronologicallyUsable);
+  const legacyEvidence = [row?.date, row?.displayDate, row?.dateDisplay, row?.Date, row?.['Date*']]
+    .some((value) => String(value ?? '').trim());
+  return {
+    hasTemporalEvidence: canonical.length > 0 || legacyEvidence || Boolean(row?.parsedDate?.isKnown),
+    timelineReady: positionableAssertions.length > 0,
+    positionableAssertionCount: positionableAssertions.length,
+    temporalAssertionCount: assertions.length,
+  };
+}
+
+export function getRowTemporalDisplayLabels(row) {
+  const labels = [];
+  const add = (value) => {
+    const text = String(value ?? '').trim();
+    if (text && !labels.includes(text)) labels.push(text);
+  };
+  const canonical = asArray(row?.temporalAssertions).filter(Boolean);
+  if (canonical.length) {
+    canonical.forEach((assertion) => {
+      const role = assertionRole(assertion);
+      const value = assertion?.display || assertion?.sourceText || '';
+      if (value) add(`${role}: ${value}`);
+    });
+    return labels;
+  }
+  add(row?.displayDate || row?.date || row?.Date || row?.dateDisplay || row?.dateLabel);
+  return labels;
+}
+
+export function getRowTemporalYears(row) {
+  const years = [];
+  const addYear = (sortKey) => {
+    const year = yearFromSortKey(sortKey);
+    if (year && !years.includes(String(year))) years.push(String(year));
+  };
+  const assertions = asArray(row?.temporalAssertions).length
+    ? asArray(row.temporalAssertions)
+    : getRowTemporalAssertions(row);
+  assertions.forEach((assertion) => {
+    const { start, end } = assertionWindowBounds(assertion);
+    addYear(start);
+    addYear(end);
+  });
+  if (!years.length && Number(row?.parsedDate?.year) > 0) years.push(String(row.parsedDate.year));
+  return years;
+}
+
+export function getRowTemporalSearchValues(row) {
+  const values = [];
+  const add = (value) => {
+    const text = String(value ?? '').trim();
+    if (text && !values.includes(text)) values.push(text);
+  };
+
+  const assertions = asArray(row?.temporalAssertions).length
+    ? asArray(row.temporalAssertions)
+    : getRowTemporalAssertions(row);
+
+  assertions.forEach((assertion) => {
+    add(assertion?.role);
+    add(assertion?.display);
+    add(assertion?.sourceText);
+    const { start, end } = assertionWindowBounds(assertion);
+    const startYear = yearFromSortKey(start);
+    const endYear = yearFromSortKey(end);
+    if (startYear) add(startYear);
+    if (endYear) add(endYear);
+  });
+
+  [row?.displayDate, row?.date, row?.Date, row?.['Date*'], row?.dateDisplay, row?.dateLabel, row?.parsedDate?.year, row?.parsedDate?.monthKey]
+    .forEach(add);
+  return values;
+}
+
 export function getAvailableTemporalRoles(rows) {
   const roles = new Set();
   asArray(rows).forEach((row) => {
@@ -145,6 +229,15 @@ export function buildTimelineMonths(rows, options = {}) {
   return Array.from(years).sort((a, b) => Number(a) - Number(b));
 }
 
+export function getTimelineRangeSortBounds(timelineMonths, rangeStart, rangeEnd) {
+  if (!Array.isArray(timelineMonths) || !timelineMonths.length) return null;
+  const startIndex = Math.min(rangeStart, rangeEnd);
+  const endIndex = Math.max(rangeStart, rangeEnd);
+  const startYear = timelineMonths[startIndex];
+  const endYear = timelineMonths[endIndex];
+  return yearWindowSortBounds(startYear, endYear);
+}
+
 function yearWindowSortBounds(startYear, endYear) {
   const start = Number(startYear);
   const end = Number(endYear);
@@ -160,9 +253,7 @@ function yearWindowSortBounds(startYear, endYear) {
 export function filterRowsByTimelineWindow(rows, timelineMode, timelineMonths, rangeStart, rangeEnd, options = {}) {
   if (timelineMode === 'all' || !timelineMonths.length) return rows;
 
-  const startIndex = Math.min(rangeStart, rangeEnd);
-  const endIndex = Math.max(rangeStart, rangeEnd);
-  const bounds = yearWindowSortBounds(timelineMonths[startIndex], timelineMonths[endIndex]);
+  const bounds = getTimelineRangeSortBounds(timelineMonths, rangeStart, rangeEnd);
   if (!bounds) return rows;
 
   return asArray(rows).filter((row) => getRowTemporalAssertions(row).some((assertion) => (
@@ -171,9 +262,56 @@ export function filterRowsByTimelineWindow(rows, timelineMode, timelineMonths, r
   )));
 }
 
+function playbackSortKeyInsideWindow(entry, windowStart) {
+  const original = entry?.playbackSortKey;
+  if (!Number.isFinite(original) || !Number.isFinite(windowStart)) return original;
+  const entryStart = entry?.windowStart;
+  const entryEnd = entry?.windowEnd;
+  const activeAtWindowStart = (entryStart === null || entryStart <= windowStart)
+    && (entryEnd === null || entryEnd >= windowStart);
+  return activeAtWindowStart && original < windowStart ? windowStart : original;
+}
+
+function coCurrentBoundaryEntries(entries) {
+  const result = [];
+  entries.forEach((entry) => {
+    result.push(entry);
+    const end = Number.isFinite(entry?.windowEnd) ? entry.windowEnd : null;
+    const start = Number.isFinite(entry?.windowStart) ? entry.windowStart : null;
+    const hasDuration = end !== null && (start === null || end > start);
+    if (!hasDuration) return;
+    result.push({
+      ...entry,
+      id: `${entry.id}__after-end`,
+      playbackSortKey: end + 0.5,
+      playbackBoundary: 'after-end',
+      displayLabel: `${entry.role} ends · ${entry.displayLabel || ''}`.trim(),
+    });
+  });
+  return result;
+}
+
 export function buildPlaybackEntries(rowsInWindow, options = {}) {
-  return buildTimelineEntries(rowsInWindow, options)
-    .slice()
+  const windowStart = Number.isFinite(options?.windowStart) ? options.windowStart : null;
+  const windowEnd = Number.isFinite(options?.windowEnd) ? options.windowEnd : null;
+  const playbackMode = options?.playbackMode || PERIDOT_TIMELINE_PLAYBACK_MODES.CUMULATIVE;
+
+  const clippedEntries = buildTimelineEntries(rowsInWindow, options)
+    .map((entry) => ({
+      ...entry,
+      playbackSortKey: playbackSortKeyInsideWindow(entry, windowStart),
+    }));
+
+  const playbackEntries = playbackMode === PERIDOT_TIMELINE_PLAYBACK_MODES.CO_CURRENT
+    ? coCurrentBoundaryEntries(clippedEntries)
+    : clippedEntries;
+
+  return playbackEntries
+    .filter((entry) => {
+      if (windowStart !== null && entry.playbackSortKey < windowStart) return false;
+      if (windowEnd !== null && entry.playbackSortKey > windowEnd) return false;
+      return true;
+    })
     .sort((a, b) => {
       if (a.playbackSortKey !== b.playbackSortKey) return a.playbackSortKey - b.playbackSortKey;
       const roleOrder = a.role.localeCompare(b.role);
@@ -193,14 +331,38 @@ export function buildPlaybackRows(rowsInWindow, options = {}) {
 // Restrict an already-filtered row set to rows whose first eligible temporal
 // entry has become active. Multiple active assertions for one row never
 // duplicate that row in downstream visualization scope.
-export function filterRowsForPlayback(baseRows, playbackEntries, playbackIndex) {
+function entryIsActiveAtMoment(entry, momentSortKey) {
+  if (!entry || !Number.isFinite(momentSortKey)) return false;
+  const start = Number.isFinite(entry.windowStart) ? entry.windowStart : null;
+  const end = Number.isFinite(entry.windowEnd) ? entry.windowEnd : null;
+  if (start === null && end === null) return false;
+  if (start === null) return momentSortKey <= end;
+  if (end === null) return momentSortKey >= start;
+  return start <= momentSortKey && end >= momentSortKey;
+}
+
+export function filterRowsForPlayback(baseRows, playbackEntries, playbackIndex, {
+  playbackMode = PERIDOT_TIMELINE_PLAYBACK_MODES.CUMULATIVE,
+} = {}) {
   if (!playbackEntries.length || playbackIndex < 0) return baseRows;
-  const visibleIds = new Set(
+
+  const visibleIds = new Set();
+  if (playbackMode === PERIDOT_TIMELINE_PLAYBACK_MODES.CO_CURRENT) {
+    const currentMoment = playbackEntries[playbackIndex]?.playbackSortKey;
+    playbackEntries.forEach((entry) => {
+      if (!entryIsActiveAtMoment(entry, currentMoment)) return;
+      const id = entry?.rowId ?? entry?.row?.id ?? entry?.id;
+      if (id) visibleIds.add(id);
+    });
+  } else {
     playbackEntries
       .slice(0, playbackIndex + 1)
-      .map((entry) => entry?.rowId ?? entry?.row?.id ?? entry?.id)
-      .filter(Boolean),
-  );
+      .forEach((entry) => {
+        const id = entry?.rowId ?? entry?.row?.id ?? entry?.id;
+        if (id) visibleIds.add(id);
+      });
+  }
+
   return baseRows.filter((row) => visibleIds.has(row.id));
 }
 

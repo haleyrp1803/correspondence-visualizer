@@ -18,13 +18,13 @@ export function runPeridotGeneralizedWorkbookRuntimeSelfAudit() {
     sheets: [
       {
         sheetName: 'Letters',
-        headers: ['Letter_ID', 'Writer', 'Date', 'Subject', 'OldSource', 'OldTarget'],
+        headers: ['Letter_ID', 'Writer', 'Date', 'BirthYear', 'BirthMonth', 'BirthDay', 'DeathYear', 'DeathMonth', 'DeathDay', 'Subject', 'OldSource', 'OldTarget'],
         rows: [
-          { Letter_ID: 'L1', Writer: 'Maria', Date: '1614-05-03', Subject: 'Marriage', OldSource: 'Wrong A', OldTarget: 'Wrong B' },
-          { Letter_ID: 'L2', Writer: 'Maria', Date: '1614-05-11', Subject: 'Court', OldSource: 'Wrong C', OldTarget: 'Wrong D' },
+          { Letter_ID: 'L1', Writer: 'Maria', Date: '1614-05-03', BirthYear:'1589', BirthMonth:'7', BirthDay:'8', DeathYear:'1631', DeathMonth:'8', DeathDay:'10', Subject: 'Marriage', OldSource: 'Wrong A', OldTarget: 'Wrong B' },
+          { Letter_ID: 'L2', Writer: 'Maria', Date: '1614-05-11', BirthYear:'1589', BirthMonth:'7', BirthDay:'8', DeathYear:'1631', DeathMonth:'8', DeathDay:'10', Subject: 'Court', OldSource: 'Wrong C', OldTarget: 'Wrong D' },
         ],
         rowCount: 2,
-        columnCount: 6,
+        columnCount: 12,
       },
       {
         sheetName: 'Details',
@@ -77,6 +77,11 @@ export function runPeridotGeneralizedWorkbookRuntimeSelfAudit() {
       },
     ],
     temporalMappings: { Date: ref('Letters', 'Date'), Date_Start: ref('', ''), Date_End: ref('', ''), Date_Display: ref('', '') },
+    temporalAssertionMappings: [
+      { id:'letter-date', role:'Letter date', kind:'date', sourceMode:'single', column:ref('Letters','Date'), noteColumns:[] },
+      { id:'birth-date', role:'Birth date', kind:'date', sourceMode:'parts', yearColumn:ref('Letters','BirthYear'), monthColumn:ref('Letters','BirthMonth'), dayColumn:ref('Letters','BirthDay'), noteColumns:[], subjectParticipantIndex:0 },
+      { id:'lifespan', role:'Life span', kind:'period', sourceMode:'endpoints', startMode:'parts', startYearColumn:ref('Letters','BirthYear'), startMonthColumn:ref('Letters','BirthMonth'), startDayColumn:ref('Letters','BirthDay'), endMode:'parts', endYearColumn:ref('Letters','DeathYear'), endMonthColumn:ref('Letters','DeathMonth'), endDayColumn:ref('Letters','DeathDay'), noteColumns:[], subjectParticipantIndex:0 },
+    ],
     relationshipMetadataMappings: { Relationship_Type: ref('Details', 'RelationType'), Relationship_Label: ref('', '') },
     customFieldSelections: [
       { sourceRef: ref('Letters', 'Subject'), sourceColumn: 'Subject', sheetName: 'Letters', label: 'Subject', action: 'include', analyticsEligible: true },
@@ -137,6 +142,18 @@ export function runPeridotGeneralizedWorkbookRuntimeSelfAudit() {
       firstRecord?.attributes?.customFields?.Subject === 'Marriage',
     temporalValuePreserved:
       Boolean(firstRecord?.temporalAssertion),
+    workbookRepeatableTemporalAssertionsPreserved:
+      firstRecord?.temporalAssertions?.length === 3
+      && firstRecord.temporalAssertions[0]?.role === 'Letter date'
+      && firstRecord.temporalAssertions[1]?.role === 'Birth date'
+      && firstRecord.temporalAssertions[2]?.role === 'Life span'
+      && firstRecord.temporalAssertions[2]?.start?.year === 1589
+      && firstRecord.temporalAssertions[2]?.end?.year === 1631,
+    workbookTemporalColumnsCanBeReused:
+      firstRecord.temporalAssertions[1]?.start?.year === firstRecord.temporalAssertions[2]?.start?.year,
+    workbookTemporalSubjectParticipantPreserved:
+      firstRecord.temporalAssertions[1]?.subjectParticipantIndex === 0
+      && firstRecord.temporalAssertions[2]?.subjectParticipantIndex === 0,
     staleLegacyParticipantMappingsIgnored:
       mappedRows[0]?.Source_Name === 'Maria'
       && mappedRows[0]?.Target_Name === 'Cosimo',

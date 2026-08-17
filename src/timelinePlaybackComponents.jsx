@@ -233,6 +233,11 @@ export function VisualizationTimelineScrubber({
   selectedRowsForPlayback,
   timelineMode,
   setTimelineMode,
+  availableTemporalRoles = [],
+  enabledTemporalRoles = [],
+  setEnabledTemporalRoles,
+  timelinePlaybackMode = 'cumulative',
+  setTimelinePlaybackMode,
 }) {
   const hasTimeline = Boolean(timelineMonths?.length);
   const lastTimelineIndex = Math.max((timelineMonths?.length || 1) - 1, 0);
@@ -288,6 +293,25 @@ export function VisualizationTimelineScrubber({
   };
 
   const statusLabel = isPlaying ? 'Playing' : playbackIndex >= 0 ? 'Paused' : 'Ready';
+  const enabledRoleSet = new Set(enabledTemporalRoles || []);
+  const hasTemporalRoles = availableTemporalRoles.length > 0;
+
+  const toggleTemporalRole = (role) => {
+    if (!setEnabledTemporalRoles) return;
+    setEnabledTemporalRoles((currentRoles) => {
+      const nextRoles = new Set(currentRoles || []);
+      if (nextRoles.has(role)) nextRoles.delete(role);
+      else nextRoles.add(role);
+      return availableTemporalRoles.filter((candidate) => nextRoles.has(candidate));
+    });
+    stopPlayback();
+  };
+
+  const enableAllTemporalRoles = () => {
+    if (!setEnabledTemporalRoles) return;
+    setEnabledTemporalRoles([...availableTemporalRoles]);
+    stopPlayback();
+  };
 
   return (
     <div className="shrink-0 rounded-[24px] border border-[var(--peridot-color-hex-c4e0ef-a50)] bg-[linear-gradient(135deg,var(--peridot-color-rgba-rgba-8-39-25-0-96),var(--peridot-color-rgba-rgba-5-29-19-0-98))] px-4 py-3 text-[var(--peridot-color-hex-fbf7ea)] shadow-[0_14px_34px_var(--peridot-color-rgba-rgba-0-0-0-0-28)]">
@@ -334,6 +358,85 @@ export function VisualizationTimelineScrubber({
           width: 18px;
         }
       `}</style>
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3 border-b border-[var(--peridot-color-hex-dfe9c8-a20)] pb-3">
+        {hasTemporalRoles ? (
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <span className="mr-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--peridot-color-hex-dfe9c8)]">Time types</span>
+            {availableTemporalRoles.map((role) => {
+              const enabled = enabledRoleSet.has(role);
+              return (
+                <button
+                  key={role}
+                  type="button"
+                  aria-pressed={enabled}
+                  onClick={() => toggleTemporalRole(role)}
+                  className={[
+                    'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+                    enabled
+                      ? 'border-[var(--peridot-color-hex-d6a36a)] bg-[var(--peridot-color-hex-edf4df)] text-[var(--peridot-color-hex-203429)]'
+                      : 'border-[var(--peridot-color-hex-dfe9c8-a35)] bg-[var(--peridot-color-hex-102c20)] text-[var(--peridot-color-hex-c8d7bd)] hover:bg-[var(--peridot-color-hex-214332)]',
+                  ].join(' ')}
+                >
+                  <span aria-hidden="true" className="mr-1.5">{enabled ? '✓' : '○'}</span>
+                  {role}
+                </button>
+              );
+            })}
+            {enabledTemporalRoles.length !== availableTemporalRoles.length ? (
+              <button
+                type="button"
+                onClick={enableAllTemporalRoles}
+                className="ml-1 text-xs font-semibold text-[var(--peridot-color-hex-d6a36a)] underline underline-offset-4 hover:text-[var(--peridot-color-hex-f5ecd2)]"
+              >
+                Select all
+              </button>
+            ) : null}
+            {!enabledTemporalRoles.length ? (
+              <span className="text-[11px] text-[var(--peridot-color-hex-c8d7bd)]">No time types selected; Timeline filtering and playback are paused.</span>
+            ) : null}
+          </div>
+        ) : <div />}
+
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <span className="mr-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--peridot-color-hex-dfe9c8)]">Event mode</span>
+          <button
+            type="button"
+            aria-pressed={timelinePlaybackMode === 'cumulative'}
+            title="Shows events and records once their date or period has begun or occurred, and keeps them visible as playback advances."
+            onClick={() => {
+              if (!setTimelinePlaybackMode) return;
+              setTimelinePlaybackMode('cumulative');
+              stopPlayback();
+            }}
+            className={[
+              'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+              timelinePlaybackMode === 'cumulative'
+                ? 'border-[var(--peridot-color-hex-d6a36a)] bg-[var(--peridot-color-hex-edf4df)] text-[var(--peridot-color-hex-203429)]'
+                : 'border-[var(--peridot-color-hex-dfe9c8-a35)] bg-[var(--peridot-color-hex-102c20)] text-[var(--peridot-color-hex-c8d7bd)] hover:bg-[var(--peridot-color-hex-214332)]',
+            ].join(' ')}
+          >
+            Cumulative Events
+          </button>
+          <button
+            type="button"
+            aria-pressed={timelinePlaybackMode === 'co-current'}
+            title="Shows only events and records whose date or period is active at the current point in time; records with periods disappear when those periods end."
+            onClick={() => {
+              if (!setTimelinePlaybackMode) return;
+              setTimelinePlaybackMode('co-current');
+              stopPlayback();
+            }}
+            className={[
+              'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+              timelinePlaybackMode === 'co-current'
+                ? 'border-[var(--peridot-color-hex-d6a36a)] bg-[var(--peridot-color-hex-edf4df)] text-[var(--peridot-color-hex-203429)]'
+                : 'border-[var(--peridot-color-hex-dfe9c8-a35)] bg-[var(--peridot-color-hex-102c20)] text-[var(--peridot-color-hex-c8d7bd)] hover:bg-[var(--peridot-color-hex-214332)]',
+            ].join(' ')}
+          >
+            Co-current Events
+          </button>
+        </div>
+      </div>
       <div className="grid gap-3 xl:grid-cols-[170px_minmax(260px,1fr)_minmax(410px,520px)] xl:items-center">
         <div className="min-w-0">
           <p className="peridot-kicker !mb-0 text-[10px] text-[var(--peridot-color-hex-dfe9c8)]">Timeline</p>

@@ -4,6 +4,8 @@ import {
   buildTimelineMonths,
   filterRowsByTimelineWindow,
   filterRowsForPlayback,
+  getTimelineRangeSortBounds,
+  PERIDOT_TIMELINE_PLAYBACK_MODES,
   getAvailableTemporalRoles,
   getRowTemporalAssertions,
 } from './timelinePlaybackHelpers.js';
@@ -37,6 +39,10 @@ export function runTimelinePlaybackAudit() {
       temporalAssertions: [assertion({ role: 'Lifespan', start: 16200101, end: 16100101, consistency: 'backwards', shape: 'inconsistent' })],
     },
     {
+      id: 'short_life',
+      temporalAssertions: [assertion({ role: 'Lifespan', start: 15900101, end: 16061231, shape: 'interval', display: '1590–1606' })],
+    },
+    {
       id: 'legacy_1', date: '1610/05/02',
       parsedDate: { isTimelineUsable: true, sortKey: 16100502, year: 1610, raw: '1610/05/02', label: '1610/05/02' },
     },
@@ -53,10 +59,31 @@ export function runTimelinePlaybackAudit() {
   const playback = buildPlaybackEntries(rows);
   const firstCardinalIndex = playback.findIndex((entry) => entry.rowId === 'cardinal_1');
   const visibleAtFirstCardinal = filterRowsForPlayback(rows, playback, firstCardinalIndex);
+  const rangeBounds = getTimelineRangeSortBounds(months, months.indexOf('1605'), months.indexOf('1610'));
+  const cumulativePlaybackInRange = buildPlaybackEntries(windowRows, {
+    windowStart: rangeBounds?.start,
+    windowEnd: rangeBounds?.end,
+    playbackMode: PERIDOT_TIMELINE_PLAYBACK_MODES.CUMULATIVE,
+  });
+  const coCurrentPlaybackInRange = buildPlaybackEntries(windowRows, {
+    windowStart: rangeBounds?.start,
+    windowEnd: rangeBounds?.end,
+    playbackMode: PERIDOT_TIMELINE_PLAYBACK_MODES.CO_CURRENT,
+  });
+  const firstRangeMoment = cumulativePlaybackInRange[0]?.playbackSortKey;
+  const lastCoCurrentIndex = coCurrentPlaybackInRange.length - 1;
+  const lastCumulativeIndex = cumulativePlaybackInRange.length - 1;
+  const coCurrentAtLastMoment = filterRowsForPlayback(windowRows, coCurrentPlaybackInRange, lastCoCurrentIndex, {
+    playbackMode: PERIDOT_TIMELINE_PLAYBACK_MODES.CO_CURRENT,
+  });
+  const cumulativeAtLastMoment = filterRowsForPlayback(windowRows, cumulativePlaybackInRange, lastCumulativeIndex, {
+    playbackMode: PERIDOT_TIMELINE_PLAYBACK_MODES.CUMULATIVE,
+  });
+  const hasAfterEndCheckpoint = coCurrentPlaybackInRange.some((entry) => entry.rowId === 'short_life' && entry.playbackBoundary === 'after-end');
 
   const checks = {
     canonicalAssertionsPreferred: getRowTemporalAssertions(rows[0]).length === 2,
-    legacyFallbackAvailable: getRowTemporalAssertions(rows[3]).length === 1 && getRowTemporalAssertions(rows[3])[0].__legacyProjection === true,
+    legacyFallbackAvailable: getRowTemporalAssertions(rows[4]).length === 1 && getRowTemporalAssertions(rows[4])[0].__legacyProjection === true,
     multipleEntriesPerRow: entries.filter((entry) => entry.rowId === 'cardinal_1').length === 2,
     rolesDerived: roles.includes('Creation date') && roles.includes('Lifespan') && roles.includes('Date'),
     intervalBoundariesIncluded: months.includes('1562') && months.includes('1624'),
@@ -65,6 +92,12 @@ export function runTimelinePlaybackAudit() {
     roleFilterReadyForT3: !creationOnlyWindowRows.some((row) => row.id === 'cardinal_1') && creationOnlyWindowRows.some((row) => row.id === 'cardinal_2'),
     playbackOrdersLifespanAtStart: playback[0]?.rowId === 'cardinal_1' && playback[0]?.role === 'Lifespan',
     playbackVisibilityDedupesRows: visibleAtFirstCardinal.filter((row) => row.id === 'cardinal_1').length === 1,
+    selectedRangeClipsAlreadyActiveIntervals: firstRangeMoment === rangeBounds?.start,
+    cumulativeModeRetainsEndedIntervals: cumulativeAtLastMoment.some((row) => row.id === 'short_life'),
+    coCurrentModeRemovesEndedIntervals: !coCurrentAtLastMoment.some((row) => row.id === 'short_life'),
+    coCurrentModeKeepsActiveIntervals: coCurrentAtLastMoment.some((row) => row.id === 'cardinal_1'),
+    coCurrentPointIsMomentBounded: !coCurrentAtLastMoment.some((row) => row.id === 'cardinal_2'),
+    coCurrentAddsPeriodEndCheckpoints: hasAfterEndCheckpoint,
   };
 
   return {

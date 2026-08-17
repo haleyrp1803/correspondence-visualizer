@@ -39,6 +39,9 @@ const SOURCE_SELECT_CLASS =
 
 const DISABLED_SOURCE_SELECT_CLASS = `${SOURCE_SELECT_CLASS} disabled:opacity-60`;
 
+const TEMPORAL_COMPONENT_SELECT_CLASS =
+  'peridot-mapping-select w-full min-w-0 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-[var(--input-text)]';
+
 const SPATIAL_SELECT_CLASS =
   'peridot-mapping-select w-full min-w-0 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-[var(--input-text)]';
 
@@ -157,72 +160,120 @@ function TemporalIntro() {
   );
 }
 
-export function TemporalMappingTable({ headers, rows = [], temporalMapping = {}, temporalNoteMappings = {}, onChange, onNoteChange }) {
+function TemporalPartSelect({ headers, value, onChange, label }) {
+  return (
+    <label className="min-w-0 text-xs font-semibold text-[var(--muted-text)]">
+      {label}
+      <select value={value || ''} onChange={(event) => onChange(event.target.value)} className={`${TEMPORAL_COMPONENT_SELECT_CLASS} mt-1`}>
+        <option value="">Unassigned</option>
+        {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function TemporalSubjectSelect({ relationshipParts = [], value, onChange }) {
+  const subjectParticipantIndex = Number.isInteger(value) ? value : '';
+  return (
+    <label className="block text-xs font-semibold text-[var(--muted-text)]">
+      Who or what does this date or period describe?
+      <select
+        value={subjectParticipantIndex}
+        onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
+        className={`${SOURCE_SELECT_CLASS} mt-1`}
+      >
+        <option value="">This row / record as a whole</option>
+        {(relationshipParts || []).map((part, participantIndex) => {
+          const participantLabel = part?.participantColumn || `Relationship part ${participantIndex + 1}`;
+          return <option key={`time-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
+        })}
+      </select>
+      <span className="mt-1 block text-[11px] font-normal leading-relaxed text-[var(--panel-card-muted-text)]">Choose a relationship participant when this time describes that person or other participant. Otherwise leave it attached to the row as a whole.</span>
+    </label>
+  );
+}
+
+function SingleEndpointControls({ headers, mapping, prefix = '', onPatch }) {
+  const modeKey = prefix ? `${prefix}Mode` : 'sourceMode';
+  const mode = mapping[modeKey] === 'parts' ? 'parts' : 'single';
+  const columnKey = prefix ? `${prefix}Column` : 'column';
+  return (
+    <div className="space-y-3">
+      <label className="block text-xs font-semibold text-[var(--muted-text)]">How is this date stored?
+        <select value={mode} onChange={(event) => onPatch({ [modeKey]: event.target.value })} className={`${SOURCE_SELECT_CLASS} mt-1`}>
+          <option value="single">In one column</option>
+          <option value="parts">In separate year / month / day columns</option>
+        </select>
+      </label>
+      {mode === 'single' ? <TemporalPartSelect headers={headers} value={mapping[columnKey]} onChange={(value) => onPatch({ [columnKey]: value })} label="Date column" /> : (
+        <div className="grid gap-2 sm:grid-cols-3">
+          <TemporalPartSelect headers={headers} value={mapping[prefix ? `${prefix}YearColumn` : 'yearColumn']} onChange={(value) => onPatch({ [prefix ? `${prefix}YearColumn` : 'yearColumn']: value })} label="Year" />
+          <TemporalPartSelect headers={headers} value={mapping[prefix ? `${prefix}MonthColumn` : 'monthColumn']} onChange={(value) => onPatch({ [prefix ? `${prefix}MonthColumn` : 'monthColumn']: value })} label="Month" />
+          <TemporalPartSelect headers={headers} value={mapping[prefix ? `${prefix}DayColumn` : 'dayColumn']} onChange={(value) => onPatch({ [prefix ? `${prefix}DayColumn` : 'dayColumn']: value })} label="Day" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TemporalMappingTable({ headers, rows = [], temporalAssertions = [], relationshipParts = [], onAssertionsChange }) {
+  const update = (index, patch) => onAssertionsChange?.((currentMappings) => (currentMappings || []).map((mapping, currentIndex) => currentIndex === index ? { ...mapping, ...patch } : mapping));
+  const remove = (index) => onAssertionsChange?.((currentMappings) => (currentMappings || []).filter((_, currentIndex) => currentIndex !== index));
+  const add = () => onAssertionsChange?.((currentMappings) => [...(currentMappings || []), { id: `time-${Date.now()}`, role: '', kind: 'date', sourceMode: 'single', column: '', noteColumns: [], subjectParticipantIndex: null }]);
   return (
     <div className="space-y-3">
       <TemporalIntro />
       <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
         <div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]">
-          <div className="min-w-0">
-            <div className="grid grid-cols-[minmax(13rem,0.9fr)_minmax(16rem,1.1fr)] gap-4 border-b border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-3 text-sm font-semibold text-[var(--panel-card-text)]">
-              <div>When it happens</div>
-              <div>Your column</div>
-            </div>
-
-            <div className="divide-y divide-[var(--panel-card-border)] rounded-b-xl border-x border-b border-[var(--panel-card-border)] bg-[var(--input-bg)]/35">
-              {VISIBLE_TEMPORAL_FIELD_DEFINITIONS.map((definition) => {
-                const uiCopy = TEMPORAL_UI_COPY[definition.key] || { label: definition.label || definition.key, description: definition.description || '' };
-                const selectedColumn = temporalMapping[definition.key] || '';
-                const examples = getNonBlankExampleValues(rows, selectedColumn, 3);
-                return (
-                  <div
-                    key={definition.key}
-                    className="grid grid-cols-[minmax(13rem,0.9fr)_minmax(16rem,1.1fr)] gap-4 px-4 py-4 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">{uiCopy.label}</div>
-                      <p className="mt-2 text-sm font-normal leading-relaxed text-[var(--panel-card-muted-text)]">{uiCopy.description}</p>
+          <div className="space-y-4 min-w-0">
+            {temporalAssertions.map((mapping, index) => {
+              const kind = mapping.kind === 'period' ? 'period' : 'date';
+              return <div key={mapping.id || index} className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="text-[15px] font-bold text-[var(--panel-card-text)]">Time {index + 1}</div>
+                  <button type="button" onClick={() => remove(index)} className="rounded-lg border border-[var(--input-border)] px-2 py-1 text-xs text-[var(--panel-card-muted-text)]">Remove</button>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="text-xs font-semibold text-[var(--muted-text)]">Name this date or period
+                    <input value={mapping.role || ''} onChange={(event) => update(index, { role: event.target.value })} placeholder="e.g. Birth, Creation date, Lifespan, Reign" className={`${SOURCE_SELECT_CLASS} mt-1`} />
+                    <span className="mt-1 block text-[11px] font-normal leading-relaxed text-[var(--panel-card-muted-text)]">Peridot will use this name to identify the time later in Timeline, Search, Inspector, and Export.</span>
+                  </label>
+                  <label className="text-xs font-semibold text-[var(--muted-text)]">What kind of time is it?
+                    <select value={kind} onChange={(event) => update(index, { kind: event.target.value, sourceMode: 'single' })} className={`${SOURCE_SELECT_CLASS} mt-1`}>
+                      <option value="date">Date</option><option value="period">Period / range</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-4">
+                  <TemporalSubjectSelect relationshipParts={relationshipParts} value={mapping.subjectParticipantIndex} onChange={(subjectParticipantIndex) => update(index, { subjectParticipantIndex })} />
+                </div>
+                <div className="mt-4">
+                  {kind === 'date' ? <SingleEndpointControls headers={headers} mapping={mapping} onPatch={(patch) => update(index, patch)} /> : (
+                    <div className="space-y-3">
+                      <label className="block text-xs font-semibold text-[var(--muted-text)]">How is this period stored?
+                        <select value={mapping.sourceMode === 'endpoints' ? 'endpoints' : 'single'} onChange={(event) => update(index, { sourceMode: event.target.value })} className={`${SOURCE_SELECT_CLASS} mt-1`}>
+                          <option value="single">In one column</option><option value="endpoints">In separate beginning and ending fields</option>
+                        </select>
+                      </label>
+                      {mapping.sourceMode === 'endpoints' ? <div className="grid gap-4 xl:grid-cols-2"><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Beginning</div><SingleEndpointControls headers={headers} mapping={mapping} prefix="start" onPatch={(patch) => update(index, patch)} /></div><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Ending</div><SingleEndpointControls headers={headers} mapping={mapping} prefix="end" onPatch={(patch) => update(index, patch)} /></div></div> : <TemporalPartSelect headers={headers} value={mapping.column} onChange={(value) => update(index, { column: value })} label="Period column" />}
                     </div>
-                    <div className="peridot-mapping-choice-cell min-w-0">
-                      <select
-                        value={selectedColumn}
-                        onChange={(event) => onChange(definition.key, event.target.value)}
-                        className={SOURCE_SELECT_CLASS}
-                      >
-                        <option value="">Unassigned</option>
-                        {headers.map((header) => (
-                          <option key={header} value={header}>{header}</option>
-                        ))}
-                      </select>
-                      <TemporalExamples values={examples} />
-                      <div className="mt-3 border-t border-[var(--panel-card-border)] pt-3">
-                        <div className="text-xs font-semibold text-[var(--muted-text)]">Related temporal notes (optional)</div>
-                        <p className="mt-1 text-xs leading-relaxed text-[var(--panel-card-muted-text)]">Preserved with this temporal value without changing how Peridot interprets the date.</p>
-                        {(temporalNoteMappings?.[definition.key] || []).map((noteColumn, noteIndex) => (
-                          <div key={`${definition.key}-note-${noteIndex}`} className="mt-2 flex gap-2">
-                            <select value={noteColumn || ''} onChange={(event) => onNoteChange?.(definition.key, noteIndex, event.target.value)} className={SOURCE_SELECT_CLASS}>
-                              <option value="">Unassigned</option>
-                              {headers.map((header) => <option key={header} value={header}>{header}</option>)}
-                            </select>
-                            <button type="button" onClick={() => onNoteChange?.(definition.key, noteIndex, '')} className="rounded-lg border border-[var(--input-border)] px-2 text-xs text-[var(--panel-card-muted-text)]">Remove</button>
-                          </div>
-                        ))}
-                        <button type="button" onClick={() => onNoteChange?.(definition.key, (temporalNoteMappings?.[definition.key] || []).length, '__ADD__')} className="mt-3 rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add related note column</button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  )}
+                </div>
+                <div className="mt-4 border-t border-[var(--panel-card-border)] pt-3">
+                  <div className="text-xs font-semibold text-[var(--muted-text)]">Related temporal notes (optional)</div>
+                  {(mapping.noteColumns || []).map((column, noteIndex) => <div key={noteIndex} className="mt-2 flex max-w-xl gap-2"><select value={column || ''} onChange={(event) => { const notes=[...(mapping.noteColumns||[])]; notes[noteIndex]=event.target.value; update(index,{noteColumns:notes}); }} className={`${SOURCE_SELECT_CLASS} max-w-md`}><option value="">Unassigned</option>{headers.map((header)=><option key={header} value={header}>{header}</option>)}</select><button type="button" onClick={()=>update(index,{noteColumns:(mapping.noteColumns||[]).filter((_,i)=>i!==noteIndex)})} className="rounded-lg border border-[var(--input-border)] px-2 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div>)}
+                  <button type="button" onClick={()=>update(index,{noteColumns:[...(mapping.noteColumns||[]),'']})} className="mt-3 rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add related note column</button>
+                </div>
+              </div>;
+            })}
+            <button type="button" onClick={add} className="rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-3 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add date or period</button>
           </div>
-
           <TemporalUsagePanel />
         </div>
       </div>
     </div>
   );
 }
-
 function TemporalUsagePanel() {
   return (
     <aside className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
@@ -1474,66 +1525,40 @@ export function WorkbookRelationshipMappingPanel({ workbookModel, workbookMappin
  * single flat uploaded column name. The visual pattern mirrors the single-table
  * Time step with one shared usage note.
  */
-export function WorkbookTemporalMappingTable({ workbookModel, workbookMapping, onChange, onNoteChange }) {
-  const temporalMappings = workbookMapping.temporalMappings || {};
-
+function WorkbookTemporalRefControl({ workbookModel, label, currentRef, onChange }) {
+  return <label className="block text-xs font-semibold text-[var(--muted-text)]">{label}<div className="mt-1"><WorkbookFieldSelect workbookModel={workbookModel} currentRef={currentRef || {}} onChange={onChange} /></div></label>;
+}
+function WorkbookTemporalSubjectSelect({ relationshipParts = [], value, onChange }) {
+  const subjectParticipantIndex = Number.isInteger(value) ? value : '';
   return (
-    <div className="space-y-3">
-      <TemporalIntro />
-      <div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5">
-        <div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]">
-          <div className="min-w-0">
-            <div className="grid grid-cols-[minmax(13rem,0.9fr)_minmax(16rem,1.1fr)] gap-4 border-b border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-4 py-3 text-sm font-semibold text-[var(--panel-card-text)]">
-              <div>When it happens</div>
-              <div>Your column</div>
-            </div>
-
-            <div className="divide-y divide-[var(--panel-card-border)] rounded-b-xl border-x border-b border-[var(--panel-card-border)] bg-[var(--input-bg)]/35">
-              {VISIBLE_TEMPORAL_FIELD_DEFINITIONS.map((definition) => {
-                const currentRef = temporalMappings[definition.key] || {};
-                const uiCopy = TEMPORAL_UI_COPY[definition.key] || { label: definition.label || definition.key, description: definition.description || '' };
-                const sourceSheet = currentRef?.sheetName ? getWorkbookSheet(workbookModel, currentRef.sheetName) : null;
-                const examples = getNonBlankExampleValues(sourceSheet?.rows || [], currentRef?.columnName || '', 3);
-                return (
-                  <div
-                    key={definition.key}
-                    className="grid grid-cols-[minmax(13rem,0.9fr)_minmax(16rem,1.1fr)] gap-4 px-4 py-4 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">{uiCopy.label}</div>
-                      <p className="mt-2 text-sm font-normal leading-relaxed text-[var(--panel-card-muted-text)]">{uiCopy.description}</p>
-                    </div>
-                    <div className="peridot-mapping-choice-cell min-w-0">
-                      <WorkbookFieldSelect
-                        workbookModel={workbookModel}
-                        currentRef={currentRef}
-                        onChange={(ref) => onChange(definition.key, ref)}
-                      />
-                      <TemporalExamples values={examples} />
-                      <div className="mt-3 border-t border-[var(--panel-card-border)] pt-3">
-                        <div className="text-xs font-semibold text-[var(--muted-text)]">Related temporal notes (optional)</div>
-                        {(workbookMapping.temporalNoteMappings?.[definition.key] || []).map((noteRef, noteIndex) => (
-                          <div key={`${definition.key}-workbook-note-${noteIndex}`} className="mt-2 flex gap-2">
-                            <WorkbookFieldSelect workbookModel={workbookModel} currentRef={noteRef || {}} onChange={(ref) => onNoteChange?.(definition.key, noteIndex, ref)} />
-                            <button type="button" onClick={() => onNoteChange?.(definition.key, noteIndex, null)} className="rounded-lg border border-[var(--input-border)] px-2 text-xs text-[var(--panel-card-muted-text)]">Remove</button>
-                          </div>
-                        ))}
-                        <button type="button" onClick={() => onNoteChange?.(definition.key, (workbookMapping.temporalNoteMappings?.[definition.key] || []).length, { __add: true })} className="mt-3 rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add related note column</button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <TemporalUsagePanel />
-        </div>
-      </div>
-    </div>
+    <label className="block text-xs font-semibold text-[var(--muted-text)]">
+      Who or what does this date or period describe?
+      <select
+        value={subjectParticipantIndex}
+        onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
+        className={`${SOURCE_SELECT_CLASS} mt-1`}
+      >
+        <option value="">This row / record as a whole</option>
+        {(relationshipParts || []).map((part, participantIndex) => {
+          const ref = part?.participantRef || makeWorkbookColumnRef('', '');
+          const participantLabel = ref?.columnName ? `${ref.sheetName} — ${ref.columnName}` : `Relationship part ${participantIndex + 1}`;
+          return <option key={`workbook-time-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
+        })}
+      </select>
+      <span className="mt-1 block text-[11px] font-normal leading-relaxed text-[var(--panel-card-muted-text)]">Choose a relationship participant when this time describes that person or other participant. Otherwise leave it attached to the row as a whole.</span>
+    </label>
   );
 }
 
+function WorkbookEndpointControls({ workbookModel, mapping, prefix = '', onPatch }) {
+  const modeKey = prefix ? `${prefix}Mode` : 'sourceMode'; const mode = mapping[modeKey] === 'parts' ? 'parts' : 'single'; const columnKey = prefix ? `${prefix}Column` : 'column';
+  return <div className="space-y-3"><label className="block text-xs font-semibold text-[var(--muted-text)]">How is this date stored?<select value={mode} onChange={(e)=>onPatch({[modeKey]:e.target.value})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="single">In one column</option><option value="parts">In separate year / month / day columns</option></select></label>{mode==='single'?<WorkbookTemporalRefControl workbookModel={workbookModel} label="Date column" currentRef={mapping[columnKey]} onChange={(ref)=>onPatch({[columnKey]:ref})}/>:<div className="grid gap-2 sm:grid-cols-3"><WorkbookTemporalRefControl workbookModel={workbookModel} label="Year" currentRef={mapping[prefix ? `${prefix}YearColumn` : 'yearColumn']} onChange={(ref)=>onPatch({[prefix ? `${prefix}YearColumn` : 'yearColumn']:ref})}/><WorkbookTemporalRefControl workbookModel={workbookModel} label="Month" currentRef={mapping[prefix ? `${prefix}MonthColumn` : 'monthColumn']} onChange={(ref)=>onPatch({[prefix ? `${prefix}MonthColumn` : 'monthColumn']:ref})}/><WorkbookTemporalRefControl workbookModel={workbookModel} label="Day" currentRef={mapping[prefix ? `${prefix}DayColumn` : 'dayColumn']} onChange={(ref)=>onPatch({[prefix ? `${prefix}DayColumn` : 'dayColumn']:ref})}/></div>}</div>;
+}
+export function WorkbookTemporalMappingTable({ workbookModel, workbookMapping, onAssertionsChange }) {
+  const temporalAssertions = workbookMapping.temporalAssertionMappings || [];
+  const update=(index,patch)=>onAssertionsChange?.((currentMappings)=>(currentMappings||[]).map((m,i)=>i===index?{...m,...patch}:m)); const remove=(index)=>onAssertionsChange?.((currentMappings)=>(currentMappings||[]).filter((_,i)=>i!==index)); const add=()=>onAssertionsChange?.((currentMappings)=>[...(currentMappings||[]),{id:`time-${Date.now()}`,role:'',kind:'date',sourceMode:'single',column:makeWorkbookColumnRef('',''),noteColumns:[],subjectParticipantIndex:null}]);
+  return <div className="space-y-3"><TemporalIntro/><div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5"><div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]"><div className="space-y-4 min-w-0">{temporalAssertions.map((mapping,index)=>{const kind=mapping.kind==='period'?'period':'date'; return <div key={mapping.id||index} className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-4"><div className="flex items-start justify-between gap-3"><div className="text-[15px] font-bold text-[var(--panel-card-text)]">Time {index+1}</div><button type="button" onClick={()=>remove(index)} className="rounded-lg border border-[var(--input-border)] px-2 py-1 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-[var(--muted-text)]">Name this date or period<input value={mapping.role||''} onChange={(e)=>update(index,{role:e.target.value})} placeholder="e.g. Birth, Creation date, Lifespan, Reign" className={`${SOURCE_SELECT_CLASS} mt-1`}/><span className="mt-1 block text-[11px] font-normal leading-relaxed text-[var(--panel-card-muted-text)]">Peridot will use this name to identify the time later in Timeline, Search, Inspector, and Export.</span></label><label className="text-xs font-semibold text-[var(--muted-text)]">What kind of time is it?<select value={kind} onChange={(e)=>update(index,{kind:e.target.value,sourceMode:'single'})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="date">Date</option><option value="period">Period / range</option></select></label></div><div className="mt-4"><WorkbookTemporalSubjectSelect relationshipParts={workbookMapping.relationshipParts || []} value={mapping.subjectParticipantIndex} onChange={(subjectParticipantIndex)=>update(index,{subjectParticipantIndex})}/></div><div className="mt-4">{kind==='date'?<WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} onPatch={(patch)=>update(index,patch)}/>:<div className="space-y-3"><label className="block text-xs font-semibold text-[var(--muted-text)]">How is this period stored?<select value={mapping.sourceMode==='endpoints'?'endpoints':'single'} onChange={(e)=>update(index,{sourceMode:e.target.value})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="single">In one column</option><option value="endpoints">In separate beginning and ending fields</option></select></label>{mapping.sourceMode==='endpoints'?<div className="grid gap-4 xl:grid-cols-2"><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Beginning</div><WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} prefix="start" onPatch={(patch)=>update(index,patch)}/></div><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Ending</div><WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} prefix="end" onPatch={(patch)=>update(index,patch)}/></div></div>:<WorkbookTemporalRefControl workbookModel={workbookModel} label="Period column" currentRef={mapping.column} onChange={(ref)=>update(index,{column:ref})}/>}</div>}</div><div className="mt-4 border-t border-[var(--panel-card-border)] pt-3"><div className="text-xs font-semibold text-[var(--muted-text)]">Related temporal notes (optional)</div>{(mapping.noteColumns||[]).map((ref,noteIndex)=><div key={noteIndex} className="mt-2 flex max-w-xl gap-2"><div className="min-w-0 max-w-md flex-1"><WorkbookFieldSelect workbookModel={workbookModel} currentRef={ref||{}} onChange={(nextRef)=>{const notes=[...(mapping.noteColumns||[])];notes[noteIndex]=nextRef;update(index,{noteColumns:notes});}}/></div><button type="button" onClick={()=>update(index,{noteColumns:(mapping.noteColumns||[]).filter((_,i)=>i!==noteIndex)})} className="rounded-lg border border-[var(--input-border)] px-2 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div>)}<button type="button" onClick={()=>update(index,{noteColumns:[...(mapping.noteColumns||[]),makeWorkbookColumnRef('','')]})} className="mt-3 rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add related note column</button></div></div>})}<button type="button" onClick={add} className="rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-3 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add date or period</button></div><TemporalUsagePanel/></div></div></div>;
+}
 /*
  * Renders workbook role mappings for caller-supplied role definitions. This is
  * the workbook counterpart to `CoreRoleMappingTable`: every mapping value is a

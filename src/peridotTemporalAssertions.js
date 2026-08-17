@@ -183,7 +183,7 @@ export function makePeridotTemporalAssertion({
   consistency = PERIDOT_TEMPORAL_CONSISTENCY.INDETERMINATE, parsingStatus = PERIDOT_TEMPORAL_PARSING_STATUS.UNRECOGNIZED,
   precision = PERIDOT_TEMPORAL_PRECISION.UNKNOWN, qualifier = PERIDOT_TEMPORAL_QUALIFIER.UNKNOWN,
   certainty = 'not-specified', calendar = 'gregorian-or-source-unspecified', sortBounds = {},
-  temporalNotes = [], originalValues = {}, parseWarnings = [], visualizationUsability = {},
+  temporalNotes = [], originalValues = {}, parseWarnings = [], visualizationUsability = {}, subjectParticipantIndex = null,
 } = {}) {
   const startSort = Number(sortBounds?.start); const endSort = Number(sortBounds?.end);
   const notes = normalizedNotes(temporalNotes);
@@ -196,6 +196,7 @@ export function makePeridotTemporalAssertion({
     certainty: asText(certainty) || 'not-specified', calendar: asText(calendar) || 'gregorian-or-source-unspecified',
     sortBounds: Object.freeze({ start: Number.isFinite(startSort) ? startSort : null, end: Number.isFinite(endSort) ? endSort : null }),
     temporalNotes: notes,
+    subjectParticipantIndex: Number.isInteger(subjectParticipantIndex) ? subjectParticipantIndex : null,
     originalValues: Object.freeze({ ...(originalValues && typeof originalValues === 'object' ? originalValues : {}) }),
     parseWarnings: Object.freeze((Array.isArray(parseWarnings) ? parseWarnings : []).map(asText).filter(Boolean)),
     visualizationUsability: Object.freeze({

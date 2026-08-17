@@ -563,6 +563,27 @@ export function suggestLookupSheetRoles(workbookModel) {
   );
 }
 
+function buildWorkbookTemporalAssertionMappingsFromLegacy(temporalMappings = {}, temporalNoteMappings = {}) {
+  const result=[];
+  if (isWorkbookColumnRefPresent(temporalMappings.Date)) result.push({ id:'legacy-date', role:temporalMappings.Date.columnName, kind:'date', sourceMode:'single', column:temporalMappings.Date, noteColumns:temporalNoteMappings.Date || [] });
+  if (isWorkbookColumnRefPresent(temporalMappings.Date_Range)) result.push({ id:'legacy-range', role:temporalMappings.Date_Range.columnName, kind:'period', sourceMode:'single', column:temporalMappings.Date_Range, noteColumns:temporalNoteMappings.Date_Range || [] });
+  if (isWorkbookColumnRefPresent(temporalMappings.Date_Start) || isWorkbookColumnRefPresent(temporalMappings.Date_End)) result.push({ id:'legacy-start-end', role:[temporalMappings.Date_Start?.columnName,temporalMappings.Date_End?.columnName].filter(Boolean).join(' / ') || 'Date interval', kind:'period', sourceMode:'endpoints', startMode:'single', startColumn:temporalMappings.Date_Start || makeWorkbookColumnRef('',''), endMode:'single', endColumn:temporalMappings.Date_End || makeWorkbookColumnRef('',''), noteColumns:[...(temporalNoteMappings.Date_Start||[]),...(temporalNoteMappings.Date_End||[])] });
+  return result.length ? result : [{ id:'time-1', role:'', kind:'date', sourceMode:'single', column:makeWorkbookColumnRef('',''), noteColumns:[] }];
+}
+
+export function getWorkbookTemporalAssertionRefs(mappings = []) {
+  const refs=[]; const add=(ref)=>{ if(isWorkbookColumnRefPresent(ref)) refs.push(ref); };
+  (mappings||[]).forEach((mapping)=>{ ['column','yearColumn','monthColumn','dayColumn','startColumn','startYearColumn','startMonthColumn','startDayColumn','endColumn','endYearColumn','endMonthColumn','endDayColumn'].forEach((key)=>add(mapping?.[key])); (mapping?.noteColumns||[]).forEach(add); });
+  return refs;
+}
+
+function temporalAssertionMappingToRuntime(mapping = {}) {
+  const next={...mapping};
+  ['column','yearColumn','monthColumn','dayColumn','startColumn','startYearColumn','startMonthColumn','startDayColumn','endColumn','endYearColumn','endMonthColumn','endDayColumn'].forEach((key)=>{ next[key]=workbookRefRuntimeKey(mapping?.[key]); });
+  next.noteColumns=(mapping.noteColumns||[]).map(workbookRefRuntimeKey).filter(Boolean);
+  return next;
+}
+
 function getWorkbookSemanticRefs(mappingState = {}) {
   const placeRefs = (mappingState.placeParts || []).flatMap((part) => [
     part?.placeRef,
@@ -577,6 +598,7 @@ function getWorkbookSemanticRefs(mappingState = {}) {
   ]);
   const relationshipMetadataRefs = Object.values(mappingState.relationshipMetadataMappings || {});
   const temporalNoteRefs = Object.values(mappingState.temporalNoteMappings || {}).flat();
+  const temporalAssertionRefs = getWorkbookTemporalAssertionRefs(mappingState.temporalAssertionMappings || []);
   const evidenceRefs = (mappingState.customFieldSelections || []).map((selection) =>
     selection?.sourceRef || makeWorkbookColumnRef(selection?.sheetName, selection?.sourceColumn)
   );
@@ -585,6 +607,7 @@ function getWorkbookSemanticRefs(mappingState = {}) {
     ...Object.values(mappingState.coreMappings || {}),
     ...Object.values(mappingState.temporalMappings || {}),
     ...temporalNoteRefs,
+    ...temporalAssertionRefs,
     ...Object.values(mappingState.pointMappings || {}),
     ...Object.values(mappingState.routeCoordinatePairMappings || {}),
     ...placeRefs,
@@ -662,6 +685,7 @@ export function buildInitialPeridotWorkbookMappingState(workbookModel, options =
     coreMappings,
     temporalMappings,
     temporalNoteMappings: {},
+    temporalAssertionMappings: buildWorkbookTemporalAssertionMappingsFromLegacy(temporalMappings, {}),
     pointMappings,
     routeCoordinatePairMappings,
     letterLevelJoinSuggestions: suggestedLetterLevelJoins,
@@ -800,6 +824,11 @@ export function validatePeridotWorkbookMapping(workbookModel, mappingState = {})
       const issue = getReferenceValidationIssue(workbookModel, ref, `temporal_note_${field}`, `Temporal note for ${field}`);
       if (issue) issues.push({ ...issue, severity: 'error' });
     });
+  });
+
+  getWorkbookTemporalAssertionRefs(mappingState.temporalAssertionMappings || []).forEach((ref, index) => {
+    const issue = getReferenceValidationIssue(workbookModel, ref, `temporal_assertion_${index}`, 'Temporal assertion source');
+    if (issue) issues.push({ ...issue, severity: 'error' });
   });
 
   Object.entries(pointMappings).forEach(([field, ref]) => {
@@ -1115,6 +1144,7 @@ function buildWorkbookGeneralizedRuntimeMapping(mappingState = {}) {
     temporalNoteMappings: Object.fromEntries(
       Object.entries(mappingState.temporalNoteMappings || {}).map(([field, refs]) => [field, (Array.isArray(refs) ? refs : []).map(workbookRefRuntimeKey).filter(Boolean)])
     ),
+    temporalAssertionMappings: (mappingState.temporalAssertionMappings || []).map(temporalAssertionMappingToRuntime),
     relationshipMetadataMapping: Object.fromEntries(
       Object.entries(mappingState.relationshipMetadataMappings || {}).map(([field, ref]) => [field, workbookRefRuntimeKey(ref)])
     ),
@@ -1195,14 +1225,14 @@ export function getWorkbookMappingSummary(workbookModel, mappingState = {}) {
   const pointMappings = mappingState.pointMappings || {};
   const routeCoordinatePairMappings = mappingState.routeCoordinatePairMappings || {};
   const mappedCoreFields = Object.entries(coreMappings).filter(([, ref]) => isWorkbookColumnRefPresent(ref));
-  const mappedSheets = getMappedCoreSheets(coreMappings, temporalMappings, pointMappings, routeCoordinatePairMappings);
+  const mappedSheets = getMappedWorkbookSemanticSheets(mappingState);
 
   return Object.freeze({
     primarySheetName: mappingState.primarySheetName || '',
     mode: mappingState.mode || '',
     primaryLetterIdColumn: mappingState.primaryLetterIdColumn || '',
     mappedCoreFieldCount: mappedCoreFields.length,
-    mappedTemporalFieldCount: Object.values(temporalMappings).filter(isWorkbookColumnRefPresent).length,
+    mappedTemporalFieldCount: (mappingState.temporalAssertionMappings || []).filter((mapping) => getWorkbookTemporalAssertionRefs([mapping]).length).length || Object.values(temporalMappings).filter(isWorkbookColumnRefPresent).length,
     mappedPointFieldCount: Object.values(pointMappings).filter(isWorkbookColumnRefPresent).length,
     mappedRouteCoordinatePairFieldCount: Object.values(routeCoordinatePairMappings).filter(isWorkbookColumnRefPresent).length,
     mappedSheets,
@@ -1221,7 +1251,7 @@ export function getWorkbookMappingSummary(workbookModel, mappingState = {}) {
 
 export function listUnmappedWorkbookColumns(workbookModel, mappingState = {}) {
   const mappedRefs = new Set(
-    [...Object.values(mappingState.coreMappings || {}), ...Object.values(mappingState.temporalMappings || {}), ...Object.values(mappingState.pointMappings || {}), ...Object.values(mappingState.routeCoordinatePairMappings || {})]
+    [...Object.values(mappingState.coreMappings || {}), ...Object.values(mappingState.temporalMappings || {}), ...getWorkbookTemporalAssertionRefs(mappingState.temporalAssertionMappings || []), ...Object.values(mappingState.pointMappings || {}), ...Object.values(mappingState.routeCoordinatePairMappings || {})]
       .filter(isWorkbookColumnRefPresent)
       .map(makeWorkbookColumnRefKey)
   );

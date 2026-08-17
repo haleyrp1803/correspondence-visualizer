@@ -37,6 +37,10 @@ import { buildMapInteractionHandlers } from './mapInteractionHandlers';
 import {
   buildPlaybackRows,
   buildTimelineMonths,
+  getAvailableTemporalRoles,
+  getRowTimelineCapability,
+  getTimelineRangeSortBounds,
+  PERIDOT_TIMELINE_PLAYBACK_MODES,
   filterRowsByTimelineWindow,
   filterRowsForPlayback,
 } from './timelinePlaybackHelpers';
@@ -3316,6 +3320,8 @@ export default function EuropeNetworkMapApp() {
   const [rangeEnd, setRangeEnd] = useState(0);
   const [playbackIndex, setPlaybackIndex] = useState(-1);
   const [playbackSpeed, setPlaybackSpeed] = useState(700);
+  const [timelinePlaybackMode, setTimelinePlaybackMode] = useState(PERIDOT_TIMELINE_PLAYBACK_MODES.CUMULATIVE);
+  const [enabledTemporalRoles, setEnabledTemporalRoles] = useState([]);
   const [showAllLinkedLetters, setShowAllLinkedLetters] = useState(false);
   const [expandedLetterSections, setExpandedLetterSections] = useState({});
   const [viewMode, setViewMode] = useState('person');
@@ -3509,7 +3515,22 @@ export default function EuropeNetworkMapApp() {
   // `AnalyticsPanel.jsx`. That chart-local range is not the same state as the
   // global timeline scrubber below, so do not merge or rename those states
   // without first defining the desired cross-workspace filtering semantics.
-  const timelineMonths = useMemo(() => buildTimelineMonths(searchRecords), [searchRecords]);
+  const availableTemporalRoles = useMemo(() => getAvailableTemporalRoles(searchRecords), [searchRecords]);
+  const temporalRoleSignature = availableTemporalRoles.join('\u0001');
+
+  // A newly loaded/mapped dataset starts with every positionable temporal role
+  // enabled. T3 keeps the selection dataset-derived rather than hard-coding
+  // historian-specific role names such as Creation date or Lifespan.
+  useEffect(() => {
+    setEnabledTemporalRoles(availableTemporalRoles);
+    setIsPlaying(false);
+    setPlaybackIndex(-1);
+  }, [temporalRoleSignature]);
+
+  const enabledTemporalRoleSet = useMemo(() => new Set(enabledTemporalRoles), [enabledTemporalRoles]);
+  const timelineMonths = useMemo(() => buildTimelineMonths(searchRecords, {
+    enabledRoles: enabledTemporalRoleSet,
+  }), [searchRecords, enabledTemporalRoleSet]);
 
   useEffect(() => {
     if (!timelineMonths.length) {
@@ -3524,8 +3545,10 @@ export default function EuropeNetworkMapApp() {
   }, [timelineMonths.length]);
 
   const timelineWindowRows = useMemo(() => {
-    return filterRowsByTimelineWindow(searchRecords, timelineMode, timelineMonths, rangeStart, rangeEnd);
-  }, [normalizedRows, timelineMode, timelineMonths, rangeStart, rangeEnd]);
+    return filterRowsByTimelineWindow(searchRecords, timelineMode, timelineMonths, rangeStart, rangeEnd, {
+      enabledRoles: enabledTemporalRoleSet,
+    });
+  }, [searchRecords, timelineMode, timelineMonths, rangeStart, rangeEnd, enabledTemporalRoleSet]);
 
   const filteredRowsForActiveFilters = useMemo(() => {
     return filterRowsBySearchAndEntity(timelineWindowRows, {
@@ -3539,9 +3562,20 @@ export default function EuropeNetworkMapApp() {
     });
   }, [timelineWindowRows, search, personFilter, placeFilter, routePlaceFilter, routePeopleFilter, capabilityFilters, structuredCriteria]);
 
+  const playbackWindowBounds = useMemo(() => (
+    timelineMode === 'range'
+      ? getTimelineRangeSortBounds(timelineMonths, rangeStart, rangeEnd)
+      : null
+  ), [timelineMode, timelineMonths, rangeStart, rangeEnd]);
+
   const selectedRowsForPlayback = useMemo(() => {
-    return buildPlaybackRows(filteredRowsForActiveFilters);
-  }, [filteredRowsForActiveFilters]);
+    return buildPlaybackRows(filteredRowsForActiveFilters, {
+      enabledRoles: enabledTemporalRoleSet,
+      windowStart: playbackWindowBounds?.start ?? null,
+      windowEnd: playbackWindowBounds?.end ?? null,
+      playbackMode: timelinePlaybackMode,
+    });
+  }, [filteredRowsForActiveFilters, enabledTemporalRoleSet, playbackWindowBounds, timelinePlaybackMode]);
 
   useEffect(() => {
     if (!isPlaying || !selectedRowsForPlayback.length) return undefined;
@@ -3559,8 +3593,10 @@ export default function EuropeNetworkMapApp() {
   }, [isPlaying, selectedRowsForPlayback, playbackSpeed]);
 
   const filteredRowsByTime = useMemo(() => {
-    return filterRowsForPlayback(filteredRowsForActiveFilters, selectedRowsForPlayback, playbackIndex);
-  }, [filteredRowsForActiveFilters, playbackIndex, selectedRowsForPlayback]);
+    return filterRowsForPlayback(filteredRowsForActiveFilters, selectedRowsForPlayback, playbackIndex, {
+      playbackMode: timelinePlaybackMode,
+    });
+  }, [filteredRowsForActiveFilters, playbackIndex, selectedRowsForPlayback, timelinePlaybackMode]);
 
   // ------------------------------------------------------------
   // Graph derivations
@@ -3600,6 +3636,30 @@ export default function EuropeNetworkMapApp() {
     [filteredRowsByTime, mapViewportSize.width, mapViewportSize.height, personLayoutMode, minCount]
   );
   const graph = viewMode === 'geographic' ? geographicGraph : personGraph;
+
+  // Playback visibility and visualization capability are intentionally separate.
+  // Co-current playback can legitimately reach a moment with zero active rows;
+  // that should render an empty stage without revoking the visualization itself.
+  // Capability is therefore derived from the committed Timeline/Search scope
+  // before playback, while the graph/map/chart body continues to use
+  // `filteredRowsByTime` for the current playback moment.
+  const availabilityAggregatedEdges = useMemo(
+    () => aggregateEdgesFromRows(filteredRowsForActiveFilters, normalizedLetters),
+    [filteredRowsForActiveFilters, normalizedLetters]
+  );
+  const availabilityFilteredAggregatedEdges = useMemo(
+    () => availabilityAggregatedEdges.filter((edge) => edge.count >= minCount),
+    [availabilityAggregatedEdges, minCount]
+  );
+  const availabilityEntityNetworkSemantics = useMemo(
+    () => derivePeridotEntityNetworkSemantics(filteredRowsForActiveFilters),
+    [filteredRowsForActiveFilters]
+  );
+  const availabilityAnalyticsFields = useMemo(
+    () => getAvailableAnalyticsFields(filteredRowsForActiveFilters),
+    [filteredRowsForActiveFilters]
+  );
+
   const analyticsFields = useMemo(() => getAvailableAnalyticsFields(filteredRowsByTime), [filteredRowsByTime]);
   useEffect(() => {
     if (analyticsChartType !== 'bar') return;
@@ -3620,15 +3680,15 @@ export default function EuropeNetworkMapApp() {
   );
 
   const visualizationAvailability = useMemo(() => {
-    const rowCount = filteredRowsByTime.length;
+    const rowCount = filteredRowsForActiveFilters.length;
     const pointCount = places.length;
-    const routeCount = filteredAggregatedEdges.length;
+    const routeCount = availabilityFilteredAggregatedEdges.length;
     // Network availability is semantic, not layout-dependent. A dataset can
     // contain valid entity relationships even when none of its entities has a
     // geographic anchor. In that case the force-directed network must remain
     // available while the geographic person/entity layout may have nothing to
     // position.
-    const availableNetworkRelationships = (entityNetworkSemantics.relationships || [])
+    const availableNetworkRelationships = (availabilityEntityNetworkSemantics.relationships || [])
       .filter((edge) => edge.count >= minCount);
     const availableNetworkEntities = new Set();
     availableNetworkRelationships.forEach((edge) => {
@@ -3643,7 +3703,7 @@ export default function EuropeNetworkMapApp() {
     // force layout, but a geographic network requires at least one relationship
     // whose two endpoints can both be positioned from explicit mapped coordinates.
     const geographicallyMappableEntities = new Set(
-      (entityNetworkSemantics.locations || [])
+      (availabilityEntityNetworkSemantics.locations || [])
         .filter((location) => Number.isFinite(Number(location.latitude)) && Number.isFinite(Number(location.longitude)))
         .map((location) => location.person)
         .filter(Boolean)
@@ -3662,12 +3722,12 @@ export default function EuropeNetworkMapApp() {
     ).size;
 
     const chartFieldCount = [
-      ...(analyticsFields.barGroupOptions || []),
-      ...(analyticsFields.segmentGroupOptions || []),
-      ...(analyticsFields.heatmapRowOptions || []),
-      ...(analyticsFields.xAxisOptions || []),
-      ...(analyticsFields.yMetricOptions || []),
-      ...(analyticsFields.numericMeasureOptions || []),
+      ...(availabilityAnalyticsFields.barGroupOptions || []),
+      ...(availabilityAnalyticsFields.segmentGroupOptions || []),
+      ...(availabilityAnalyticsFields.heatmapRowOptions || []),
+      ...(availabilityAnalyticsFields.xAxisOptions || []),
+      ...(availabilityAnalyticsFields.yMetricOptions || []),
+      ...(availabilityAnalyticsFields.numericMeasureOptions || []),
     ].length;
 
     return {
@@ -3687,7 +3747,7 @@ export default function EuropeNetworkMapApp() {
       hasCharts: rowCount > 0 && chartFieldCount > 0,
       hasExploreData: rowCount > 0,
     };
-  }, [analyticsFields, entityNetworkSemantics, filteredAggregatedEdges.length, filteredRowsByTime.length, minCount, places.length]);
+  }, [availabilityAnalyticsFields, availabilityEntityNetworkSemantics, availabilityFilteredAggregatedEdges.length, filteredRowsForActiveFilters.length, minCount, places.length]);
   const viewResetKey = useMemo(() => {
     const layoutKey = viewMode === 'person' ? `${viewMode}:${personLayoutMode}` : viewMode;
     return `${layoutKey}:${timelineMode}:${rangeStart}:${rangeEnd}`;
@@ -3750,8 +3810,8 @@ export default function EuropeNetworkMapApp() {
   // ------------------------------------------------------------
   const rowDiagnostics = useMemo(() => {
     const mappableRows = normalizedRows.filter((row) => row.mappable);
-    const unknownDateRows = normalizedRows.filter((row) => !row.parsedDate?.isKnown).length;
-    const timelineUsableRows = normalizedRows.filter((row) => row.parsedDate?.isTimelineUsable).length;
+    const unknownDateRows = normalizedRows.filter((row) => !getRowTimelineCapability(row).hasTemporalEvidence).length;
+    const timelineUsableRows = normalizedRows.filter((row) => getRowTimelineCapability(row).timelineReady).length;
     const peopleInFilteredRows = Array.from(new Set(filteredRowsByTime.flatMap((row) => [row.sourcePerson, row.targetPerson]).filter(Boolean)));
     const exactPersonMetadataMatches = peopleInFilteredRows.filter((name) => personMetadataByName.has(name)).length;
     const visibleLinkedLetters = graph.edges.reduce((sum, edge) => sum + ((edge.letterMetadata || []).length), 0);
@@ -3775,27 +3835,21 @@ export default function EuropeNetworkMapApp() {
   }, [normalizedRows, filteredRowsByTime, graph.edges, graph.nodes, normalizedLetters.length, normalizedPersonMetadata.length, geographyRows.length, timelineMonths.length, personMetadataByName]);
 
   const exportVisibleDateLabel = useMemo(() => {
-    const knownDateRows = filteredRowsByTime.filter((row) => row.parsedDate?.isKnown && row.date);
-    if (!knownDateRows.length) {
-      return timelineMode === 'all' ? 'All available dates' : currentRangeLabel;
+    const visibleYears = buildTimelineMonths(filteredRowsByTime, { enabledRoles: enabledTemporalRoles });
+    let baseRange = currentRangeLabel;
+
+    if (visibleYears.length) {
+      const start = visibleYears[0];
+      const end = visibleYears[visibleYears.length - 1];
+      baseRange = start === end ? start : `${start} to ${end}`;
     }
-
-    const ordered = [...knownDateRows].sort((a, b) => {
-      const aTime = a.parsedDate?.sortTime ?? 0;
-      const bTime = b.parsedDate?.sortTime ?? 0;
-      return aTime - bTime;
-    });
-
-    const start = ordered[0]?.date || '—';
-    const end = ordered[ordered.length - 1]?.date || start || '—';
-    const baseRange = start === end ? start : `${start} to ${end}`;
 
     if (hasActivePlayback) {
       return `${baseRange} (visible through playback pause)`;
     }
 
     return baseRange;
-  }, [filteredRowsByTime, timelineMode, currentRangeLabel, hasActivePlayback]);
+  }, [filteredRowsByTime, enabledTemporalRoles, currentRangeLabel, hasActivePlayback]);
 
   const exportSubtitleLines = useMemo(() => {
     const activeFilterLabels = [
@@ -4128,7 +4182,7 @@ export default function EuropeNetworkMapApp() {
     }
   };
 
-  const handleSaveColumnMappingState = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
+  const handleSaveColumnMappingState = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionMappings, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
     setColumnMappingStaging((current) => {
       if (!current || current.status !== 'ready') return current;
 
@@ -4176,6 +4230,7 @@ export default function EuropeNetworkMapApp() {
           coreMapping: coreMapping || current.mappingState?.coreMapping || {},
           temporalMapping: temporalMapping || current.mappingState?.temporalMapping || {},
           temporalNoteMappings: temporalNoteMappings || current.mappingState?.temporalNoteMappings || {},
+          temporalAssertionMappings: temporalAssertionMappings || current.mappingState?.temporalAssertionMappings || [],
           pointMapping: pointMapping || current.mappingState?.pointMapping || {},
           routeCoordinatePairMapping: routeCoordinatePairMapping || current.mappingState?.routeCoordinatePairMapping || {},
           customFieldSelections: customFieldSelections || current.mappingState?.customFieldSelections || [],
@@ -4186,7 +4241,7 @@ export default function EuropeNetworkMapApp() {
     });
   };
 
-  const handleConfirmColumnMappingImport = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
+  const handleConfirmColumnMappingImport = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionMappings, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
     if (!columnMappingStaging || columnMappingStaging.status !== 'ready') return;
     const activeDatasetProfileId = resolvePeridotDatasetProfileId(
       datasetProfileId
@@ -4344,6 +4399,7 @@ export default function EuropeNetworkMapApp() {
       const nextCoreMapping = coreMapping || columnMappingStaging.mappingState?.coreMapping || {};
       const nextTemporalMapping = temporalMapping || columnMappingStaging.mappingState?.temporalMapping || {};
       const nextTemporalNoteMappings = temporalNoteMappings || columnMappingStaging.mappingState?.temporalNoteMappings || {};
+      const nextTemporalAssertionMappings = temporalAssertionMappings || columnMappingStaging.mappingState?.temporalAssertionMappings || [];
       const nextPointMapping = pointMapping || columnMappingStaging.mappingState?.pointMapping || {};
       const nextRouteCoordinatePairMapping = routeCoordinatePairMapping || columnMappingStaging.mappingState?.routeCoordinatePairMapping || {};
       const nextPlaceParts = placeParts || columnMappingStaging.mappingState?.placeParts || [];
@@ -4358,6 +4414,7 @@ export default function EuropeNetworkMapApp() {
         coreMapping: nextCoreMapping,
         temporalMapping: nextTemporalMapping,
         temporalNoteMappings: nextTemporalNoteMappings,
+        temporalAssertionMappings: nextTemporalAssertionMappings,
         pointMapping: nextPointMapping,
         routeCoordinatePairMapping: nextRouteCoordinatePairMapping,
         customFieldSelections: nextCustomFieldSelections,
@@ -4948,6 +5005,11 @@ export default function EuropeNetworkMapApp() {
     selectedRowsForPlayback,
     timelineMode,
     setTimelineMode,
+    availableTemporalRoles,
+    enabledTemporalRoles,
+    setEnabledTemporalRoles,
+    timelinePlaybackMode,
+    setTimelinePlaybackMode,
   };
 
   const visualizationWorkspaceProps = {

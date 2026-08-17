@@ -1,3 +1,5 @@
+import { getRowTimelineCapability, getRowTemporalSearchValues, getRowTemporalYears, getRowTemporalDisplayLabels } from './timelinePlaybackHelpers.js';
+
 /*
  * Search-result helpers for Peridot's Advanced Search workspace.
  *
@@ -291,7 +293,7 @@ export const CAPABILITY_FILTER_OPTIONS = Object.freeze([
     id: 'timeline-ready',
     label: 'Timeline-ready',
     shortLabel: 'Timeline',
-    description: 'Rows with a usable date/display-date value.',
+    description: 'Rows with at least one date or period that can be positioned on the timeline.',
   },
   {
     id: 'evidence-ready',
@@ -301,9 +303,9 @@ export const CAPABILITY_FILTER_OPTIONS = Object.freeze([
   },
   {
     id: 'missing-date',
-    label: 'Missing date',
-    shortLabel: 'No date',
-    description: 'Rows without a date/display-date value.',
+    label: 'Missing time',
+    shortLabel: 'No time',
+    description: 'Rows without mapped temporal evidence.',
   },
   {
     id: 'missing-coordinates',
@@ -500,7 +502,8 @@ function getRowCapabilityState(row) {
   const hasEntityRoute = Boolean(sourcePerson && targetPerson);
   const hasPlaces = Boolean(sourcePlace || targetPlace);
   const hasPlaceRoute = Boolean(sourcePlace && targetPlace);
-  const hasDate = Boolean(firstText(row, DATE_FIELDS));
+  const temporalCapability = getRowTimelineCapability(row);
+  const hasDate = temporalCapability.hasTemporalEvidence;
   const hasCoordinates = hasAnyCoordinate(row);
   const hasEvidence = hasAnyEvidenceField(row);
   return {
@@ -515,7 +518,7 @@ function getRowCapabilityState(row) {
     mapReady: hasPlaces || hasCoordinates,
     routeReady: hasPlaceRoute || Boolean(row?.mappable),
     networkReady: hasEntityRoute,
-    timelineReady: hasDate,
+    timelineReady: temporalCapability.timelineReady,
     evidenceReady: hasEvidence,
     missingDate: !hasDate,
     missingCoordinates: !hasCoordinates,
@@ -596,7 +599,7 @@ function valuesForStructuredField(row, field, metadataField = '') {
   if (field === 'routePeople') {
     return [compactRouteLabel(firstText(row, SOURCE_PERSON_FIELDS), firstText(row, TARGET_PERSON_FIELDS))];
   }
-  if (field === 'date') return DATE_FIELDS.map((key) => row?.[key]).concat(row?.parsedDate?.year, row?.parsedDate?.monthKey);
+  if (field === 'date') return getRowTemporalSearchValues(row);
   if (field === 'evidenceFieldPresent' || field === 'metadataFieldPresent') {
     return getSearchableEvidenceFieldEntries(row).map((entry) => entry.label);
   }
@@ -871,13 +874,13 @@ export function buildPeridotSearchFacets(rows = [], options = {}) {
     const targetPerson = firstText(row, TARGET_PERSON_FIELDS);
     const sourcePlace = firstText(row, SOURCE_PLACE_FIELDS);
     const targetPlace = firstText(row, TARGET_PLACE_FIELDS);
-    const year = asText(firstText(row, DATE_FIELDS)).match(/\d{4}/)?.[0] || row?.parsedDate?.year || row?.parsedDate?.monthKey;
+    const temporalYears = getRowTemporalYears(row);
     addFacetCount(people, sourcePerson);
     addFacetCount(people, targetPerson);
     addFacetCount(places, sourcePlace);
     addFacetCount(places, targetPlace);
     if (sourcePlace || targetPlace) addFacetCount(placeRoutes, compactRouteLabel(sourcePlace, targetPlace));
-    addFacetCount(years, year ? String(year).slice(0, 4) : '');
+    Array.from(new Set(temporalYears)).forEach((year) => addFacetCount(years, String(year).slice(0, 4)));
     getSearchableEvidenceFieldEntries(row).forEach((entry) => {
       addFacetCount(evidenceFields, entry.label);
     });
@@ -906,7 +909,7 @@ export function buildPeridotSearchResults(rows = [], appliedFilters = {}, option
     const targetPerson = firstText(row, TARGET_PERSON_FIELDS);
     const sourcePlace = firstText(row, SOURCE_PLACE_FIELDS);
     const targetPlace = firstText(row, TARGET_PLACE_FIELDS);
-    const displayDate = firstText(row, DATE_FIELDS) || 'Undated';
+    const displayDate = getRowTemporalDisplayLabels(row).slice(0, 2).join(' · ') || firstText(row, DATE_FIELDS) || 'Undated';
     const matchedFields = buildMatchedFields(row, appliedFilters);
     return {
       id: row?.id || row?.recordId || row?.Record_ID || row?.Letter_ID || `search-result-${index}`,

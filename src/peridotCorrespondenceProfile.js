@@ -25,6 +25,7 @@ import {
   PERIDOT_PROVENANCE_STATUS,
 } from './peridotNormalizationProvenance.js';
 import {
+  makePeridotTemporalAssertion,
   parsePeridotTemporalRange,
   parsePeridotTemporalSpan,
   parsePeridotTemporalValue,
@@ -615,17 +616,21 @@ function makeGeneralizedTemporalAssertions(observation = {}) {
   const descriptors = Array.isArray(temporal.assertions) ? temporal.assertions : [];
   const assertions = descriptors.map((descriptor) => {
     const options = { role: asText(descriptor?.role), temporalNotes: descriptor?.notes || [] };
-    if (descriptor?.kind === 'span') return parsePeridotTemporalSpan(descriptor.sourceText, options);
-    if (descriptor?.kind === 'range') {
-      return parsePeridotTemporalRange({
+    let parsed = null;
+    if (descriptor?.kind === 'span') parsed = parsePeridotTemporalSpan(descriptor.sourceText, options);
+    else if (descriptor?.kind === 'range') {
+      parsed = parsePeridotTemporalRange({
         startValue: descriptor.startValue,
         endValue: descriptor.endValue,
         displayValue: descriptor.sourceText,
         role: options.role,
         temporalNotes: options.temporalNotes,
       });
-    }
-    return parsePeridotTemporalValue(descriptor?.sourceText, options);
+    } else parsed = parsePeridotTemporalValue(descriptor?.sourceText, options);
+    return parsed ? makePeridotTemporalAssertion({
+      ...parsed,
+      subjectParticipantIndex: Number.isInteger(descriptor?.subjectParticipantIndex) ? descriptor.subjectParticipantIndex : null,
+    }) : null;
   }).filter(Boolean);
 
   if (assertions.length) return assertions;

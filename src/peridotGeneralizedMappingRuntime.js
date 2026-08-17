@@ -9,6 +9,7 @@
  */
 
 import { parsePeridotCoordinatePair } from './peridotDataCapabilityAudit.js';
+import { composeTemporalPartsValue, getTemporalAssertionSourceColumns, normalizeTemporalAssertionMappings } from './peridotTemporalMapping.js';
 
 function asText(value) {
   return String(value ?? '').trim();
@@ -115,39 +116,73 @@ function buildTemporalNotes(row = {}, noteColumns = []) {
     .filter(Boolean);
 }
 
-function buildGeneralizedTemporal(row = {}, temporalMapping = {}, temporalNoteMappings = {}) {
+function buildTemporalAssertionDescriptors(row = {}, temporalAssertionMappings = []) {
+  const value = (column) => valueFrom(row, column);
+  const notesFor = (mapping) => buildTemporalNotes(row, mapping.noteColumns || []);
+  const partValue = (mapping, prefix = '') => composeTemporalPartsValue({
+    year: value(mapping[prefix ? `${prefix}YearColumn` : 'yearColumn']),
+    month: value(mapping[prefix ? `${prefix}MonthColumn` : 'monthColumn']),
+    day: value(mapping[prefix ? `${prefix}DayColumn` : 'dayColumn']),
+  });
+
+  return normalizeTemporalAssertionMappings(temporalAssertionMappings).map((mapping, index) => {
+    const role = asText(mapping.role) || `Time ${index + 1}`;
+    const notes = notesFor(mapping);
+    if (mapping.kind === 'period') {
+      if (mapping.sourceMode === 'single') {
+        const sourceText = value(mapping.column);
+        if (!asText(sourceText)) return null;
+        return { fieldKey: mapping.id, role, sourceText, kind: 'span', notes, subjectParticipantIndex: Number.isInteger(mapping.subjectParticipantIndex) ? mapping.subjectParticipantIndex : null };
+      }
+      const startValue = mapping.startMode === 'parts' ? partValue(mapping, 'start') : value(mapping.startColumn);
+      const endValue = mapping.endMode === 'parts' ? partValue(mapping, 'end') : value(mapping.endColumn);
+      if (!asText(startValue) && !asText(endValue)) return null;
+      return {
+        fieldKey: mapping.id, role, startValue, endValue,
+        sourceText: composeDisplayDateValue('', '', startValue, endValue), kind: 'range', notes, subjectParticipantIndex: Number.isInteger(mapping.subjectParticipantIndex) ? mapping.subjectParticipantIndex : null,
+      };
+    }
+    const sourceText = mapping.sourceMode === 'parts' ? partValue(mapping) : value(mapping.column);
+    if (!asText(sourceText)) return null;
+    return { fieldKey: mapping.id, role, sourceText, kind: 'point', notes, subjectParticipantIndex: Number.isInteger(mapping.subjectParticipantIndex) ? mapping.subjectParticipantIndex : null };
+  }).filter(Boolean);
+}
+
+function buildGeneralizedTemporal(row = {}, temporalMapping = {}, temporalNoteMappings = {}, temporalAssertionMappings = []) {
   const date = valueFrom(row, temporalMapping.Date);
   const dateRange = valueFrom(row, temporalMapping.Date_Range);
   const dateStart = valueFrom(row, temporalMapping.Date_Start);
   const dateEnd = valueFrom(row, temporalMapping.Date_End);
-  const assertions = [];
+  const mappedAssertions = buildTemporalAssertionDescriptors(row, temporalAssertionMappings);
+  const assertions = mappedAssertions.length ? mappedAssertions : [];
 
-  if (asText(date)) assertions.push({ fieldKey: 'Date', role: asText(temporalMapping.Date) || 'Date', sourceText: date, kind: 'point', notes: buildTemporalNotes(row, temporalNoteMappings.Date) });
-  if (asText(dateRange)) assertions.push({ fieldKey: 'Date_Range', role: asText(temporalMapping.Date_Range) || 'Date range', sourceText: dateRange, kind: 'span', notes: buildTemporalNotes(row, temporalNoteMappings.Date_Range) });
-  if (asText(dateStart) || asText(dateEnd)) {
-    assertions.push({
-      fieldKey: 'Date_Start_End',
-      role: [asText(temporalMapping.Date_Start), asText(temporalMapping.Date_End)].filter(Boolean).join(' / ') || 'Date interval',
-      startValue: dateStart,
-      endValue: dateEnd,
-      sourceText: composeDisplayDateValue('', '', dateStart, dateEnd),
-      kind: 'range',
-      notes: [
-        ...buildTemporalNotes(row, temporalNoteMappings.Date_Start),
-        ...buildTemporalNotes(row, temporalNoteMappings.Date_End),
-      ].filter((note, index, all) => all.findIndex((candidate) => candidate.sourceColumn === note.sourceColumn) === index),
+  if (!mappedAssertions.length) {
+    if (asText(date)) assertions.push({ fieldKey: 'Date', role: asText(temporalMapping.Date) || 'Date', sourceText: date, kind: 'point', notes: buildTemporalNotes(row, temporalNoteMappings.Date) });
+    if (asText(dateRange)) assertions.push({ fieldKey: 'Date_Range', role: asText(temporalMapping.Date_Range) || 'Date range', sourceText: dateRange, kind: 'span', notes: buildTemporalNotes(row, temporalNoteMappings.Date_Range) });
+    if (asText(dateStart) || asText(dateEnd)) assertions.push({
+      fieldKey: 'Date_Start_End', role: [asText(temporalMapping.Date_Start), asText(temporalMapping.Date_End)].filter(Boolean).join(' / ') || 'Date interval',
+      startValue: dateStart, endValue: dateEnd, sourceText: composeDisplayDateValue('', '', dateStart, dateEnd), kind: 'range',
+      notes: [...buildTemporalNotes(row, temporalNoteMappings.Date_Start), ...buildTemporalNotes(row, temporalNoteMappings.Date_End)]
+        .filter((note, index, all) => all.findIndex((candidate) => candidate.sourceColumn === note.sourceColumn) === index),
     });
   }
 
+  const first = assertions[0] || null;
+  const compatibilityDate = first?.kind === 'point' ? first.sourceText : '';
+  const compatibilityRange = first?.kind === 'span' ? first.sourceText : '';
+  const compatibilityStart = first?.kind === 'range' ? first.startValue : '';
+  const compatibilityEnd = first?.kind === 'range' ? first.endValue : '';
   return {
-    date, dateRange, dateStart, dateEnd,
-    displayDate: composeDisplayDateValue(date, dateRange, dateStart, dateEnd),
+    date: date || compatibilityDate,
+    dateRange: dateRange || compatibilityRange,
+    dateStart: dateStart || compatibilityStart,
+    dateEnd: dateEnd || compatibilityEnd,
+    displayDate: composeDisplayDateValue(date || compatibilityDate, dateRange || compatibilityRange, dateStart || compatibilityStart, dateEnd || compatibilityEnd),
     assertions: Object.freeze(assertions.map((assertion) => Object.freeze({ ...assertion, notes: Object.freeze(assertion.notes || []) }))),
     sourceColumns: { date: asText(temporalMapping.Date), dateRange: asText(temporalMapping.Date_Range), dateStart: asText(temporalMapping.Date_Start), dateEnd: asText(temporalMapping.Date_End) },
     noteSourceColumns: Object.freeze(Object.fromEntries(Object.entries(temporalNoteMappings || {}).map(([key, columns]) => [key, Object.freeze([...(Array.isArray(columns) ? columns : [])].map(asText).filter(Boolean))]))),
   };
 }
-
 function buildGeneralizedRelationshipMetadata(row = {}, mapping = {}) {
   return {
     type: asText(valueFrom(row, mapping.Relationship_Type)),
@@ -178,7 +213,7 @@ export function buildPeridotGeneralizedObservation(row = {}, mapping = {}, rowIn
     originalUploadedRow: { ...(row || {}) },
     participants: Object.freeze(buildGeneralizedParticipants(row, mapping.relationshipParts || [])),
     places: Object.freeze(buildGeneralizedPlaces(row, mapping.placeParts || [])),
-    temporal: Object.freeze(buildGeneralizedTemporal(row, mapping.temporalMapping || {}, mapping.temporalNoteMappings || {})),
+    temporal: Object.freeze(buildGeneralizedTemporal(row, mapping.temporalMapping || {}, mapping.temporalNoteMappings || {}, mapping.temporalAssertionMappings || [])),
     relationship: Object.freeze(buildGeneralizedRelationshipMetadata(row, mapping.relationshipMetadataMapping || {})),
     evidenceFields: Object.freeze(buildEvidenceFields(row, mapping.customFieldSelections || [])),
   });
@@ -255,6 +290,7 @@ export function projectGeneralizedObservationToLegacyRow(observation = {}, mappi
     ...(observation.places || []).flatMap((place) => [place.sourceColumn, place.roleSourceColumn, ...(place.coordinateSourceColumns || [])]),
     ...Object.values(temporal.sourceColumns || {}),
     ...Object.values(temporal.noteSourceColumns || {}).flat(),
+    ...getTemporalAssertionSourceColumns(mapping.temporalAssertionMappings || []),
     ...Object.values(relationship.sourceColumns || {}),
     ...customInspectorFields.map((field) => field.sourceColumn),
   ].filter(Boolean));
