@@ -194,13 +194,23 @@ function locationsFromRow(row) {
  * semantics. This function intentionally does not infer relationships from
  * arbitrary row co-occurrence.
  */
-export function derivePeridotEntityNetworkSemantics(rows = []) {
+export function derivePeridotEntityNetworkSemantics(rows = [], options = {}) {
   const relationshipMap = new Map();
   const locations = [];
+  const defaultRows = Array.isArray(rows) ? rows : [];
+  const relationshipRows = Array.isArray(options.relationshipRows) ? options.relationshipRows : defaultRows;
+  const locationRows = Array.isArray(options.locationRows) ? options.locationRows : defaultRows;
 
-  (Array.isArray(rows) ? rows : []).forEach((row = {}, rowIndex) => {
+  // Geographic person/entity views sometimes need two related scopes:
+  // structural relationship rows may be undated (for example genealogy parent/partner
+  // assertions), while participant place/event rows are date-bearing and should follow
+  // the active Timeline/playback scope. Keeping the inputs separate preserves explicit
+  // relationship semantics without inventing dates for structural relationships.
+  locationRows.forEach((row = {}) => {
     locations.push(...locationsFromRow(row));
+  });
 
+  relationshipRows.forEach((row = {}, rowIndex) => {
     let relationshipDrafts = [];
     if (row?.generalizedObservation) {
       relationshipDrafts = generalizedRelationshipsFromRow(row, rowIndex);
@@ -244,6 +254,19 @@ export function derivePeridotEntityNetworkSemantics(rows = []) {
     })),
     locations,
   };
+}
+
+/**
+ * Geographic entity networks intentionally separate relationship structure
+ * from currently visible participant-place assertions. This is especially
+ * important for genealogy, where canonical family relationships are structural
+ * rows while birth/death event rows carry the geographic anchors.
+ */
+export function derivePeridotGeographicEntityNetworkSemantics(relationshipRows = [], locationRows = []) {
+  return derivePeridotEntityNetworkSemantics(relationshipRows, {
+    relationshipRows,
+    locationRows,
+  });
 }
 
 /**

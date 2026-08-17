@@ -60,7 +60,7 @@ import {
   revokeObjectUrl,
 } from './exportHelpers';
 import { buildForcePersonPositions } from './personForceLayoutHelpers';
-import { derivePeridotEntityNetworkSemantics, getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels } from './peridotEntityNetwork.js';
+import { derivePeridotEntityNetworkSemantics, derivePeridotGeographicEntityNetworkSemantics, getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels } from './peridotEntityNetwork.js';
 import { InspectorConnectedCorrespondents } from './InspectorConnectedCorrespondents';
 import { InspectorPersonPlaces } from './InspectorPersonPlaces';
 import { InspectorBackButton } from './InspectorBackButton';
@@ -783,9 +783,11 @@ function computePersonEdgeWidth(count) {
 // Person-network graph builder shared by geographic and force-directed layouts.
 // Relationship semantics are derived in peridotEntityNetwork.js so layout no
 // longer determines (or reconstructs) what the user's relationships mean.
-function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQuery = '') {
+function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQuery = '', semanticOptions = null) {
   const personMap = new Map();
-  const { relationships, locations } = derivePeridotEntityNetworkSemantics(rows);
+  const { relationships, locations } = layoutMode === 'geographic' && semanticOptions
+    ? derivePeridotGeographicEntityNetworkSemantics(semanticOptions.relationshipRows, semanticOptions.locationRows)
+    : derivePeridotEntityNetworkSemantics(rows);
 
   relationships.forEach((relationship) => {
     [relationship.source, relationship.target].forEach((person) => {
@@ -3506,6 +3508,24 @@ export default function EuropeNetworkMapApp() {
     setPlaybackIndex(-1);
   }, [timelineMonths.length]);
 
+  // Entity relationships can be structural and therefore legitimately undated
+  // (genealogy parent/partner assertions are the clearest example). Geographic
+  // People Map layout should not lose that structure merely because Timeline
+  // filtering is operating on date-bearing event/place rows. We therefore keep
+  // a Search-filtered relationship scope before Timeline, while geographic
+  // anchors continue to come from the Timeline/playback-visible row scope.
+  const entityRelationshipStructureRows = useMemo(() => {
+    return filterRowsBySearchAndEntity(searchRecords, {
+      searchQuery: search,
+      personQuery: personFilter,
+      placeQuery: placeFilter,
+      routePlaceQuery: routePlaceFilter,
+      routePeopleQuery: routePeopleFilter,
+      capabilityFilters,
+      structuredCriteria,
+    });
+  }, [searchRecords, search, personFilter, placeFilter, routePlaceFilter, routePeopleFilter, capabilityFilters, structuredCriteria]);
+
   const timelineWindowRows = useMemo(() => {
     return filterRowsByTimelineWindow(searchRecords, timelineMode, timelineMonths, rangeStart, rangeEnd, {
       enabledRoles: enabledTemporalRoleSet,
@@ -3593,9 +3613,13 @@ export default function EuropeNetworkMapApp() {
       mapViewportSize.width,
       mapViewportSize.height,
       personLayoutMode,
-      minCount
+      minCount,
+      '',
+      personLayoutMode === 'geographic'
+        ? { relationshipRows: entityRelationshipStructureRows, locationRows: filteredRowsByTime }
+        : null
     ),
-    [filteredRowsByTime, mapViewportSize.width, mapViewportSize.height, personLayoutMode, minCount]
+    [entityRelationshipStructureRows, filteredRowsByTime, mapViewportSize.width, mapViewportSize.height, personLayoutMode, minCount]
   );
   const graph = viewMode === 'geographic' ? geographicGraph : personGraph;
 
@@ -3616,6 +3640,13 @@ export default function EuropeNetworkMapApp() {
   const availabilityEntityNetworkSemantics = useMemo(
     () => derivePeridotEntityNetworkSemantics(filteredRowsForActiveFilters),
     [filteredRowsForActiveFilters]
+  );
+  const availabilityGeographicEntityNetworkSemantics = useMemo(
+    () => derivePeridotGeographicEntityNetworkSemantics(
+      entityRelationshipStructureRows,
+      filteredRowsForActiveFilters
+    ),
+    [entityRelationshipStructureRows, filteredRowsForActiveFilters]
   );
   const availabilityAnalyticsFields = useMemo(
     () => getAvailableAnalyticsFields(filteredRowsForActiveFilters),
@@ -3665,17 +3696,19 @@ export default function EuropeNetworkMapApp() {
     // force layout, but a geographic network requires at least one relationship
     // whose two endpoints can both be positioned from explicit mapped coordinates.
     const geographicallyMappableEntities = new Set(
-      (availabilityEntityNetworkSemantics.locations || [])
+      (availabilityGeographicEntityNetworkSemantics.locations || [])
         .filter((location) => Number.isFinite(Number(location.latitude)) && Number.isFinite(Number(location.longitude)))
         .map((location) => location.person)
         .filter(Boolean)
     );
-    const geographicNetworkEdgeCount = availableNetworkRelationships.filter((edge) => (
+    const availableGeographicRelationships = (availabilityGeographicEntityNetworkSemantics.relationships || [])
+      .filter((edge) => edge.count >= minCount);
+    const geographicNetworkEdgeCount = availableGeographicRelationships.filter((edge) => (
       geographicallyMappableEntities.has(edge.source)
       && geographicallyMappableEntities.has(edge.target)
     )).length;
     const geographicNetworkNodeCount = new Set(
-      availableNetworkRelationships
+      availableGeographicRelationships
         .filter((edge) => (
           geographicallyMappableEntities.has(edge.source)
           && geographicallyMappableEntities.has(edge.target)
@@ -3709,7 +3742,7 @@ export default function EuropeNetworkMapApp() {
       hasCharts: rowCount > 0 && chartFieldCount > 0,
       hasExploreData: rowCount > 0,
     };
-  }, [availabilityAnalyticsFields, availabilityEntityNetworkSemantics, availabilityFilteredAggregatedEdges.length, filteredRowsForActiveFilters.length, minCount, places.length]);
+  }, [availabilityAnalyticsFields, availabilityEntityNetworkSemantics, availabilityGeographicEntityNetworkSemantics, availabilityFilteredAggregatedEdges.length, filteredRowsForActiveFilters.length, minCount, places.length]);
   const viewResetKey = useMemo(() => {
     const layoutKey = viewMode === 'person' ? `${viewMode}:${personLayoutMode}` : viewMode;
     return `${layoutKey}:${timelineMode}:${rangeStart}:${rangeEnd}`;

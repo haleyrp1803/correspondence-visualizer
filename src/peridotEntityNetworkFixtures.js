@@ -1,4 +1,4 @@
-import { derivePeridotEntityNetworkSemantics, getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels, rowHasPeridotEntityRelationship } from './peridotEntityNetwork.js';
+import { derivePeridotEntityNetworkSemantics, derivePeridotGeographicEntityNetworkSemantics, getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels, rowHasPeridotEntityRelationship } from './peridotEntityNetwork.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -103,10 +103,42 @@ export function runPeridotEntityNetworkSelfAudit() {
   assert(places.locations.some((location) => location.person === 'A' && location.label === 'Florence'), 'Part A place association should remain attached to Part A.');
   assert(places.locations.some((location) => location.person === 'B' && location.label === 'Rome'), 'Part B place association should remain attached to Part B.');
 
+  // Geographic People Map regression: canonical genealogy relationships may be
+  // undated structural rows while birth/death events carry the explicit places.
+  // Timeline filtering of event rows must not erase the family relationship itself.
+  const splitScopeGeography = derivePeridotGeographicEntityNetworkSemantics(
+    [
+      {
+        sourcePerson: 'Mother',
+        targetPerson: 'Person A',
+        originalCanonicalItem: {
+          id: 'rel-mother-child',
+          participantAId: 'mother-id',
+          participantBId: 'person-a-id',
+          relationshipType: 'parent-child',
+          direction: 'directed',
+          participantARole: 'mother',
+          participantBRole: 'child',
+        },
+      },
+    ],
+    [
+      { recordType: 'genealogy-event', sourcePerson: 'Mother', sourceLoc: 'Florence', sourceLat: 43.77, sourceLon: 11.25, eventType: 'childbirth' },
+      { recordType: 'genealogy-event', sourcePerson: 'Person A', sourceLoc: 'Florence', sourceLat: 43.77, sourceLon: 11.25, eventType: 'birth' },
+    ],
+  );
+  assert(splitScopeGeography.relationships.length === 1, 'Undated genealogy relationship should survive in the geographic structural scope.');
+  assert(splitScopeGeography.locations.length === 2, 'Timeline-visible genealogy events should provide geographic anchors independently of relationship rows.');
+  assert(splitScopeGeography.relationships[0]?.source === 'Mother' && splitScopeGeography.relationships[0]?.target === 'Person A', 'Geographic relationship endpoints should preserve canonical genealogy direction.');
+  assert(splitScopeGeography.locations.some((location) => location.person === 'Mother' && location.role === 'childbirth'), 'Mother childbirth place should remain attached to Mother.');
+  assert(splitScopeGeography.locations.some((location) => location.person === 'Person A' && location.role === 'birth'), 'Person A birth place should remain attached to Person A.');
+
   return {
     multipartEdgeCount: multipart.relationships.length,
     genealogyEdgeCount: genealogy.relationships.length,
     distinctRelationshipCount: distinct.relationships.length,
     locationAssertionCount: places.locations.length,
+    splitScopeGeographicRelationshipCount: splitScopeGeography.relationships.length,
+    splitScopeGeographicLocationCount: splitScopeGeography.locations.length,
   };
 }
