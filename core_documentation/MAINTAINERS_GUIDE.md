@@ -29,7 +29,7 @@ This document owns current architecture, source/module ownership, state and data
 Current synchronized checkpoint:
 
 ```text
-134c67c — Refine upload review checkpoint
+2d5e668 — Generalize temporal mapping and timeline playback
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
@@ -43,7 +43,7 @@ Peridot is a Vite/React/Tailwind research application that has moved from a map-
 
 The active data architecture now includes a canonical normalized research model beneath the current runtime consumers. Correspondence imports normalize into canonical entities/places/records/participations/evidence/assertions and then pass through a legacy compatibility adapter so existing consumers retain their accepted row contracts. Genealogy imports normalize person-centered data directly into canonical entities, life events, relationships, places, evidence, and provenance and project through a dedicated genealogy runtime model. Phase 1 established user-owned variable/mapping definitions, stable source-table metadata, deterministic transformation helpers, and an explicit runtime compatibility boundary.
 
-Phase 2 has now generalized the active correspondence/directed-record mapping shell itself. The accepted workflow is Preview → Time → Places → Relations → Evidence → Review, with a workbook Sheets step where relevant. Preview records table orientation without visually transposing the source; Time uses plain date/beginning/ending roles; Places stores repeatable place parts; Relations stores repeatable n-participant relationship parts; Evidence preserves Include/Ignore and display labels; Review repeats the assignments before capability validation. Workbook Places and Relations use the same interaction model with sheet-qualified references. These richer mappings are currently preserved in mapping state, but the next Phase 2 task is to make them authoritative inputs to canonical normalization/runtime behavior rather than leaving legacy Source/Target and point/route compatibility fields as downstream decision-makers.
+Phase 2 has now crossed the generalized-mapping authority boundary for both single-table and workbook imports. The accepted correspondence/directed-record workflow is Preview → Relations → Time → Places → Evidence → Review, with a workbook Sheets step where relevant. Preview records orientation without visually transposing the source; Relations stores repeatable n-participant relationship parts; Time stores repeatable user-named Date/Period assertions and can associate them with the row/record or a mapped relationship participant; Places stores repeatable place parts; Evidence preserves Include/Ignore and display labels; Review repeats the assignments before capability validation. Workbook mappings use sheet-qualified references and generalized join validation. Generalized place, relationship, temporal, and evidence assignments are authoritative through canonical normalization/runtime consumption; legacy correspondence-shaped fields remain only as explicit compatibility projections where a current consumer still requires them.
 
 The active public workflow is Home → Manage Your Data → Visualize Your Data → Explore Your Data → Learn More. Themes and Accessibility remains route-compatible but intentionally hidden from the public hamburger menu. Timeline and Export are Visualizations-integrated surfaces; Inspector is a compact/full shared-state evidence system.
 
@@ -154,7 +154,9 @@ Minimum regression checks: node, edge, and cluster click; compact close; Expand;
 
 ### Visualizations and Timeline
 
-Visualizations owns capability-aware map, network, force-directed, and chart entry points; header collapse behavior; the bottom timeline scrubber; and the shared Export menu. Timeline is year-based and must remain a Visualizations-integrated control rather than a separate workspace.
+Visualizations owns capability-aware map, network, force-directed, and chart entry points; header collapse behavior; the bottom timeline scrubber; and the shared Export menu. Timeline remains a Visualizations-integrated control rather than a separate workspace. Its active chronology is derived from canonical `temporalAssertions[]` on runtime rows, with legacy `parsedDate` used only as a fallback path. A record may contribute multiple assertion-level timeline entries, and interval filtering uses temporal intersection rather than only an interval start.
+
+The Timeline derives available **Time types** from mapped temporal roles and keeps the controls visible even when only one role is available. Playback supports **Cumulative Events** and **Co-current Events**. Cumulative mode retains records after their date or period begins/occurs; co-current mode recalculates visibility at the current moment, removes ended intervals, bounds point dates to their temporal unit, and inserts interval-end checkpoints so disappearing records are observable. A co-current moment with zero active rows is a valid empty visualization state and must not cause capability routing to replace the workspace with an unavailable-state screen.
 
 ### Export
 
@@ -268,17 +270,18 @@ parsed/staged source
 ### Import contract
 
 - `PeridotDataWorkspace.jsx` owns user entry, template download, upload launch, profile selection, upload summary, and navigation into Visualizations.
-- `PeridotColumnMappingModal.jsx` owns the correspondence/directed-record mapping stages (Preview, Sheets where applicable, Time, Places, Relations, Evidence, Review) and the genealogy stages (Preview, Identity, Parents, Partners, Life events, Places, Attributes, Review).
+- `PeridotColumnMappingModal.jsx` owns the correspondence/directed-record mapping stages (Preview, Sheets where applicable, Relations, Time, Places, Evidence, Review) and the genealogy stages (Preview, Identity, Parents, Partners, Life events, Places, Attributes, Review).
 - Mapping is explicit, progressive, reversible, and user-owned. Peridot may propose recognizable structures, but it does not silently standardize values, assign scholarly meaning, or infer irreversible relationships.
 - Preview preserves the source table visually as uploaded. For single tables, the user can state whether headings run across the top or down the left; downstream mapping controls and example values must use the same orientation-aware internal row set.
-- Time maps Date, Beginning date, and Ending date in human-readable language; no mandatory primary date is imposed.
-- Places uses repeatable `placeParts` (Place A/B/C...) with place source, role source, and optional combined or separate coordinates. The user-facing model no longer asks users to classify a place as a point versus route endpoint.
 - Relations uses repeatable `relationshipParts` (Part A/B/C...) with per-part participant and role mappings, plus optional relationship-level type/label fields. N-part relationships must not be silently reduced to binary Source/Target just to satisfy legacy consumers.
-- Workbook Places and Relations mirror the single-table interaction model using `{ sheetName, columnName }` references.
+- Time uses repeatable temporal mappings rather than fixed Date/Beginning/Ending slots. Each user-named assertion is either a Date or Period / range and can describe the row/record as a whole or a mapped relationship participant. Date sources may be one column or separate year/month/day columns. Period sources may be one range column or separate beginning/end representations; each endpoint may use one column or separate year/month/day columns, including six-column Y/M/D + Y/M/D ranges. Source columns are reusable across different temporal assertions.
+- Each temporal assertion may attach zero or more researcher-note columns. These notes are preserved independently of machine-derived temporal structure and do not silently control visualization eligibility.
+- Places uses repeatable `placeParts` (Place A/B/C...) with place source, role source, and optional combined or separate coordinates. The user-facing model no longer asks users to classify a place as a point versus route endpoint.
+- Workbook Relations, Time, and Places mirror the single-table interaction model using `{ sheetName, columnName }` references.
 - Evidence retains explicit Include and Ignore controls, optional display labels, source examples, and chart/filter-readiness hints. Fields already structurally mapped on earlier pages remain visible but are ignored as duplicate evidence.
-- Review is a summary + validation + correction checkpoint. It repeats Time/Places/Relations/Evidence assignments, provides one unified **Map** readiness row, and retains current capability/warning output underneath.
+- Review is a summary + validation + correction checkpoint. It repeats Relations/Time/Places/Evidence assignments, reports temporal interpretation separately from record-level Timeline readiness, provides one unified **Map** readiness row, and retains current capability/warning output underneath.
 - Workbooks still use a selected primary record sheet and user-configured unique-ID joins; never use row-order joining as the primary assembly strategy.
-- The Phase 1 universal mapping/source/transformation layer remains the canonical architectural foundation. The Phase 2 UI is now substantially integrated, but its richer assignments are not yet authoritative throughout runtime assembly and all consumer paths.
+- The generalized mapping/source/transformation layer is now authoritative for single-table and workbook import semantics through canonical normalization/runtime consumption. Legacy correspondence-shaped projections remain only as explicit compatibility paths and must not override accepted generalized mappings.
 
 ### Minimum regression checks
 
@@ -531,7 +534,7 @@ Owns pure post-upload validation summaries. It produces:
 
 #### `src/PeridotColumnMappingModal.jsx`
 
-Owns the large column/workbook-mapping workspace for arbitrary CSV/TSV/XLSX/XLS imports. The current UI is role-based rather than correspondence-template-first: users move through Preview, Sheets for workbooks, Time, Places, Relations, Evidence, and Review. It still produces Peridot-compatible rows for the existing visualization pipeline, but it now exposes explicit temporal roles, point-location roles, route coordinate-pair roles, workbook primary-sheet selection, multi-sheet unique-ID joins, and selected evidence/Analytics metadata from primary and joined sheets.
+Owns the large column/workbook-mapping workspace for arbitrary CSV/TSV/XLSX/XLS imports. The current UI is role-based rather than correspondence-template-first: users move through Preview, Sheets for workbooks, Relations, Time, Places, Evidence, and Review. It exposes generalized relationship parts, repeatable temporal assertions, repeatable places, workbook primary-sheet selection, multi-sheet unique-ID joins, and selected evidence/Analytics metadata from primary and joined sheets.
 
 This file has been partially decomposed. Static UI labels/step groupings live in `peridotColumnMappingUiConfig.js`; repeated Time/Places/Relations controls live in `PeridotMappingFieldControls.jsx`; Evidence Include/Ignore controls live in `PeridotEvidenceFieldControls.jsx`. The modal now also owns orientation-aware single-table interpretation, `placeParts`, `relationshipParts`, workbook-qualified equivalents, and the human-readable Review assignment summary. It should continue to own state transitions, workbook state, import/cancel behavior, final mapping assembly, upload-mapping entrance animation hooks, and the accepted opacity-only step transition. Avoid reintroducing carousel/slide/scale/blur transitions for step changes unless a new motion pass explicitly chooses that direction.
 
@@ -541,7 +544,7 @@ Static UI configuration for the mapping modal: single-table/workbook step sequen
 
 #### `src/PeridotMappingFieldControls.jsx`
 
-Presentational mapping controls used by the mapping modal for Time, generalized repeatable Places, generalized repeatable Relations, and workbook-qualified equivalents. Places support arbitrary Place A/B/C parts with role source and optional coordinates; Relations support Part A/B/C participants with per-part role source and optional relationship metadata. Workbook controls use combined sheet-column references while preserving the internal workbook reference shape. This file should remain stateless and receive current values plus callbacks from `PeridotColumnMappingModal.jsx`.
+Presentational mapping controls used by the mapping modal for generalized repeatable Relations, Time, Places, and workbook-qualified equivalents. Time presents repeatable Date/Period cards, source-representation controls, Y/M/D component selectors, relationship-participant attachment, and related-note selectors. Places support arbitrary Place A/B/C parts with role source and optional coordinates; Relations support Part A/B/C participants with per-part role source and optional relationship metadata. Workbook controls use combined sheet-column references while preserving the internal workbook reference shape. This file should remain stateless and receive current values plus callbacks from `PeridotColumnMappingModal.jsx`.
 
 #### `src/PeridotEvidenceFieldControls.jsx`
 
@@ -579,7 +582,11 @@ Owns machine-readable source and transformation provenance for normalized items.
 
 #### `src/peridotTemporalAssertions.js`
 
-Owns conservative parsing and preservation of exact, partial, ranged, approximate, before/after, uncertain, unknown, and textual dates for canonical structures. Original date values remain preserved.
+Owns conservative parsing and preservation of canonical temporal assertions. Original source text always survives. The parser distinguishes temporal shape, known components, approximation, boundedness, consistency, warnings, and machine usability rather than forcing every value into one JavaScript date. It supports ordinary point dates, mixed-precision and open intervals, approximation markers, partial values such as `1607/00/02` and `0000/08/08`, and chronologically backwards ranges that remain preserved but unsafe for ordinary interval computation. Annotated date strings may be parsed from viable outer date expressions, while cells containing competing date possibilities remain flagged rather than collapsed into false certainty. Researcher-supplied temporal notes remain separate from Peridot's derived temporal structure.
+
+#### `src/peridotTemporalMapping.js`
+
+Owns generalized temporal-mapping normalization and composition. It represents repeatable Date/Period mappings independently from display labels, supports one-column and Y/M/D source representations, composes beginning/end endpoints for periods, allows source-column reuse across assertions, and carries relationship-participant attachment and related temporal-note mappings into canonical temporal assertions.
 
 #### `src/peridotNormalizedValidation.js`
 
@@ -651,11 +658,11 @@ Top-level map interaction handlers.
 
 #### `src/timelinePlaybackHelpers.js`
 
-Pure timeline/playback derivation helpers.
+Pure canonical Timeline/playback derivation helpers. It prefers `row.temporalAssertions[]`, falls back to legacy `parsedDate` only when canonical assertions are absent, derives temporal roles, builds assertion-level entries and interval boundaries, filters ranges by temporal intersection, and deduplicates active assertion entries back to visualization rows. It also owns Cumulative versus Co-current playback visibility semantics and period-end checkpoints.
 
 #### `src/timelinePlaybackComponents.jsx`
 
-Timeline/playback panel UI boundary. The timeline is now **year-based**, not month-based.
+Timeline/playback panel UI boundary. It renders dataset-derived Time types, the selected temporal-role controls, Cumulative Events / Co-current Events mode controls and explanatory hover text, range/playback controls, and empty/unavailable states. Timeline remains Visualizations-integrated.
 
 #### `src/personForceLayoutHelpers.js`
 
@@ -812,48 +819,44 @@ These areas still deserve narrow, explicit passes:
 
 ## 11. Active Technical Backlog
 
-1. **Universal data architecture — Phase 2: make generalized mappings authoritative end-to-end.**
-   - Trace Confirm import from `placeParts`, `relationshipParts`, generalized temporal/evidence mappings, and workbook-qualified references into canonical normalization and runtime assembly.
-   - Make the generalized assignments the authoritative source for downstream semantics.
-   - Retain legacy correspondence-shaped projections only where a current consumer still demonstrably requires them.
-   - Do not collapse arbitrary n-part relationships into Source/Target or reinstate point-versus-route classification as the user-facing model.
-2. **Audit validation and Review warnings against the generalized model.**
-   - Classify each warning/requirement as universal, compatibility-path-specific, or obsolete.
-   - Pay particular attention to `Letter_ID`, exact-key join language, Source/Target requirements, source/target place assumptions, and point/route terminology.
-   - Rewrite or retire warnings only after the authoritative runtime requirements are known.
-3. **End-to-end Phase 2 regression suite.**
-   - Test the Maria Maddalena workbook, correspondence data, genealogy data, Alaskan-airfield data, and wide/transposed stock-price data.
-   - Verify mapping → confirm import → canonical dataset → applicable Search/Inspector/Map/Network/Timeline/Charts/Export consumers.
-   - Preserve canonical-only validity where no current visualization consumer exists.
-4. **Repository-wide legacy upload/runtime retirement audit.**
-   - Run only after generalized runtime integration and regression testing.
-   - Inventory old Source/Target-only mapping code, point/route branching, correspondence-shaped workbook assembly, obsolete UI/components, compatibility adapters, tests/fixtures, comments, and documentation.
+1. **Complete the generalized Network follow-up.**
+   - Audit the geographic person/entity network so it consumes all generalized relationships rather than only the first relationship where that limitation still survives.
+   - Preserve the accepted generalized relationship semantics from the canonical/runtime model rather than reconstructing Source/Target assumptions.
+   - Finish the currently deferred force-network rendering repairs: fit the Force-Directed Network reliably to the viewport and terminate arrowheads at node boundaries.
+2. **Repository-wide legacy upload/runtime retirement audit.**
+   - The generalized mapping architecture is now authoritative, so inventory old Source/Target-only mapping code, obsolete point/route branches, correspondence-shaped assembly logic, compatibility adapters, stale tests/fixtures, comments, and documentation.
    - Classify each item as **delete now**, **still-required compatibility layer**, **legitimate profile-specific specialization**, or **uncertain/retain**.
-   - Retire in bounded cleanup passes; do not perform one broad deletion.
-5. **Close Phase 2 with core-document synchronization and a clean checkpoint.**
-6. **Universal data architecture — Phase 3: chart builder**, only after the Phase 2 authority/retirement boundary is clean:
+   - Preserve Correspondence / Directed Record and Genealogy / Person-Centered specializations until the audit proves a simpler no-loss replacement.
+3. **Temporal compatibility cleanup after consumer migration.**
+   - Audit the remaining `parseHistoricalDate()` and legacy `parsedDate` paths.
+   - Remove them only after every remaining consumer has migrated to canonical `temporalAssertions[]` or has a deliberate compatibility reason to remain.
+   - Keep source temporal text and researcher-note provenance intact during cleanup.
+4. **Optional Timeline temporal-structure controls.**
+   - Consider user-facing filters for structures such as approximate, partial, open-ended, or inconsistent dates/periods only if they add analytical value without making the Timeline control surface overly technical.
+   - Do not conflate researcher-provided certainty/completeness notes with machine-derived temporal structure.
+5. **Search coverage and scope audit.**
+6. **Inspector → Advanced Search actions and safe metadata filters, after the coverage audit.**
+7. **Timeline playback × Analytics audit.**
+8. **Universal data architecture — Phase 3: chart builder**, after the authority/retirement boundary is sufficiently clean:
    - universal chart-variable registry;
    - permissive direct x/y/group/filter controls;
    - structured scholarly sentence builder with autocomplete and visible interpretation, not free-form natural-language prompting;
    - targeted clarification/validity handling;
    - Search/Timeline/export integration audit;
    - final UX simplification as needed.
-7. First-time tutorial polish, in bounded passes:
+9. First-time tutorial polish, in bounded passes:
    - attention choreography that sequences dialogue, workspace movement, tutorial placement, and target emphasis;
    - placement audit for panels that obscure important controls;
    - minor typography/spacing refinement;
    - standardized semantic keyword highlighting;
-   - final full UX walkthrough.
-8. Search coverage and scope audit.
-9. Inspector → Advanced Search actions and safe metadata filters, after the coverage audit.
-10. Timeline playback × Analytics audit.
-11. Accessibility pass.
-12. Clarify data-scope language across the app.
-13. Learn More completion: substantive research-workflow tutorial/help material.
-14. Correct the stale dataset-profile fixture that still expects genealogy to be non-importable; keep this as a narrowly bounded maintenance fix rather than mixing it into universal-upload behavior.
-15. Continue bounded structural work only when a concrete maintenance need exists; `App.jsx` remains concentrated but should not be casually refactored.
+   - final full UX walkthrough, including explicit review of animation order/timing.
+10. Accessibility pass.
+11. Clarify data-scope language across the app.
+12. Learn More completion: substantive research-workflow tutorial/help material.
+13. Correct the stale dataset-profile fixture that still expects genealogy to be non-importable; keep this as a narrowly bounded maintenance fix.
+14. Continue bounded structural work only when a concrete maintenance need exists; `App.jsx` remains concentrated but should not be casually refactored.
 
-For the universal-data program, the page-by-page Phase 2 mapping redesign is accepted at `134c67c`. The next work is not another mapper-shell redesign: it is making those mappings authoritative in the runtime, then auditing warnings and legacy paths from that new baseline. Correspondence and Genealogy profiles remain until the retirement audit proves a simpler no-loss replacement. For tutorial polish, prefer subtle motion over stronger outlines and explicitly review animation order/timing during final visual polish.
+The authoritative generalized mapping/runtime milestone is now accepted through `2d5e668`. The next architecture work is no longer “make mappings authoritative”; it is to finish the remaining Network consumer work, audit/retire legacy compatibility paths deliberately, and continue downstream consumer work from the canonical model.
 
 ## 12. Archived and Compatibility Paths
 
@@ -861,9 +864,9 @@ For the universal-data program, the page-by-page Phase 2 mapping redesign is acc
 
 ### Canonical correspondence adapter and profile routing — active compatibility paths
 
-The canonical normalized model is authoritative for correspondence import, but many current downstream consumers still receive established legacy row structures through `peridotLegacyCompatibilityAdapter.js` and `peridotCanonicalRuntimeModel.js`. The Phase 2 mapping UI now captures richer generalized place and relationship assignments than those legacy row contracts can express. This is therefore an **active compatibility boundary**, not yet dead code. Genealogy continues to use its own direct canonical runtime projection.
+The canonical normalized model and generalized mapping architecture are authoritative for correspondence/directed-record import semantics. Current downstream consumers may still receive established legacy row structures through `peridotLegacyCompatibilityAdapter.js` and `peridotCanonicalRuntimeModel.js`; that adapter now also carries canonical `temporalAssertions[]` onto active runtime rows so migrated consumers can use the richer model without losing legacy parity. Genealogy continues to use its own direct canonical runtime projection.
 
-Do not remove or collapse the Correspondence / Directed Record or Genealogy / Person-Centered profiles merely because the generalized mapper UI exists. First make the generalized mapping architecture authoritative end-to-end, then run the warning/validation and repository-wide retirement audits. A compatibility adapter should be removed only after all remaining consumers have either migrated or been shown not to need it.
+This is an **active compatibility boundary**, not yet dead code. Do not remove or collapse the Correspondence / Directed Record or Genealogy / Person-Centered profiles merely because generalized mappings are authoritative. A compatibility adapter or legacy date field should be removed only after all remaining consumers have either migrated or been shown not to need it.
 
 ### MapLibre migrated-overlay branch paused / active preview removed
 
@@ -901,19 +904,23 @@ A future chat should start from:
 
 - source of truth folder: `C:\Users\haley\OneDrive\Desktop\Peridot\`
 - active branch: `main`
-- current synchronized checkpoint: **`134c67c` — `Refine upload review checkpoint`**
+- current synchronized checkpoint: **`2d5e668` — `Generalize temporal mapping and timeline playback`**
 
 A future chat should also be told that:
 
 - the app identity is **Peridot**
-- Phase 1 of the universal data architecture is complete: universal mapping definitions, generalized source/sheet descriptors, deterministic transformation helpers, and a runtime compatibility boundary are implemented
-- Phase 2's page-by-page mapping redesign is accepted through `134c67c`: Preview/orientation, Time, generalized repeatable Places, generalized n-part Relations, Evidence, and Review have been tested; workbook Places/Relations have parity with the single-table interaction model
-- Review is a double-check checkpoint: it repeats assignments and reports one unified **Map** readiness state rather than separate point/route map categories
-- the new mapper state is richer than the legacy runtime: `placeParts` and `relationshipParts` are preserved, but the next task is to make them authoritative through canonical normalization/runtime consumption instead of allowing old Source/Target or point/route fields to decide downstream behavior
-- after runtime integration, audit validation/warnings; then run the representative dataset regression suite; then perform a repository-wide legacy upload/runtime retirement audit; only after Phase 2 is clean should Phase 3 chart-builder work begin
-- the deferred Review-warning audit must distinguish genuine requirements from legacy correspondence/workbook assumptions, including `Letter_ID`, exact-key joins, Source/Target, and point/route language
-- canonical normalization remains active: correspondence currently runs canonical → legacy compatibility adapter; genealogy runs canonical → dedicated genealogy runtime; broader universal structures may remain canonical-only until deliberately adopted by consumers
+- the generalized mapping architecture is authoritative for single-table and workbook import semantics; current compatibility projections must not override accepted generalized mappings
+- the correspondence/directed-record mapping order is Preview → Relations → Time → Places → Evidence → Review, with workbook Sheets where relevant
+- Relations are repeatable and n-part; Places are repeatable; Time is repeatable and consists of user-named Date/Period assertions rather than one privileged Date
+- Date mappings support one combined source column or separate year/month/day columns; Period mappings support one range column or separate beginning/end representations, including separate Y/M/D on each endpoint
+- temporal source columns may be reused across assertions, so Birth Y/M/D can simultaneously define Birth date and the beginning of Lifespan
+- temporal assertions can describe the row/record or a mapped relationship participant and may carry multiple researcher-note columns
+- canonical temporal parsing preserves source text, partial/approximate/open/inconsistent structure, known/unknown components, and warnings without silently manufacturing missing precision
+- active runtime rows now carry canonical `temporalAssertions[]`; legacy `parsedDate` remains a compatibility fallback only
+- Timeline derives dataset-specific Time types from canonical assertions and supports Cumulative Events and Co-current Events; zero active co-current rows is a valid empty visualization state, not a capability failure
+- generalized temporal readiness/Search diagnostics use canonical assertions rather than one legacy Date field
 - Correspondence / Directed Record and Genealogy / Person-Centered remain active profiles until the retirement audit proves full parity and actual architectural simplification
+- the next implementation area is the deferred Network work: complete generalized relationship consumption, force-directed viewport fitting, and arrowhead termination, then continue the repository-wide compatibility retirement audit
 
 - the first-time tutorial is implemented as a seven-stage guided overlay beginning in Visualizations, with draggable/minimizable panels, Back/Continue progression, recovery logic, keyboard accessibility, target highlighting, and explicit Inspector-close guidance; `619bab0` is the stable baseline for future polish
 - the user-designed Peridot logo, gilded logo, selected Adobe Stock filigree, homepage screenshot, and homepage mockup assets are stored in `assets/`; the Home workspace uses `assets/Peridot Logo Gilded Transparent.png` and `assets/Adobe Stock Filigree 1.png`; the additional licensed filigree assets `Adobe Stock Filigree 2.png`, `Adobe Stock Filigree 3.png`, `Adobe Stock Filigree Divider Set.png`, and `Adobe Stock Filigree Full Set.png` are retained for design reference/use

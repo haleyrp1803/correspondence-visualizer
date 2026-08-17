@@ -24,7 +24,7 @@ This Charter owns mandatory process rules, source-of-truth continuity, delivery/
 Current synchronized checkpoint:
 
 ```text
-134c67c — Refine upload review checkpoint
+2d5e668 — Generalize temporal mapping and timeline playback
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
@@ -307,7 +307,7 @@ Future cluster changes should preserve:
 
 Data import is a fragile boundary. Keep the public direction intact: unified CSV / TSV / XLSX / XLS upload, user-confirmed/user-owned mapping, active correspondence and genealogy profiles, permissive database-first admission, and no silent standardization. The accepted Phase 2 correspondence/directed-record mapper now uses Preview/orientation, Time, repeatable Places, n-part Relations, Evidence, and Review; workbook Places/Relations use sheet-qualified versions of the same model. Correspondence still passes through the canonical normalized model and a legacy runtime adapter; genealogy uses a direct canonical runtime projection; broader universal structures may remain canonical-only until a consumer deliberately adopts them.
 
-The next architectural task is to make generalized `placeParts`, `relationshipParts`, temporal/evidence assignments, and workbook references authoritative through normalization/runtime consumption. Do not let legacy Source/Target or point/route fields silently override a user's newer mapping merely because older consumers still exist. Compatibility projection is allowed only as an explicit downstream bridge.
+Generalized `placeParts`, `relationshipParts`, temporal/evidence assignments, and workbook references are now authoritative through normalization/runtime consumption. Do not let legacy Source/Target, point/route, or single-Date fields silently override a user's accepted mapping merely because older consumers still exist. Compatibility projection is allowed only as an explicit downstream bridge and is now a retirement-audit target rather than a competing architecture.
 
 Do not create a new profile for every unusual spreadsheet shape as a substitute for the universal mapping work. Conversely, do not retire or collapse the existing Correspondence / Directed Record or Genealogy / Person-Centered profiles until runtime integration, representative regression testing, and a repository-wide retirement audit prove that removal loses no behavior or scholarly expressiveness and simplifies the architecture rather than relocating complexity. Do not reintroduce the legacy three-file workflow without a specific recovery or compatibility reason.
 
@@ -343,8 +343,8 @@ Detailed historical decision rationale remains preserved in the archived invento
 - Arbitrary tables use explicit user-confirmed mapping; current correspondence workbooks use user-confirmed unique-ID joins rather than row-order matching.
 - The Phase 1 universal mapping foundation is deterministic and user-owned: saved variables, field assignments, sheet-purpose assignments, repeated-heading groups, source-table/field descriptors, transformations, and table connections record what the user has told Peridot. Peridot may suggest broad recognizable forms such as dates or coordinates, but the user is ultimately responsible for the accepted mapping.
 - Broader universal datasets must not be forced into correspondence- or genealogy-shaped runtime rows merely because those are the current active consumer projections. Canonical-only preservation is valid until appropriate downstream consumers are implemented.
-- Phase 2's progressive mapping UI has now been tested and simplified around the existing production role-mapper shell. The accepted human-facing grammar is Preview/orientation → Time → repeatable Places → n-part Relations → Evidence → Review, with workbook Sheets where needed. Major tabs remain visible rather than disappearing because Peridot thinks a capability is unused.
-- Generalized mappings must become authoritative before the old upload/runtime system is retired. Sequence: runtime integration → validation/warning audit → representative end-to-end regression testing → repository-wide legacy retirement audit → Phase 2 documentation closure.
+- Phase 2's progressive mapping UI and generalized runtime authority are now accepted. The correspondence/directed-record grammar is Preview/orientation → n-part Relations → repeatable Time → repeatable Places → Evidence → Review, with workbook Sheets where needed. Major tabs remain visible rather than disappearing because Peridot thinks a capability is unused.
+- Generalized mappings are authoritative through canonical normalization/runtime consumption. Legacy fields may remain only as explicit compatibility projections while the repository-wide retirement audit determines which paths are still required.
 - The repository-wide retirement audit should classify old code as delete now, still-required compatibility layer, legitimate profile-specific specialization, or uncertain/retain. Do not perform broad deletion before the replacement has carried real data end-to-end.
 - Phase 3 should begin only after that Phase 2 boundary is clean. It should build chart controls from saved variables, including a structured autocomplete sentence builder that mirrors scholarly questions without implementing unrestricted natural-language prompting.
 
@@ -353,22 +353,44 @@ Detailed historical decision rationale remains preserved in the archived invento
 
 ```text
 Decision:
-Treat the accepted generalized mapping assignments as the future authoritative semantic inputs.
+Treat accepted generalized mapping assignments as the authoritative semantic inputs.
 
 Context:
-The Phase 2 UI now captures repeatable place parts and n-participant relationships that are richer than the legacy Source/Target and point/route row vocabulary.
+The Phase 2 UI and runtime now carry repeatable place parts, n-participant relationships, generalized temporal assertions, evidence mappings, and workbook-qualified references through canonical normalization and active runtime consumption.
 
 Chosen approach:
-Finish runtime integration first, audit warnings second, test representative datasets third, and perform a repository-wide legacy retirement audit only after those checks pass.
+Keep generalized mappings authoritative while retaining only explicit downstream compatibility projections where current consumers still require them. Continue retirement through bounded audits rather than broad deletion.
 
 Rejected alternative:
-Delete or bypass the legacy system immediately after the UI redesign, or begin Phase 3 while two competing mapping architectures remain authoritative.
+Let legacy Source/Target, point/route, or single-Date fields remain co-equal semantic authorities, or delete all compatibility code at once.
 
 Reason:
-The replacement must prove end-to-end behavior before compatibility code can be safely removed, and Phase 3 should target one stable data architecture.
+One authoritative mapping architecture prevents accepted user mappings from being silently overridden while preserving rollback-safe compatibility for consumers that have not yet migrated.
 
 Maintenance consequence:
-Legacy fields may remain temporarily as explicit compatibility projections, but they must not override accepted generalized mappings. Retirement happens in bounded passes after audit classification.
+New consumer work should read canonical/generalized structures first. Compatibility fields must be treated as projections, not sources of truth, and should be removed only after consumer parity is proven.
+```
+
+#### Temporal assertions and Timeline semantics decision
+
+```text
+Decision:
+Preserve temporal evidence as repeatable canonical Date/Period assertions and let Timeline expose both accumulation and simultaneity.
+
+Context:
+Humanistic datasets may contain multiple dates/periods per record, partial or approximate dates, open intervals, mixed precision, researcher-supplied temporal notes, and source layouts ranging from one range column to separate Y/M/D fields for both endpoints.
+
+Chosen approach:
+Preserve original temporal text; derive machine-usable temporal structure conservatively; keep researcher notes separate from inferred structure; allow repeatable user-named Date/Period mappings with reusable source columns; and carry canonical temporalAssertions[] into active runtime consumers. Timeline derives dataset-specific Time types and supports Cumulative Events and Co-current Events.
+
+Rejected alternative:
+Force one privileged Date per row, normalize every date to a JavaScript Date, invent missing components, let certainty/completeness notes silently determine visualization eligibility, or make empty co-current moments look like visualization failures.
+
+Reason:
+The canonical model must preserve historical uncertainty and partiality while still supporting defensible chronological filtering, playback, and comparison of overlapping periods.
+
+Maintenance consequence:
+Temporal consumers should use canonical temporalAssertions[] first and legacy parsedDate only as a temporary fallback. Future structure filters must distinguish machine-derived temporal form from researcher-supplied notes.
 ```
 
 ### 7.2 Routing and workspace model
@@ -387,7 +409,7 @@ Legacy fields may remain temporarily as explicit compatibility projections, but 
 
 - Advanced Search is the owner of global applied filtering and the primary Explore surface.
 - Search retains the draft/apply model, predictive discovery, explicit route filters, structured AND / OR / EXCLUDING criteria, Browse, Results, Refine/Inspect, Capabilities, and overlay Inspector handoff.
-- Timeline consumes the active temporal scope; Analytics charts the currently filtered data by default. The exact coverage/scope and Timeline × Analytics contracts remain active audit items.
+- Timeline consumes the active temporal scope through canonical temporal assertions, including selected Time types and Cumulative/Co-current playback. Analytics charts the currently filtered data by default. The exact Search coverage/scope and Timeline × Analytics contracts remain active audit items.
 
 ### 7.5 Analytics
 

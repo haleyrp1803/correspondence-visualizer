@@ -20,27 +20,44 @@ This document owns the detailed checkpoint, milestone chronology, deferred/archi
 ## 1. Current Synchronized Checkpoint
 
 ```text
-134c67c — Refine upload review checkpoint
+2d5e668 — Generalize temporal mapping and timeline playback
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
 
-This checkpoint marks the accepted page-by-page Phase 2 redesign of the correspondence/directed-record mapping workspace on top of the Phase 1 universal architecture.
+This checkpoint closes a major Phase 2 authority and temporal-model sequence. Generalized single-table and workbook mappings now feed canonical/runtime semantics authoritatively, temporal evidence is preserved as repeatable canonical assertions, and Timeline consumes those assertions directly rather than treating one legacy Date as the only chronology.
 
 Current architectural significance:
 
-- Phase 1 universal mapping/source/transformation/runtime-compatibility foundations remain intact;
-- the active production mapping shell has been generalized rather than replaced by a separate “Universal” profile;
-- single-table Preview records source orientation while preserving the uploaded visual table; Time uses Date/Beginning/Ending roles; Places uses repeatable place parts; Relations uses repeatable n-participant parts; Evidence retains Include/Ignore; Review repeats the user's assignments before validation;
-- workbook Places and Relations now use the same interaction model with sheet-qualified references;
-- Review reports one unified **Map** capability rather than separate point-map/route-map categories and treats accepted generalized place assignments as sufficient mapping readiness;
-- richer `placeParts` and `relationshipParts` are preserved in mapping state but are not yet authoritative throughout every legacy runtime/consumer path;
-- the next Phase 2 sequence is runtime-authority integration → validation/warning audit → representative end-to-end regression testing → repository-wide legacy upload/runtime retirement audit → Phase 2 closure;
-- Phase 3 chart-builder work should begin only after that architecture boundary is clean.
+- generalized mappings are authoritative for single-table and workbook imports;
+- workbook join validation and Network availability checks recognize generalized relationship structure;
+- temporal assertions preserve original source text, known/unknown date components, approximation, interval boundedness, consistency warnings, open ranges, and researcher-note columns without inventing missing precision;
+- a record/entity can carry multiple typed temporal assertions simultaneously;
+- runtime compatibility rows now carry canonical `temporalAssertions[]`, while legacy `parsedDate` remains only as a fallback for unmigrated/demo paths;
+- Time mapping is repeatable and user-named: Date or Period / range assertions can use one source column or separate Y/M/D components, period endpoints can each use combined or component fields, source columns can be reused across assertions, and temporal assertions can attach to the record or a mapped relationship participant;
+- Timeline derives available Time types from canonical assertions, filters intervals by temporal intersection, and supports **Cumulative Events** and **Co-current Events**;
+- a co-current playback moment with zero active records is treated as a valid empty visualization state rather than a visualization-capability failure;
+- Search/Timeline readiness diagnostics and temporal result labels now use canonical temporal information rather than one privileged legacy Date;
+- remaining work is concentrated in Network consumer/layout repairs and deliberate retirement of compatibility paths, not another generalized-mapper redesign.
 
-The active Correspondence / Directed Record and Genealogy / Person-Centered profiles remain compatibility/specialization paths. They should be retired or collapsed only after the later retirement audit proves no capability loss and a genuine reduction in architectural complexity.
+The active Correspondence / Directed Record and Genealogy / Person-Centered profiles remain compatibility/specialization paths and should not be retired without a no-loss repository-wide audit.
 
 ## 2. Recent Milestones, Newest First
+
+### Generalized runtime authority, Temporal Assertions, and canonical Timeline playback — 2026-08-17
+
+- **`858ac26` — `Synchronize documentation for Phase 2 mapping redesign`** recorded the earlier generalized-mapper state before the authority migration.
+- **`0fa8925` — `Make generalized mappings authoritative for single-table import`** and **`c600295` — `Make generalized mappings authoritative for workbook import`** moved accepted generalized mappings from preserved UI state into authoritative import/runtime semantics.
+- **`358202c` — `Generalize workbook join validation`** aligned workbook validation with the generalized mapping model.
+- **`6fd19e0` — `Refine network availability for generalized relationships`** made Network capability detection more consistent with generalized relationships while leaving additional Network consumer/layout work deferred.
+- **`ba07895` — `Add temporal assertions foundation`** established the canonical temporal model: original source text survives; partial, approximate, open, mixed-precision, unknown, and inconsistent values are represented conservatively; researcher note columns remain separate from machine-derived temporal structure; and multiple temporal assertions can coexist for one subject.
+- **`ac95c13` — `Bridge canonical temporal assertions to runtime rows`** carried canonical `temporalAssertions[]` across the legacy compatibility boundary without removing existing legacy date fields.
+- **`ce46f08` — `Derive timeline from canonical temporal assertions`** migrated Timeline derivation to assertion-level chronology, including multiple temporal entries per record, interval intersection, role derivation, and legacy fallback.
+- **`2d5e668` — `Generalize temporal mapping and timeline playback`** completed the current user-facing temporal milestone: repeatable user-named Date/Period mappings; one-column or Y/M/D representations; six-column start/end component periods; reusable source columns; relationship-participant attachment; temporal note columns; dataset-derived Time types; canonical Timeline readiness/Search diagnostics; and **Cumulative Events** / **Co-current Events** playback.
+- Live regression testing used the Maria Maddalena correspondence workbook, a Cardinals workbook with Creation date + Lifespan, and a genealogy/family-tree workbook. These tests confirmed nuanced partial-date handling, multiple simultaneous temporal assertions, source-column reuse, interval participation, role-specific Timeline controls, and co-current disappearance of ended periods.
+- Empty Co-current moments now remain valid empty visualization states rather than triggering the visualization-unavailable screen.
+- Deferred temporal cleanup: retire `parseHistoricalDate()` / `parsedDate` only after remaining consumers migrate, and consider optional Approximate/Partial/etc. Timeline structure filters only if they remain human-readable.
+- Deferred Network follow-up remains separate: consume all generalized relationships where needed, fit the Force-Directed Network to the viewport, and terminate arrowheads at node boundaries.
 
 ### Progressive universal upload redesign and Review checkpoint — 2026-08-08
 
@@ -441,6 +458,15 @@ The following milestone narratives are retained as historical records. They rema
 ---
 ## 3. Deferred, Archived, and Rolled-Back Work
 
+### Current deferred temporal and Network cleanup after `2d5e668`
+
+- Retire the legacy `parseHistoricalDate()` / `parsedDate` compatibility path only after all remaining consumers have migrated to canonical `temporalAssertions[]` or have an explicit reason to remain on the fallback.
+- Consider optional Timeline filters for machine-derived temporal structures such as approximate, partial, or open-ended values only if the controls remain legible to humanistic researchers; do not treat researcher certainty/completeness notes as equivalent to machine-derived temporal structure.
+- Complete the generalized Network consumer follow-up: ensure relevant person/entity networks consume all generalized relationships rather than only the first where that limitation remains.
+- Repair Force-Directed Network fit-to-viewport behavior.
+- Terminate force/network arrowheads at node boundaries rather than allowing them to run beneath nodes.
+- Preserve the distinction between a temporarily empty Co-current playback moment and genuine visualization unavailability.
+
 ### Tutorial attention-animation experiments rolled back before `619bab0`
 
 The following tutorial experiments were intentionally removed and are not current functionality:
@@ -487,7 +513,16 @@ This is the single authoritative place in the documentation for the cumulative c
 
 | Date | Commit | Message | Branch/tag decoration |
 |---|---|---|---|
-| 2026-08-08 | `134c67c` | Refine upload review checkpoint | (HEAD -> main, origin/main, origin/HEAD) |
+| 2026-08-17 | `2d5e668` | Generalize temporal mapping and timeline playback | (HEAD -> main, origin/main, origin/HEAD) |
+| 2026-08-17 | `ce46f08` | Derive timeline from canonical temporal assertions |  |
+| 2026-08-17 | `ac95c13` | Bridge canonical temporal assertions to runtime rows |  |
+| 2026-08-17 | `ba07895` | Add temporal assertions foundation |  |
+| 2026-08-09 | `6fd19e0` | Refine network availability for generalized relationships |  |
+| 2026-08-09 | `358202c` | Generalize workbook join validation |  |
+| 2026-08-08 | `c600295` | Make generalized mappings authoritative for workbook import |  |
+| 2026-08-08 | `0fa8925` | Make generalized mappings authoritative for single-table import |  |
+| 2026-08-08 | `858ac26` | Synchronize documentation for Phase 2 mapping redesign |  |
+| 2026-08-08 | `134c67c` | Refine upload review checkpoint |  |
 | 2026-08-08 | `0ae7e03` | Refine evidence mapping workflow |  |
 | 2026-08-08 | `967b293` | Generalize relationship mapping workflow |  |
 | 2026-08-08 | `90a3a3b` | Generalize place mapping workflow |  |
