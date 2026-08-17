@@ -185,7 +185,8 @@ export function makePeridotTemporalAssertion({
   certainty = 'not-specified', calendar = 'gregorian-or-source-unspecified', sortBounds = {},
   temporalNotes = [], originalValues = {}, parseWarnings = [], visualizationUsability = {}, subjectParticipantIndex = null,
 } = {}) {
-  const startSort = Number(sortBounds?.start); const endSort = Number(sortBounds?.end);
+  const startSort = Number.isFinite(sortBounds?.start) ? Number(sortBounds.start) : null;
+  const endSort = Number.isFinite(sortBounds?.end) ? Number(sortBounds.end) : null;
   const notes = normalizedNotes(temporalNotes);
   return Object.freeze({
     id: asText(id), role: asText(role), sourceText: sourceText === '' ? asText(display) : String(sourceText ?? ''),

@@ -37,41 +37,6 @@ function temporalDisplay(temporal) {
     || asText(temporal?.normalizedValue);
 }
 
-function temporalYearFromSortBound(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return null;
-  return Math.trunc(number / 10000);
-}
-
-function makeLegacyParsedDate(temporal) {
-  if (!temporal) {
-    return Object.freeze({
-      raw: '',
-      isKnown: false,
-      isTimelineUsable: false,
-      monthKey: null,
-      sortKey: null,
-      label: 'Unknown date',
-    });
-  }
-
-  const start = Number(temporal?.sortBounds?.start);
-  const year = temporalYearFromSortBound(start);
-  const raw = temporalDisplay(temporal);
-  return Object.freeze({
-    raw,
-    year,
-    month: null,
-    day: null,
-    isKnown: Number.isFinite(year),
-    isTimelineUsable: Number.isFinite(year),
-    precision: asText(temporal?.precision) || 'year',
-    monthKey: Number.isFinite(year) ? String(year) : null,
-    sortKey: Number.isFinite(start) ? start : null,
-    label: raw || (Number.isFinite(year) ? String(year) : 'Unknown date'),
-  });
-}
-
 function entityLabel(entityById, id) {
   return entityById.get(id)?.label || id || 'Unknown';
 }
@@ -103,7 +68,6 @@ function makeRelationshipRow(relationship, index, entityById) {
     date,
     Date: date,
     temporalAssertions: relationship.temporalAssertion ? Object.freeze([relationship.temporalAssertion]) : Object.freeze([]),
-    parsedDate: makeLegacyParsedDate(relationship.temporalAssertion),
     relationship: relationship.relationshipType,
     relationshipType: relationship.relationshipType,
     relationshipDirection: relationship.direction,
@@ -147,7 +111,6 @@ function makeEventRow(event, index, entityById, placeById) {
     date,
     Date: date,
     temporalAssertions: event.temporalAssertion ? Object.freeze([event.temporalAssertion]) : Object.freeze([]),
-    parsedDate: makeLegacyParsedDate(event.temporalAssertion),
     relationship: '',
     topic: event.eventType,
     eventType: event.eventType,

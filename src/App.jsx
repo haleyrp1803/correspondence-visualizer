@@ -334,38 +334,12 @@ function makePlaceKey(label, lat, lon) {
   return `${label}__${lat}__${lon}`;
 }
 
-// Compatibility projection for the old direct geography/linked-record input
-// path. Canonical temporal assertions are authoritative even here; `parsedDate`
-// is derived from that assertion only so older consumers can survive until the
-// final retirement pass.
+// Canonical temporal projection for the old direct geography/linked-record input
+// path. Even compatibility inputs now enter active consumers through canonical
+// temporal assertions; no independent parsed-date object is maintained.
 function buildCanonicalTemporalState(rawValue, role = 'Date') {
-  const assertion = parsePeridotTemporalValue(rawValue, { role });
-  const endpoint = assertion?.start || assertion?.end || null;
-  const sortKey = Number.isFinite(assertion?.sortBounds?.start)
-    ? assertion.sortBounds.start
-    : Number.isFinite(assertion?.sortBounds?.end)
-      ? assertion.sortBounds.end
-      : null;
-  const year = Number(endpoint?.year) || null;
-  const month = Number(endpoint?.month) || null;
-  const day = Number(endpoint?.day) || null;
-  const timelineUsable = Boolean(assertion?.visualizationUsability?.timelinePositionable && Number.isFinite(sortKey));
-
   return {
-    temporalAssertions: [assertion],
-    parsedDate: {
-      raw: String(rawValue ?? '').trim(),
-      year,
-      month,
-      day,
-      isKnown: Boolean(year),
-      isTimelineUsable: timelineUsable,
-      precision: endpoint?.precision || assertion?.precision || 'unknown',
-      monthKey: year ? String(year) : null,
-      sortKey,
-      label: assertion?.display || assertion?.sourceText || (year ? String(year) : 'Unknown date'),
-      __canonicalCompatibilityProjection: true,
-    },
+    temporalAssertions: [parsePeridotTemporalValue(rawValue, { role })],
   };
 }
 

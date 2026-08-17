@@ -107,90 +107,11 @@ function buildCustomInspectorFieldObject(row) {
   return result;
 }
 
-function normalizeDateSeparators(value) {
-  return asText(value).replace(/-/g, '/');
-}
-
 function getDisplayDateValue(row) {
   return asText(row?.Date_Display)
     || asText(row?.Date)
     || asText(row?.Date_Start)
     || asText(row?.Date_End);
-}
-
-function getSortableDateValue(row) {
-  return asText(row?.Date_Start)
-    || asText(row?.Date)
-    || asText(row?.Date_End)
-    || asText(row?.Date_Display);
-}
-
-/**
- * Conservative date parser mirroring the internal shape used by App.jsx.
- *
- * It accepts machine-readable year, year/month, and year/month/day values using
- * either slash or hyphen separators. It does not attempt to interpret historical
- * or scholarly uncertainty strings such as "c. 1620", "1620?", "before 1619",
- * or "undated"; those values are preserved as labels but are not timeline-ready.
- */
-export function parsePeridotTemplateDate(rawValue) {
-  const raw = asText(rawValue);
-
-  if (!raw || raw === '0' || raw === '0000' || raw === '0000/00/00' || raw.toLowerCase() === 'unknown') {
-    return {
-      raw,
-      isKnown: false,
-      isTimelineUsable: false,
-      monthKey: null,
-      sortKey: null,
-      label: 'Unknown date',
-    };
-  }
-
-  const normalized = normalizeDateSeparators(raw);
-  const match = normalized.match(/^(\d{4})(?:\/(\d{1,2}))?(?:\/(\d{1,2}))?$/);
-
-  if (!match) {
-    return {
-      raw,
-      isKnown: true,
-      isTimelineUsable: false,
-      monthKey: null,
-      sortKey: null,
-      label: raw,
-    };
-  }
-
-  const year = Number(match[1]);
-  const month = match[2] ? Number(match[2]) : null;
-  const day = match[3] ? Number(match[3]) : null;
-  const hasKnownYear = year > 0;
-  const hasKnownMonth = Number.isFinite(month) && month >= 1 && month <= 12;
-  const hasKnownDay = Number.isFinite(day) && day >= 1 && day <= 31;
-
-  if (!hasKnownYear) {
-    return {
-      raw,
-      isKnown: false,
-      isTimelineUsable: false,
-      monthKey: null,
-      sortKey: null,
-      label: raw,
-    };
-  }
-
-  return {
-    raw,
-    year,
-    month: hasKnownMonth ? month : null,
-    day: hasKnownDay ? day : null,
-    isKnown: true,
-    isTimelineUsable: true,
-    precision: hasKnownDay ? 'day' : hasKnownMonth ? 'month' : 'year',
-    monthKey: String(year),
-    sortKey: year * 10000 + (hasKnownMonth ? month : 0) * 100 + (hasKnownDay ? day : 0),
-    label: raw,
-  };
 }
 
 function buildPeridotTemplatePlaceMapEntry(placeMap, { label, lat, lon, roleHint }) {
@@ -273,7 +194,6 @@ export function normalizePeridotTemplateRowForGeography(
     dateDisplay: asText(row?.Date_Display),
     pointLoc: asText(row?.Point_Place),
     pointCoordinates: asText(row?.Point_Coordinates),
-    parsedDate: parsePeridotTemplateDate(getSortableDateValue(row)),
     pointLoc,
     pointLat: pointCoordinate?.lat ?? NaN,
     pointLon: pointCoordinate?.lon ?? NaN,
@@ -323,7 +243,6 @@ export function normalizePeridotTemplateRowForLetter(
   const pages = asText(row?.['Page(s)']);
   const links = asText(row?.['Link(s)']);
   const date = getDisplayDateValue(row);
-  const sortableDate = getSortableDateValue(row);
 
   return {
     ...customInspectorFieldValues,
@@ -339,7 +258,6 @@ export function normalizePeridotTemplateRowForLetter(
     dateDisplay: asText(row?.Date_Display),
     pointLoc: asText(row?.Point_Place),
     pointCoordinates: asText(row?.Point_Coordinates),
-    parsedDate: parsePeridotTemplateDate(sortableDate),
     sourceLoc: asText(row?.Source_Location),
     source,
     sourceTitle: asText(row?.Source_Title),

@@ -46,9 +46,10 @@ export function runTimelinePlaybackAudit() {
       temporalAssertions: [assertion({ role: 'Lifespan', start: 15900101, end: 16061231, shape: 'interval', display: '1590–1606' })],
     },
     {
-      id: 'legacy_1', date: '1610/05/02',
-      parsedDate: { isTimelineUsable: true, sortKey: 16100502, year: 1610, raw: '1610/05/02', label: '1610/05/02' },
+      id: 'canonical_date_1610', date: '1610/05/02',
+      temporalAssertions: [assertion({ role: 'Date', start: 16100502, display: '1610/05/02' })],
     },
+    { id: 'raw_date_without_assertion', date: '1611/05/02' },
   ];
 
   const participantAndRecordRow = {
@@ -94,7 +95,7 @@ export function runTimelinePlaybackAudit() {
 
   const checks = {
     canonicalAssertionsPreferred: getRowTemporalAssertions(rows[0]).length === 2,
-    legacyFallbackAvailable: getRowTemporalAssertions(rows[4]).length === 1 && getRowTemporalAssertions(rows[4])[0].__legacyProjection === true,
+    legacyParsedDateFallbackRetired: getRowTemporalAssertions(rows[5]).length === 0,
     rowLevelAssertionPreferredForConsumers: getRowPrimaryTemporalAssertion(participantAndRecordRow)?.role === 'Record date',
     canonicalConsumerSortKey: getRowTemporalSortKey(participantAndRecordRow) === 16050304,
     canonicalConsumerDateParts: getRowTemporalDateParts(participantAndRecordRow)?.year === 1605

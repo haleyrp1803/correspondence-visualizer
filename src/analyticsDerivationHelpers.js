@@ -81,7 +81,7 @@ function parseNumber(value) {
 function getDatePartsFromRow(row) {
   // Canonical temporal assertions are the row-level date authority. The shared
   // helper retains the temporary legacy fallback for old/demo rows, so Analytics
-  // does not need its own parser or direct `parsedDate` dependency.
+  // does not need its own parser or any legacy date-object dependency.
   return getRowTemporalDateParts(row);
 }
 

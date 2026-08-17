@@ -2,9 +2,8 @@
  * Pure timeline and playback helpers.
  *
  * Canonical runtime rows may carry multiple `temporalAssertions`. Timeline
- * derivation treats those assertions as the authoritative chronology and uses
- * legacy `parsedDate` only when a row has no canonical assertions (demo / old
- * compatibility paths).
+ * derivation treats those assertions as the sole authoritative chronology.
+ * Legacy parsed-date projections were retired after active consumers migrated.
  *
  * Scope contract:
  * - timeline boundaries derive from all positionable temporal assertions;
@@ -32,34 +31,8 @@ function yearFromSortKey(sortKey) {
   return Number.isInteger(year) && year > 0 ? year : null;
 }
 
-function legacyAssertionFromRow(row) {
-  const parsed = row?.parsedDate;
-  if (!parsed?.isTimelineUsable || !Number.isFinite(parsed?.sortKey)) return null;
-  const year = Number(parsed?.year) || yearFromSortKey(parsed.sortKey);
-  if (!year) return null;
-  return {
-    id: `${row?.id || 'row'}__legacy-date`,
-    role: DEFAULT_TEMPORAL_ROLE,
-    sourceText: row?.date || parsed?.raw || '',
-    display: row?.date || parsed?.label || parsed?.raw || String(year),
-    temporalShape: 'point',
-    consistency: 'valid',
-    sortBounds: { start: parsed.sortKey, end: parsed.sortKey },
-    visualizationUsability: {
-      hasKnownYear: true,
-      timelinePositionable: true,
-      intervalSafe: false,
-      yearFilterUsable: true,
-    },
-    __legacyProjection: true,
-  };
-}
-
 export function getRowTemporalAssertions(row) {
-  const canonical = asArray(row?.temporalAssertions).filter(Boolean);
-  if (canonical.length) return canonical;
-  const legacy = legacyAssertionFromRow(row);
-  return legacy ? [legacy] : [];
+  return asArray(row?.temporalAssertions).filter(Boolean);
 }
 
 
@@ -175,13 +148,10 @@ function assertionIntersectsWindow(assertion, windowStart, windowEnd) {
 
 
 export function getRowTimelineCapability(row) {
-  const canonical = asArray(row?.temporalAssertions).filter(Boolean);
-  const assertions = canonical.length ? canonical : getRowTemporalAssertions(row);
+  const assertions = getRowTemporalAssertions(row);
   const positionableAssertions = assertions.filter(isAssertionChronologicallyUsable);
-  const legacyEvidence = [row?.date, row?.displayDate, row?.dateDisplay, row?.Date, row?.['Date*']]
-    .some((value) => String(value ?? '').trim());
   return {
-    hasTemporalEvidence: canonical.length > 0 || legacyEvidence || Boolean(row?.parsedDate?.isKnown),
+    hasTemporalEvidence: assertions.length > 0,
     timelineReady: positionableAssertions.length > 0,
     positionableAssertionCount: positionableAssertions.length,
     temporalAssertionCount: assertions.length,
@@ -213,8 +183,7 @@ export function getRowTemporalYears(row) {
     const year = yearFromSortKey(sortKey);
     if (year && !years.includes(String(year))) years.push(String(year));
   };
-  const canonical = asArray(row?.temporalAssertions).filter(Boolean);
-  const assertions = canonical.length ? canonical : getRowTemporalAssertions(row);
+  const assertions = getRowTemporalAssertions(row);
   assertions.forEach((assertion) => {
     const { start, end } = assertionWindowBounds(assertion);
     addYear(start);
@@ -230,8 +199,7 @@ export function getRowTemporalSearchValues(row) {
     if (text && !values.includes(text)) values.push(text);
   };
 
-  const canonical = asArray(row?.temporalAssertions).filter(Boolean);
-  const assertions = canonical.length ? canonical : getRowTemporalAssertions(row);
+  const assertions = getRowTemporalAssertions(row);
 
   assertions.forEach((assertion) => {
     add(assertion?.role);
@@ -244,13 +212,6 @@ export function getRowTemporalSearchValues(row) {
     if (endYear) add(endYear);
   });
 
-  // Legacy/raw fields participate only when the row has no canonical temporal
-  // assertions. Canonical rows should never gain searchable chronology from an
-  // obsolete compatibility projection that disagrees with the accepted mapping.
-  if (!canonical.length) {
-    [row?.displayDate, row?.date, row?.Date, row?.['Date*'], row?.dateDisplay, row?.dateLabel, row?.parsedDate?.year, row?.parsedDate?.monthKey]
-      .forEach(add);
-  }
   return values;
 }
 

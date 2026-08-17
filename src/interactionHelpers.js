@@ -132,11 +132,10 @@ function buildDateBounds(incidentEdges) {
   const sourceRows = incidentEdges.flatMap((edge) => edge.rows || []).filter(Boolean);
   if (sourceRows.length) return buildDateBoundsFromLetters(sourceRows);
 
-  const allDates = incidentEdges.flatMap((edge) => edge.dates || []).filter(Boolean).sort();
-  return {
-    earliestDate: allDates[0] || '',
-    latestDate: allDates[allDates.length - 1] || '',
-  };
+  // Edge-level date labels are preserved as evidence/export strings, but they
+  // are not a chronological authority. If no source records survive on the
+  // edge, do not manufacture an earliest/latest span by lexically sorting text.
+  return { earliestDate: '', latestDate: '' };
 }
 
 function buildCounterpartDetailsFromEdges(label, incidentEdges) {

@@ -13,6 +13,8 @@
  * geographic or force-directed layout after derivation.
  */
 
+import { getRowPrimaryTemporalDisplay } from './timelinePlaybackHelpers.js';
+
 const DIRECTED = 'directed';
 const UNDIRECTED = 'undirected';
 const TYPED_INVERSE = 'typed-inverse';
@@ -230,7 +232,7 @@ export function derivePeridotEntityNetworkSemantics(rows = []) {
       const edge = relationshipMap.get(key);
       edge.count += 1;
       edge.rows.push(draft.sourceRow);
-      const date = asText(draft.sourceRow?.date || draft.sourceRow?.Date || draft.sourceRow?.parsedDate?.raw);
+      const date = asText(getRowPrimaryTemporalDisplay(draft.sourceRow));
       if (date) edge.dates.add(date);
     });
   });

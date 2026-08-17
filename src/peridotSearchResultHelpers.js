@@ -80,7 +80,6 @@ const EVIDENCE_FIELDS = [
 const CORE_FIELDS = new Set([
   'id',
   'recordId',
-  'parsedDate',
   ...TITLE_FIELDS,
   ...DATE_FIELDS,
   ...SOURCE_PERSON_FIELDS,
@@ -213,7 +212,6 @@ function getLinkedResearchMetadata(linkedRow) {
       || key === 'sourceLoc'
       || key === 'targetLoc'
       || key === 'date'
-      || key === 'parsedDate'
       || key === 'personKey'
       || key === 'peridotCapabilities'
       || key === 'capabilities'

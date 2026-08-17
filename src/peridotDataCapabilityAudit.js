@@ -24,6 +24,11 @@
  * places, or force a dataset into the existing correspondence schema.
  */
 
+import {
+  parsePeridotTemporalRange as parseCanonicalTemporalRange,
+  parsePeridotTemporalSpan as parseCanonicalTemporalSpan,
+} from './peridotTemporalAssertions.js';
+
 export const PERIDOT_FIELD_ROLES = Object.freeze({
   RECORD_LABEL: 'record_label',
   RECORD_TYPE: 'record_type',
@@ -84,8 +89,6 @@ export const PERIDOT_RECORD_SHAPES = Object.freeze({
 const ROLE = PERIDOT_FIELD_ROLES;
 const CAPABILITY = PERIDOT_CAPABILITY_FLAGS;
 
-const EARLIEST_REASONABLE_YEAR = 500;
-const LATEST_REASONABLE_YEAR = 2200;
 const MAX_CATEGORICAL_UNIQUE_VALUES = 80;
 const LONG_TEXT_AVERAGE_LENGTH = 80;
 const LONG_TEXT_MAX_LENGTH = 180;
@@ -164,273 +167,78 @@ function toFiniteNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function excelSerialDateToUtcMs(serial) {
-  if (!Number.isFinite(serial)) return null;
+function excelSerialDateToIso(serial) {
+  if (!Number.isFinite(serial)) return '';
   const excelEpoch = Date.UTC(1899, 11, 30);
-  return excelEpoch + Math.round(serial) * 24 * 60 * 60 * 1000;
+  const date = new Date(excelEpoch + Math.round(serial) * 24 * 60 * 60 * 1000);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
 }
 
-function makeUtcDateMs(year, month = 1, day = 1) {
-  return Date.UTC(year, month - 1, day);
+function yearFromCanonicalSort(sortKey) {
+  if (!Number.isFinite(sortKey)) return null;
+  const year = Math.floor(Math.abs(Math.trunc(sortKey)) / 10000);
+  return Number.isInteger(year) && year > 0 ? year : null;
 }
 
-function isReasonableYear(year) {
-  return Number.isInteger(year) && year >= EARLIEST_REASONABLE_YEAR && year <= LATEST_REASONABLE_YEAR;
+function canonicalRangeKind(assertion) {
+  if (!assertion) return 'unknown';
+  if (assertion.boundedness === 'openStart') return 'openStart';
+  if (assertion.boundedness === 'openEnd' || assertion.boundedness === 'ongoing') return 'openEnd';
+  if (['interval', 'partialInterval', 'approximateInterval'].includes(assertion.temporalShape)) return 'closedRange';
+  if (assertion.temporalShape === 'inconsistent') return 'closedRange';
+  if (assertion.temporalShape && assertion.temporalShape !== 'unknown') return 'single';
+  return 'unknown';
 }
 
-function makeTemporalResult({
-  display,
-  startSort = null,
-  endSort = null,
-  startYear = null,
-  endYear = null,
-  precision = 'unknown',
-  rangeKind = 'unknown',
-  startOpen = false,
-  endOpen = false,
-  warnings = [],
-}) {
-  const resolvedEndSort = endSort ?? startSort;
-  const resolvedEndYear = endYear ?? startYear;
-  const isSortable = startSort !== null || resolvedEndSort !== null;
-  const hasRange = startSort !== null && resolvedEndSort !== null && resolvedEndSort !== startSort;
-
+function canonicalTemporalCapability(assertion, displayOverride = '') {
+  const startSort = Number.isFinite(assertion?.sortBounds?.start) ? assertion.sortBounds.start : null;
+  const endSort = Number.isFinite(assertion?.sortBounds?.end) ? assertion.sortBounds.end : null;
+  const startYear = Number(assertion?.start?.year) || yearFromCanonicalSort(startSort) || null;
+  const endYear = Number(assertion?.end?.year) || yearFromCanonicalSort(endSort) || startYear;
+  const rangeKind = canonicalRangeKind(assertion);
+  const isSortable = Boolean(assertion?.visualizationUsability?.timelinePositionable)
+    && (startSort !== null || endSort !== null);
   return {
-    display: normalizeTextValue(display),
-    startSort: startSort ?? resolvedEndSort,
-    endSort: resolvedEndSort ?? startSort,
-    startYear: startYear ?? resolvedEndYear,
-    endYear: resolvedEndYear ?? startYear,
-    precision,
+    display: normalizeTextValue(displayOverride || assertion?.display || assertion?.sourceText),
+    startSort: startSort ?? endSort,
+    endSort: endSort ?? startSort,
+    startYear: startYear ?? endYear,
+    endYear: endYear ?? startYear,
+    precision: assertion?.precision || 'unknown',
     rangeKind,
-    hasRange,
-    isInterval: rangeKind === 'closedRange' || rangeKind === 'openStart' || rangeKind === 'openEnd',
-    startOpen,
-    endOpen,
+    hasRange: startSort !== null && endSort !== null && startSort !== endSort,
+    isInterval: ['closedRange', 'openStart', 'openEnd'].includes(rangeKind),
+    startOpen: rangeKind === 'openStart',
+    endOpen: rangeKind === 'openEnd',
     isSortable,
-    warnings,
+    warnings: [...(assertion?.parseWarnings || [])],
+    temporalAssertion: assertion || null,
   };
 }
 
-function mergeTemporalWarnings(...temporalValues) {
-  return temporalValues.flatMap((temporal) => temporal?.warnings || []);
+function makeTemporalResult({ display = '' } = {}) {
+  return canonicalTemporalCapability(null, display);
 }
 
+// Compatibility-shaped capability adapters. These functions remain exported
+// because mapping/review callers expect the older capability-result shape, but
+// all temporal interpretation now comes from the canonical assertion parser.
 export function parsePeridotTemporalRange({ startValue, endValue, displayValue } = {}) {
-  const hasStartValue = !isBlankValue(startValue);
-  const hasEndValue = !isBlankValue(endValue);
-  const start = hasStartValue ? parsePeridotTemporalValue(startValue) : null;
-  const end = hasEndValue ? parsePeridotTemporalValue(endValue) : null;
-  const display = normalizeTextValue(
-    displayValue
-    || [startValue, endValue].filter((value) => !isBlankValue(value)).join(' – '),
-  );
-
-  if (start?.isSortable && end?.isSortable) {
-    const startSort = start.startSort;
-    const endSort = end.endSort ?? end.startSort;
-    const startYear = start.startYear;
-    const endYear = end.endYear ?? end.startYear;
-    const warnings = mergeTemporalWarnings(start, end);
-
-    if (endSort !== null && startSort !== null && endSort < startSort) {
-      warnings.push('End date sorts before start date; temporal interval is preserved but should be reviewed.');
-    }
-
-    return makeTemporalResult({
-      display,
-      startSort,
-      endSort,
-      startYear,
-      endYear,
-      precision: startSort !== endSort ? 'range' : start.precision,
-      rangeKind: startSort !== endSort ? 'closedRange' : 'single',
-      warnings,
-    });
-  }
-
-  if (start?.isSortable) {
-    return makeTemporalResult({
-      display,
-      startSort: start.startSort,
-      endSort: start.endSort ?? start.startSort,
-      startYear: start.startYear,
-      endYear: start.endYear ?? start.startYear,
-      precision: start.precision,
-      rangeKind: 'openStart',
-      endOpen: true,
-      warnings: mergeTemporalWarnings(start, end),
-    });
-  }
-
-  if (end?.isSortable) {
-    return makeTemporalResult({
-      display,
-      startSort: end.startSort,
-      endSort: end.endSort ?? end.startSort,
-      startYear: end.startYear,
-      endYear: end.endYear ?? end.startYear,
-      precision: end.precision,
-      rangeKind: 'openEnd',
-      startOpen: true,
-      warnings: mergeTemporalWarnings(start, end),
-    });
-  }
-
-  return makeTemporalResult({
-    display,
-    precision: start?.precision || end?.precision || 'unknown',
-    rangeKind: hasStartValue ? 'openStart' : hasEndValue ? 'openEnd' : 'unknown',
-    startOpen: !hasStartValue && hasEndValue,
-    endOpen: hasStartValue && !hasEndValue,
-    warnings: mergeTemporalWarnings(start, end),
-  });
+  return canonicalTemporalCapability(parseCanonicalTemporalRange({
+    startValue,
+    endValue,
+    displayValue,
+  }));
 }
 
 export function parsePeridotTemporalValue(value, options = {}) {
-  const { allowExcelSerialDates = true } = options;
+  let sourceValue = value;
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    const year = value.getUTCFullYear();
-    return makeTemporalResult({
-      display: value.toISOString().slice(0, 10),
-      startSort: Date.UTC(year, value.getUTCMonth(), value.getUTCDate()),
-      startYear: year,
-      precision: 'exact',
-      rangeKind: 'single',
-    });
+    sourceValue = value.toISOString().slice(0, 10);
+  } else if (typeof value === 'number' && options.allowExcelSerialDates !== false && value > 1 && value < 100000) {
+    sourceValue = excelSerialDateToIso(value) || value;
   }
-
-  if (typeof value === 'number' && allowExcelSerialDates && value > 1 && value < 100000) {
-    const startSort = excelSerialDateToUtcMs(value);
-    const year = new Date(startSort).getUTCFullYear();
-    return makeTemporalResult({
-      display: String(value),
-      startSort,
-      startYear: year,
-      precision: 'exact',
-      rangeKind: 'single',
-    });
-  }
-
-  const raw = normalizeTextValue(value);
-  if (!raw) return makeTemporalResult({ display: raw, precision: 'unknown' });
-
-  if (/^(s\.?d\.?|n\.?d\.?|unknown|undated|no date|null|na|n\/a)$/i.test(raw)) {
-    return makeTemporalResult({ display: raw, precision: 'unknown' });
-  }
-
-  if (/^0{4}([/-]0{2}){0,2}$/.test(raw)) {
-    return makeTemporalResult({
-      display: raw,
-      precision: 'invalid',
-      warnings: ['Date value is preserved as evidence but is not sortable.'],
-    });
-  }
-
-  const circaMatch = raw.match(/^(?:c\.?|ca\.?|circa)\s*(\d{3,4})$/i);
-  if (circaMatch) {
-    const year = Number(circaMatch[1]);
-    if (isReasonableYear(year)) {
-      return makeTemporalResult({
-        display: raw,
-        startSort: makeUtcDateMs(year, 1, 1),
-        endSort: makeUtcDateMs(year, 12, 31),
-        startYear: year,
-        endYear: year,
-        precision: 'circa',
-        rangeKind: 'single',
-      });
-    }
-  }
-
-  const rangeMatch = raw.match(/^(\d{3,4})(?:\s*[-–—]\s*)(\d{3,4})$/);
-  if (rangeMatch) {
-    const startYear = Number(rangeMatch[1]);
-    const endYear = Number(rangeMatch[2]);
-    if (isReasonableYear(startYear) && isReasonableYear(endYear) && endYear >= startYear) {
-      return makeTemporalResult({
-        display: raw,
-        startSort: makeUtcDateMs(startYear, 1, 1),
-        endSort: makeUtcDateMs(endYear, 12, 31),
-        startYear,
-        endYear,
-        precision: 'range',
-        rangeKind: 'closedRange',
-      });
-    }
-  }
-
-  const isoMatch = raw.match(/^(\d{3,4})[-/](\d{1,2})[-/](\d{1,2})$/);
-  if (isoMatch) {
-    const year = Number(isoMatch[1]);
-    const month = Number(isoMatch[2]);
-    const day = Number(isoMatch[3]);
-    if (isReasonableYear(year) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      return makeTemporalResult({
-        display: raw,
-        startSort: makeUtcDateMs(year, month, day),
-        startYear: year,
-        precision: 'exact',
-        rangeKind: 'single',
-      });
-    }
-  }
-
-  const slashMatch = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{3,4})$/);
-  if (slashMatch) {
-    const month = Number(slashMatch[1]);
-    const day = Number(slashMatch[2]);
-    const year = Number(slashMatch[3]);
-    if (isReasonableYear(year) && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      return makeTemporalResult({
-        display: raw,
-        startSort: makeUtcDateMs(year, month, day),
-        startYear: year,
-        precision: 'exact',
-        rangeKind: 'single',
-      });
-    }
-  }
-
-  const yearMonthMatch = raw.match(/^(\d{3,4})[-/](\d{1,2})$/);
-  if (yearMonthMatch) {
-    const year = Number(yearMonthMatch[1]);
-    const month = Number(yearMonthMatch[2]);
-    if (isReasonableYear(year) && month >= 1 && month <= 12) {
-      const endDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
-      return makeTemporalResult({
-        display: raw,
-        startSort: makeUtcDateMs(year, month, 1),
-        endSort: makeUtcDateMs(year, month, endDay),
-        startYear: year,
-        endYear: year,
-        precision: 'month',
-        rangeKind: 'single',
-      });
-    }
-  }
-
-  const yearOnlyMatch = raw.match(/^(\d{3,4})$/);
-  if (yearOnlyMatch) {
-    const year = Number(yearOnlyMatch[1]);
-    if (isReasonableYear(year)) {
-      return makeTemporalResult({
-        display: raw,
-        startSort: makeUtcDateMs(year, 1, 1),
-        endSort: makeUtcDateMs(year, 12, 31),
-        startYear: year,
-        endYear: year,
-        precision: 'year',
-        rangeKind: 'single',
-      });
-    }
-  }
-
-  return makeTemporalResult({
-    display: raw,
-    precision: 'invalid',
-    warnings: ['Date value is preserved as evidence but is not currently sortable.'],
-  });
+  return canonicalTemporalCapability(parseCanonicalTemporalSpan(sourceValue));
 }
 
 export function parsePeridotCoordinatePair(value) {
