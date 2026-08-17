@@ -81,6 +81,7 @@ import {
   getCapabilityFilterLabel,
   getSearchableEvidenceFieldEntries,
 } from './peridotSearchResultHelpers.js';
+import { getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels, rowHasPeridotEntityRelationship } from './peridotEntityNetwork.js';
 
 const SHELL_CLASS = 'peridot-search-folio-shell';
 const CARD_CLASS = 'peridot-search-tab-card';
@@ -104,7 +105,7 @@ const STRUCTURED_FIELD_OPTIONS = Object.freeze([
   { id: 'person', label: 'Person / entity', placeholder: 'Person or entity name' },
   { id: 'place', label: 'Place', placeholder: 'Place name' },
   { id: 'routePlace', label: 'Route place', placeholder: 'Rome, Florence, or Rome → Florence' },
-  { id: 'routePeople', label: 'Route people', placeholder: 'Sender, recipient, or Sender → Recipient' },
+  { id: 'routePeople', label: 'Entity relationship', placeholder: 'Person A — Person B, Person A → Person B, or either entity' },
   { id: 'entityPair', label: 'Connected entity pair', placeholder: 'Two distinct connected entities' },
   { id: 'date', label: 'Date', placeholder: 'Year or date label' },
   { id: 'metadataValue', label: 'Metadata value', placeholder: 'Italian, Medici, ambassador, or another metadata value' },
@@ -222,16 +223,19 @@ function buildBrowseIndexGroups(rows = [], evidenceRows = rows) {
   const people = new Map();
   const places = new Map();
   const routes = new Map();
+  const relationships = new Map();
   const evidenceFields = new Map();
 
   (Array.isArray(rows) ? rows : []).forEach((row) => {
-    const sourcePerson = firstBrowseText(row, BROWSE_SOURCE_PERSON_FIELDS);
-    const targetPerson = firstBrowseText(row, BROWSE_TARGET_PERSON_FIELDS);
     const sourcePlace = firstBrowseText(row, BROWSE_SOURCE_PLACE_FIELDS);
     const targetPlace = firstBrowseText(row, BROWSE_TARGET_PLACE_FIELDS);
 
-    addBrowseCount(people, sourcePerson, { source: true });
-    addBrowseCount(people, targetPerson, { target: true });
+    getPeridotRowEntityParticipants(row).forEach((participant) => {
+      addBrowseCount(people, participant);
+    });
+    getPeridotRowEntityRelationshipLabels(row).forEach((relationshipLabel) => {
+      addBrowseCount(relationships, relationshipLabel, { example: relationshipLabel });
+    });
     addBrowseCount(places, sourcePlace, { source: true });
     addBrowseCount(places, targetPlace, { target: true });
 
@@ -254,14 +258,16 @@ function buildBrowseIndexGroups(rows = [], evidenceRows = rows) {
   });
 
   const routeItems = sortBrowseItems(routes);
+  const relationshipItems = sortBrowseItems(relationships);
   const hasRoutes = routeItems.length > 0;
+  const hasRelationships = relationshipItems.length > 0;
   const groups = [
     {
       id: 'browse-people',
       type: 'person',
-      label: hasRoutes ? 'People / Entities' : 'Entities',
-      description: hasRoutes
-        ? 'Source and target entity index.'
+      label: hasRelationships ? 'People / Entities' : 'Entities',
+      description: hasRelationships
+        ? 'All mapped participants in the current relationship records.'
         : 'Entity or record-label index for this dataset.',
       items: sortBrowseItems(people),
     },
@@ -273,6 +279,13 @@ function buildBrowseIndexGroups(rows = [], evidenceRows = rows) {
         ? 'Source and target place index.'
         : 'Mapped location index for point or place records.',
       items: sortBrowseItems(places),
+    },
+    {
+      id: 'browse-relationships',
+      type: 'routePeople',
+      label: 'Entity relationships',
+      description: 'All mapped entity relationships, including additional relationship participants.',
+      items: relationshipItems,
     },
     {
       id: 'browse-evidence',
@@ -917,7 +930,7 @@ function BrowseIndexGroup({ group, onChooseBrowseItem }) {
     : group.items;
   const visibleItems = isExpanded ? panelItems : panelItems.slice(0, BROWSE_PANEL_VISIBLE_LIMIT);
   const hiddenCount = Math.max(panelItems.length - visibleItems.length, 0);
-  const isRouteGroup = group.type === 'routePlace';
+  const isRouteGroup = group.type === 'routePlace' || group.type === 'routePeople';
   const isEvidenceGroup = group.type === 'evidenceField';
   const usesCondensedColumns = isRouteGroup || isEvidenceGroup;
 
@@ -1080,7 +1093,8 @@ function getResultDisplayParts(result) {
   const [routeSourceEntity, routeTargetEntity] = splitRouteLabel(result?.peopleRoute || result?.title);
   const [routeSourcePlace, routeTargetPlace] = splitRouteLabel(result?.placeRoute);
 
-  const sourceEntity = firstResultText(sources, [
+  const networkParticipants = Array.isArray(result?.networkParticipants) ? result.networkParticipants.filter(isMeaningfulResultValue) : [];
+  const sourceEntity = networkParticipants[0] || firstResultText(sources, [
     'sourcePerson',
     'sourceEntity',
     'Source_Entity',
@@ -1093,7 +1107,9 @@ function getResultDisplayParts(result) {
     'label',
   ]) || routeSourceEntity;
 
-  const targetEntity = firstResultText(sources, [
+  const targetEntity = networkParticipants.length > 1
+    ? networkParticipants.slice(1).join(' · ')
+    : firstResultText(sources, [
     'targetPerson',
     'targetEntity',
     'Target_Entity',
@@ -1191,12 +1207,12 @@ function SearchResultCard({ result, onInspectSearchResult, isRouteCapable }) {
       </div>
 
       <div className="peridot-search-results-ledger-cell peridot-search-result-ledger-source-entity-cell">
-        <span className="peridot-search-results-ledger-mobile-label">Source entity</span>
+        <span className="peridot-search-results-ledger-mobile-label">Focal / source entity</span>
         <span className="peridot-search-result-title" title={parts.sourceEntity}>{parts.sourceEntity}</span>
       </div>
 
       <div className="peridot-search-results-ledger-cell peridot-search-result-ledger-target-entity-cell">
-        <span className="peridot-search-results-ledger-mobile-label">Target entity</span>
+        <span className="peridot-search-results-ledger-mobile-label">Related / target entities</span>
         <span className="peridot-search-result-meta-value" title={parts.targetEntity || 'Unknown target'}>
           {parts.targetEntity || 'Unknown target'}
         </span>
@@ -1495,20 +1511,17 @@ export function PeridotSearchWorkspace({
         'placeNetworkReady',
         'routeMapReady',
       ]);
-      if (auditedCapability !== null) return auditedCapability;
+      if (auditedCapability === true) return true;
 
-      const hasEntityPair = hasMeaningfulSourceTargetPair(
-        row,
-        ['sourcePerson', 'Source', 'Source_Name', 'Source_Person', 'Source_Entity', 'sender', 'Sender'],
-        ['targetPerson', 'Target', 'Target_Name', 'Target_Person', 'Target_Entity', 'recipient', 'Recipient'],
-      );
+      if (rowHasPeridotEntityRelationship(row)) return true;
+
       const hasPlacePair = hasMeaningfulSourceTargetPair(
         row,
         ['Source_Location', 'Source_Loc', 'Source_Place', 'Source_Coordinates'],
         ['Target_Location', 'Target_Inferred_Loc', 'Target_Loc', 'Target_Place', 'Target_Coordinates'],
       );
 
-      return hasEntityPair || hasPlacePair;
+      return hasPlacePair;
     };
     const routeRelationshipCount = (Array.isArray(searchRows) ? searchRows : []).filter(hasRouteOrRelationshipRecord).length;
     return [
@@ -1535,12 +1548,12 @@ export function PeridotSearchWorkspace({
       },
       {
         label: 'Routes / relationships',
-        value: routeRelationshipCount > 0 ? `${routeRelationshipCount} source-target ${routeRelationshipCount === 1 ? 'record' : 'records'}` : 'Not available',
+        value: routeRelationshipCount > 0 ? `${routeRelationshipCount} relationship/route ${routeRelationshipCount === 1 ? 'record' : 'records'}` : 'Not available',
         ready: routeRelationshipCount > 0,
         statusLabel: routeRelationshipCount > 0 ? 'Available' : 'Not available',
         note: routeRelationshipCount > 0
-          ? 'The current scope has source-target routes or entity relationships available for route and network views.'
-          : 'No source-target routes or entity relationships were mapped for this dataset.',
+          ? 'The current scope has mapped routes or entity relationships available for route and network views.'
+          : 'No mapped routes or entity relationships are available in the current scope.',
       },
       {
         label: 'Chart / export scope',
@@ -1598,6 +1611,7 @@ export function PeridotSearchWorkspace({
     if (group.type === 'person') setDraftPersonFilter(item.value);
     if (group.type === 'place') setDraftPlaceFilter(item.value);
     if (group.type === 'routePlace') setDraftRoutePlaceFilter(item.value);
+    if (group.type === 'routePeople') setDraftRoutePeopleFilter(item.value);
     if (group.type === 'year') {
       setDraftStartYear(item.value);
       setDraftEndYear(item.value);
@@ -1651,6 +1665,7 @@ export function PeridotSearchWorkspace({
     if (group.type === 'person') setDraftPersonFilter(item.value);
     if (group.type === 'place') setDraftPlaceFilter(item.value);
     if (group.type === 'routePlace') setDraftRoutePlaceFilter(item.value);
+    if (group.type === 'routePeople') setDraftRoutePeopleFilter(item.value);
     if (group.type === 'evidenceField') {
       const nextCriterion = {
         ...createStructuredCriterion(),
@@ -1857,11 +1872,11 @@ export function PeridotSearchWorkspace({
           <div className="lg:flex-1">
             <AutocompleteTextInput
               id="advanced-search-route-people"
-              label="Route people"
+              label="Entity relationship"
               value={draftRoutePeopleFilter}
               onChange={setDraftRoutePeopleFilter}
               onKeyDown={handleDraftKeyDown}
-              placeholder="Sender → Recipient, or one name"
+              placeholder="Person A — Person B, Person A → Person B, or one name"
               suggestions={routePeopleSuggestions}
             />
           </div>
@@ -2042,8 +2057,8 @@ export function PeridotSearchWorkspace({
                 {searchResultsAreRouteCapable ? (
                   <>
                     <span>Date</span>
-                    <span>Source entity</span>
-                    <span>Target entity</span>
+                    <span>Focal / source entity</span>
+                    <span>Related / target entities</span>
                     <span>Source location</span>
                     <span>Target location</span>
                     <span>Inspect</span>

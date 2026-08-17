@@ -246,6 +246,60 @@ export function derivePeridotEntityNetworkSemantics(rows = []) {
   };
 }
 
+/**
+ * Resolve one runtime row through the same relationship semantics used by the
+ * People and Force-Directed network builders. Search, Inspector, playback, and
+ * other consumers should use this boundary instead of reinterpreting
+ * sourcePerson/targetPerson independently.
+ */
+export function getPeridotRowEntityRelationships(row = {}) {
+  if (row?.generalizedObservation) {
+    return generalizedRelationshipsFromRow(row, 0);
+  }
+  const canonical = canonicalRelationshipFromRow(row, 0);
+  const legacy = canonical || legacyRelationshipFromRow(row, 0);
+  return legacy ? [legacy] : [];
+}
+
+export function getPeridotRowEntityParticipants(row = {}) {
+  const participants = new Set();
+  getPeridotRowEntityRelationships(row).forEach((relationship) => {
+    if (relationship.source) participants.add(relationship.source);
+    if (relationship.target) participants.add(relationship.target);
+  });
+
+  // A row may carry a person/entity without asserting an edge (for example a
+  // genealogy event). Preserve it for entity indexes without inventing a
+  // relationship.
+  if (!participants.size) {
+    [row?.person, row?.entity, row?.sourcePerson, row?.targetPerson]
+      .map(asText)
+      .filter(Boolean)
+      .forEach((value) => participants.add(value));
+  }
+
+  return Array.from(participants);
+}
+
+export function formatPeridotEntityRelationshipLabel(relationship = {}) {
+  const source = asText(relationship.source);
+  const target = asText(relationship.target);
+  if (!source && !target) return '';
+  if (!target) return source;
+  const connector = normalizeDirection(relationship.direction) === DIRECTED ? '→' : '—';
+  return `${source} ${connector} ${target}`;
+}
+
+export function getPeridotRowEntityRelationshipLabels(row = {}) {
+  return getPeridotRowEntityRelationships(row)
+    .map(formatPeridotEntityRelationshipLabel)
+    .filter(Boolean);
+}
+
+export function rowHasPeridotEntityRelationship(row = {}) {
+  return getPeridotRowEntityRelationships(row).length > 0;
+}
+
 export const PERIDOT_ENTITY_NETWORK_DIRECTIONS = Object.freeze({
   DIRECTED,
   UNDIRECTED,

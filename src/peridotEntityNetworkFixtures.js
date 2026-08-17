@@ -1,4 +1,4 @@
-import { derivePeridotEntityNetworkSemantics } from './peridotEntityNetwork.js';
+import { derivePeridotEntityNetworkSemantics, getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels, rowHasPeridotEntityRelationship } from './peridotEntityNetwork.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -27,6 +27,22 @@ export function runPeridotEntityNetworkSelfAudit() {
   assert(pairs.has('Person A|Partner'), 'Person A should connect to Partner.');
   assert(!pairs.has('Father|Mother'), 'Co-participants must not be connected merely by co-occurrence.');
   assert(multipart.relationships.every((edge) => edge.direction === 'undirected'), 'Generalized relationships without explicit direction must remain undirected.');
+
+  const multipartRow = {
+    generalizedObservation: {
+      participants: [
+        { value: 'Person A', role: 'person' },
+        { value: 'Father', role: 'father' },
+        { value: 'Mother', role: 'mother' },
+        { value: 'Partner', role: 'partner' },
+      ],
+      places: [],
+      relationship: { type: 'family', label: '' },
+    },
+  };
+  assert(rowHasPeridotEntityRelationship(multipartRow), 'Multipart row should report network readiness through shared relationship semantics.');
+  assert(getPeridotRowEntityParticipants(multipartRow).join('|') === 'Person A|Father|Mother|Partner', 'Shared participant helper should expose every mapped relationship participant.');
+  assert(getPeridotRowEntityRelationshipLabels(multipartRow).join('|') === 'Person A — Father|Person A — Mother|Person A — Partner', 'Shared relationship labels should expose every mapped relationship pair and preserve undirected semantics.');
 
   const genealogy = derivePeridotEntityNetworkSemantics([
     {

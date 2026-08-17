@@ -60,7 +60,7 @@ import {
   revokeObjectUrl,
 } from './exportHelpers';
 import { buildForcePersonPositions } from './personForceLayoutHelpers';
-import { derivePeridotEntityNetworkSemantics } from './peridotEntityNetwork.js';
+import { derivePeridotEntityNetworkSemantics, getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels } from './peridotEntityNetwork.js';
 import { InspectorConnectedCorrespondents } from './InspectorConnectedCorrespondents';
 import { InspectorPersonPlaces } from './InspectorPersonPlaces';
 import { InspectorBackButton } from './InspectorBackButton';
@@ -974,7 +974,8 @@ function filterRowsBySearchAndEntity(rows, {
 
   return rows.filter((row) => {
     const placeRouteLabel = [row.sourceLoc, row.targetLoc].filter(Boolean).join(' → ');
-    const personRouteLabel = [row.sourcePerson, row.targetPerson].filter(Boolean).join(' → ');
+    const networkParticipants = getPeridotRowEntityParticipants(row);
+    const networkRelationshipLabels = getPeridotRowEntityRelationshipLabels(row);
     const placeRouteSearchText = [
       placeRouteLabel,
       [row.sourceLoc, row.targetLoc].filter(Boolean).join(' to '),
@@ -982,10 +983,9 @@ function filterRowsBySearchAndEntity(rows, {
       row.targetLoc,
     ];
     const peopleRouteSearchText = [
-      personRouteLabel,
-      [row.sourcePerson, row.targetPerson].filter(Boolean).join(' to '),
-      row.sourcePerson,
-      row.targetPerson,
+      ...networkRelationshipLabels,
+      ...networkRelationshipLabels.map((label) => label.replace(/→|—/g, ' to ')),
+      ...networkParticipants,
     ];
 
     if (activeStructuredCriteria.length && !rowMatchesStructuredCriteria(row, activeStructuredCriteria)) {
@@ -996,7 +996,7 @@ function filterRowsBySearchAndEntity(rows, {
       return false;
     }
 
-    if (personQ && !matchesFilterTerm([row.sourcePerson, row.targetPerson], personQ)) {
+    if (personQ && !matchesFilterTerm(networkParticipants, personQ)) {
       return false;
     }
 
@@ -1028,7 +1028,7 @@ function buildSearchFilterSuggestions(rows) {
   const peopleRoutes = new Set();
 
   rows.forEach((row) => {
-    [row.sourcePerson, row.targetPerson].forEach((value) => {
+    getPeridotRowEntityParticipants(row).forEach((value) => {
       const label = asText(value);
       if (label) people.add(label);
     });
@@ -1044,11 +1044,9 @@ function buildSearchFilterSuggestions(rows) {
       placeRoutes.add(`${sourcePlace} → ${targetPlace}`);
     }
 
-    const sourcePerson = asText(row.sourcePerson);
-    const targetPerson = asText(row.targetPerson);
-    if (sourcePerson && targetPerson) {
-      peopleRoutes.add(`${sourcePerson} → ${targetPerson}`);
-    }
+    getPeridotRowEntityRelationshipLabels(row).forEach((label) => {
+      if (label) peopleRoutes.add(label);
+    });
   });
 
   return {
@@ -3776,7 +3774,7 @@ export default function EuropeNetworkMapApp() {
     const mappableRows = normalizedRows.filter((row) => row.mappable);
     const unknownDateRows = normalizedRows.filter((row) => !getRowTimelineCapability(row).hasTemporalEvidence).length;
     const timelineUsableRows = normalizedRows.filter((row) => getRowTimelineCapability(row).timelineReady).length;
-    const peopleInFilteredRows = Array.from(new Set(filteredRowsByTime.flatMap((row) => [row.sourcePerson, row.targetPerson]).filter(Boolean)));
+    const peopleInFilteredRows = Array.from(new Set(filteredRowsByTime.flatMap((row) => getPeridotRowEntityParticipants(row)).filter(Boolean)));
     const exactPersonMetadataMatches = peopleInFilteredRows.filter((name) => personMetadataByName.has(name)).length;
     const visibleLinkedLetters = graph.edges.reduce((sum, edge) => sum + ((edge.letterMetadata || []).length), 0);
 
