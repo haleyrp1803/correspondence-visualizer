@@ -13,6 +13,7 @@
  */
 
 import { pointToQuadraticDistance } from './mapLayoutHelpers';
+import { getRowPrimaryTemporalDisplay, getRowTemporalSortBounds, getRowTemporalSortKey } from './timelinePlaybackHelpers.js';
 
 export function buildNearbyCandidates(point, screenNodes, screenEdges, clusterSingularLabel, clusterPluralLabel) {
   const nodeCandidates = screenNodes
@@ -42,7 +43,7 @@ export function buildNearbyCandidates(point, screenNodes, screenEdges, clusterSi
       return {
         id: `edge:${edge.id}`,
         kind: 'edge',
-        label: `${edge.sourceLabel} → ${edge.targetLabel}`,
+        label: `${edge.sourceLabel} ${edge.direction === 'directed' ? '→' : '—'} ${edge.targetLabel}`,
         subtitle: `Weight: ${edge.count}`,
         distance,
         payload: edge,
@@ -111,14 +112,26 @@ function buildLinkedLettersFromIncidentEdges(incidentEdges) {
         .map((letter) => [letter.id, letter]),
     ).values(),
   ).sort((a, b) => {
-    const aDate = a.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
-    const bDate = b.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
+    const aDate = getRowTemporalSortKey(a) ?? Number.MAX_SAFE_INTEGER;
+    const bDate = getRowTemporalSortKey(b) ?? Number.MAX_SAFE_INTEGER;
     if (aDate !== bDate) return aDate - bDate;
     return getLetterSourcePerson(a).localeCompare(getLetterSourcePerson(b));
   });
 }
 
 function buildDateBounds(incidentEdges) {
+  const linkedLetters = Array.from(
+    new Map(
+      incidentEdges
+        .flatMap((edge) => edge.letterMetadata || [])
+        .map((letter) => [letter.id, letter]),
+    ).values(),
+  );
+  if (linkedLetters.length) return buildDateBoundsFromLetters(linkedLetters);
+
+  const sourceRows = incidentEdges.flatMap((edge) => edge.rows || []).filter(Boolean);
+  if (sourceRows.length) return buildDateBoundsFromLetters(sourceRows);
+
   const allDates = incidentEdges.flatMap((edge) => edge.dates || []).filter(Boolean).sort();
   return {
     earliestDate: allDates[0] || '',
@@ -199,22 +212,32 @@ function buildLinkedLettersFromGraphEdges(graph) {
         .map((letter) => [letter.id, letter]),
     ).values(),
   ).sort((a, b) => {
-    const aDate = a.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
-    const bDate = b.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
+    const aDate = getRowTemporalSortKey(a) ?? Number.MAX_SAFE_INTEGER;
+    const bDate = getRowTemporalSortKey(b) ?? Number.MAX_SAFE_INTEGER;
     if (aDate !== bDate) return aDate - bDate;
     return getLetterSourcePerson(a).localeCompare(getLetterSourcePerson(b));
   });
 }
 
 function buildDateBoundsFromLetters(linkedLetters = []) {
-  const dates = linkedLetters
-    .map((letter) => letter.date || letter.Date)
-    .filter(Boolean)
-    .sort();
+  let earliest = null;
+  let latest = null;
+
+  linkedLetters.forEach((letter) => {
+    const bounds = getRowTemporalSortBounds(letter);
+    const label = getRowPrimaryTemporalDisplay(letter);
+    if (Number.isFinite(bounds.start) && (!earliest || bounds.start < earliest.key)) {
+      earliest = { key: bounds.start, label };
+    }
+    const latestKey = Number.isFinite(bounds.end) ? bounds.end : bounds.start;
+    if (Number.isFinite(latestKey) && (!latest || latestKey > latest.key)) {
+      latest = { key: latestKey, label };
+    }
+  });
 
   return {
-    earliestDate: dates[0] || '',
-    latestDate: dates[dates.length - 1] || '',
+    earliestDate: earliest?.label || '',
+    latestDate: latest?.label || '',
   };
 }
 

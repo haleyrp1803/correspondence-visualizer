@@ -46,7 +46,8 @@ function CompactRoutePrompt({ linkedRecordCount }) {
 }
 
 function RouteLead({ selectedProps, linkedRecordCount }) {
-  const routeLabel = `${selectedProps.sourceLabel} → ${selectedProps.targetLabel}`;
+  const directionGlyph = selectedProps.direction === 'directed' ? '→' : '—';
+  const routeLabel = `${selectedProps.sourceLabel} ${directionGlyph} ${selectedProps.targetLabel}`;
   const dateSpan = (selectedProps.dates || []).length
     ? `${selectedProps.dates[0]}${selectedProps.dates.length > 1 ? `–${selectedProps.dates[selectedProps.dates.length - 1]}` : ''}`
     : '';
@@ -58,7 +59,7 @@ function RouteLead({ selectedProps, linkedRecordCount }) {
         {routeLabel}
       </h2>
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--text-main)]">
-        This directed connection has a represented weight of{' '}
+        This connection has a represented weight of{' '}
         <span className="font-semibold text-[var(--text-strong)]">{selectedProps.count || 0}</span> and is associated
         with <span className="font-semibold text-[var(--text-strong)]">{linkedRecordCount || 0}</span> related
         record{linkedRecordCount === 1 ? '' : 's'}
@@ -90,7 +91,9 @@ export function InspectorEdgeView({
     return (
       <div className="space-y-3">
         <InspectorSummaryCardComponent>
-          <DetailRow label="Connection" value={`${selectedProps.sourceLabel} → ${selectedProps.targetLabel}`} />
+          <DetailRow label="Connection" value={`${selectedProps.sourceLabel} ${selectedProps.direction === 'directed' ? '→' : '—'} ${selectedProps.targetLabel}`} />
+          <DetailRow label="Relationship" value={selectedProps.relationshipType || selectedProps.relationshipLabel} />
+          <DetailRow label="Direction" value={selectedProps.direction || 'undirected'} />
           <DetailRow label="Weight" value={selectedProps.count} />
           <DetailRow label="Dates represented" value={(selectedProps.dates || []).join('; ')} />
           <DetailRow label="Related records" value={linkedRecordCount} />

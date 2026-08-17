@@ -30,7 +30,9 @@ function makeDatasetId(fileLabel = '', sourceKind = '') {
 }
 
 function temporalDisplay(temporal) {
-  return asText(temporal?.displayValue)
+  return asText(temporal?.display)
+    || asText(temporal?.sourceText)
+    || asText(temporal?.displayValue)
     || asText(temporal?.originalValue)
     || asText(temporal?.normalizedValue);
 }
@@ -100,6 +102,7 @@ function makeRelationshipRow(relationship, index, entityById) {
     mappable: false,
     date,
     Date: date,
+    temporalAssertions: relationship.temporalAssertion ? Object.freeze([relationship.temporalAssertion]) : Object.freeze([]),
     parsedDate: makeLegacyParsedDate(relationship.temporalAssertion),
     relationship: relationship.relationshipType,
     relationshipType: relationship.relationshipType,
@@ -143,6 +146,7 @@ function makeEventRow(event, index, entityById, placeById) {
     mappable: false,
     date,
     Date: date,
+    temporalAssertions: event.temporalAssertion ? Object.freeze([event.temporalAssertion]) : Object.freeze([]),
     parsedDate: makeLegacyParsedDate(event.temporalAssertion),
     relationship: '',
     topic: event.eventType,
@@ -231,7 +235,11 @@ function buildValidationSummary(canonicalDataset, projectedRows, options = {}) {
       pointMapReady: 0,
       routeMapReady: 0,
       networkReady: relationships,
-      timelineReady: projectedRows.filter((row) => row.parsedDate?.isTimelineUsable).length,
+      timelineReady: projectedRows.filter((row) => (row.temporalAssertions || []).some(
+        (assertion) => assertion?.visualizationUsability?.timelinePositionable
+          && assertion?.consistency !== 'backwards'
+          && assertion?.temporalShape !== 'inconsistent'
+      )).length,
       chartReady: projectedRows.length,
       exportReady: projectedRows.length,
     }),

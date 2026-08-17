@@ -62,6 +62,74 @@ export function getRowTemporalAssertions(row) {
   return legacy ? [legacy] : [];
 }
 
+
+// Active consumers outside Timeline still need a single chronological anchor
+// for row-level sorting and chart axes. Prefer a usable assertion that describes
+// the record itself; participant-attached assertions (for example a person's
+// lifespan attached to Part A of a relationship) are secondary when a row-level
+// event/date is also available. This preserves the richer plural model without
+// forcing legacy consumers to guess among unrelated dates.
+export function getRowPrimaryTemporalAssertion(row) {
+  const usable = getRowTemporalAssertions(row).filter(isAssertionChronologicallyUsable);
+  if (!usable.length) return null;
+  const rowLevel = usable.find((assertion) => !Number.isInteger(assertion?.subjectParticipantIndex));
+  return rowLevel || usable[0];
+}
+
+export function getRowTemporalSortKey(row) {
+  const assertion = getRowPrimaryTemporalAssertion(row);
+  if (!assertion) return null;
+  return assertionPlaybackSortKey(assertion);
+}
+
+export function getRowTemporalSortBounds(row) {
+  const assertion = getRowPrimaryTemporalAssertion(row);
+  if (!assertion) return { start: null, end: null };
+  return assertionWindowBounds(assertion);
+}
+
+function datePartsFromSortKey(sortKey) {
+  if (!Number.isFinite(sortKey)) return null;
+  const absolute = Math.abs(Math.trunc(sortKey));
+  const year = Math.floor(absolute / 10000);
+  const month = Math.floor((absolute % 10000) / 100);
+  const day = absolute % 100;
+  if (!year) return null;
+  return {
+    year,
+    month: month >= 1 && month <= 12 ? month : 1,
+    day: day >= 1 && day <= 31 ? day : 1,
+  };
+}
+
+export function getRowTemporalDateParts(row) {
+  const assertion = getRowPrimaryTemporalAssertion(row);
+  if (!assertion) return null;
+  const endpoint = assertion?.start || assertion?.end || null;
+  const sortKey = assertionPlaybackSortKey(assertion);
+  const fallback = datePartsFromSortKey(sortKey);
+  const year = Number(endpoint?.year) || fallback?.year || null;
+  if (!year) return null;
+  const month = Number(endpoint?.month);
+  const day = Number(endpoint?.day);
+  const knownMonth = Number.isInteger(month) && month >= 1 && month <= 12;
+  const knownDay = Number.isInteger(day) && day >= 1 && day <= 31;
+  return {
+    year,
+    month: knownMonth ? month : 1,
+    day: knownDay ? day : 1,
+    precision: knownDay ? 'day' : knownMonth ? 'month' : 'year',
+    sort: year * 372 + ((knownMonth ? month : 1) - 1) * 31 + ((knownDay ? day : 1) - 1),
+  };
+}
+
+export function getRowPrimaryTemporalDisplay(row) {
+  const assertion = getRowPrimaryTemporalAssertion(row);
+  const canonical = String(assertion?.display || assertion?.sourceText || '').trim();
+  if (canonical) return canonical;
+  return String(row?.displayDate || row?.date || row?.Date || row?.dateDisplay || row?.dateLabel || '').trim();
+}
+
 function isAssertionChronologicallyUsable(assertion) {
   if (!assertion) return false;
   if (assertion?.consistency === 'backwards' || assertion?.temporalShape === 'inconsistent') return false;
@@ -145,15 +213,13 @@ export function getRowTemporalYears(row) {
     const year = yearFromSortKey(sortKey);
     if (year && !years.includes(String(year))) years.push(String(year));
   };
-  const assertions = asArray(row?.temporalAssertions).length
-    ? asArray(row.temporalAssertions)
-    : getRowTemporalAssertions(row);
+  const canonical = asArray(row?.temporalAssertions).filter(Boolean);
+  const assertions = canonical.length ? canonical : getRowTemporalAssertions(row);
   assertions.forEach((assertion) => {
     const { start, end } = assertionWindowBounds(assertion);
     addYear(start);
     addYear(end);
   });
-  if (!years.length && Number(row?.parsedDate?.year) > 0) years.push(String(row.parsedDate.year));
   return years;
 }
 
@@ -164,9 +230,8 @@ export function getRowTemporalSearchValues(row) {
     if (text && !values.includes(text)) values.push(text);
   };
 
-  const assertions = asArray(row?.temporalAssertions).length
-    ? asArray(row.temporalAssertions)
-    : getRowTemporalAssertions(row);
+  const canonical = asArray(row?.temporalAssertions).filter(Boolean);
+  const assertions = canonical.length ? canonical : getRowTemporalAssertions(row);
 
   assertions.forEach((assertion) => {
     add(assertion?.role);
@@ -179,8 +244,13 @@ export function getRowTemporalSearchValues(row) {
     if (endYear) add(endYear);
   });
 
-  [row?.displayDate, row?.date, row?.Date, row?.['Date*'], row?.dateDisplay, row?.dateLabel, row?.parsedDate?.year, row?.parsedDate?.monthKey]
-    .forEach(add);
+  // Legacy/raw fields participate only when the row has no canonical temporal
+  // assertions. Canonical rows should never gain searchable chronology from an
+  // obsolete compatibility projection that disagrees with the accepted mapping.
+  if (!canonical.length) {
+    [row?.displayDate, row?.date, row?.Date, row?.['Date*'], row?.dateDisplay, row?.dateLabel, row?.parsedDate?.year, row?.parsedDate?.monthKey]
+      .forEach(add);
+  }
   return values;
 }
 

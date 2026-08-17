@@ -18,6 +18,7 @@ import {
   ANALYTICS_HEATMAP_FIELD_DEFINITIONS,
   ANALYTICS_SEGMENT_FIELD_DEFINITIONS,
 } from './analyticsConfig';
+import { getRowTemporalDateParts } from './timelinePlaybackHelpers.js';
 
 function normalizeText(value) {
   const text = String(value ?? '').trim();
@@ -77,53 +78,11 @@ function parseNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function parseDatePartsFromText(value) {
-  const dateText = String(value ?? '').trim();
-  const match = dateText.match(/^(\d{3,4})(?:[-/](\d{1,4}))?(?:[-/](\d{1,2}))?/);
-  if (!match || match[1] === '0000') return null;
-
-  const year = Number(match[1]);
-  const monthToken = match[2];
-  const dayToken = match[3];
-  const possibleMonth = monthToken ? Number(monthToken) : null;
-  const month = possibleMonth && possibleMonth >= 1 && possibleMonth <= 12 ? possibleMonth : null;
-  const possibleDay = dayToken ? Number(dayToken) : null;
-  const day = month && possibleDay && possibleDay >= 1 && possibleDay <= 31 ? possibleDay : null;
-
-  return {
-    year,
-    month: month || 1,
-    day: day || 1,
-    precision: day ? 'day' : month ? 'month' : 'year',
-    sort: year * 372 + ((month || 1) - 1) * 31 + ((day || 1) - 1),
-  };
-}
-
 function getDatePartsFromRow(row) {
-  const candidateValues = [row?.date, row?.Date, row?.Date_Start, row?.Date_End, row?.Date_Display];
-  for (const candidate of candidateValues) {
-    const parts = parseDatePartsFromText(candidate);
-    if (parts) return parts;
-  }
-
-  const parsedYear = row?.parsedDate?.year;
-  const parsedMonth = row?.parsedDate?.month;
-  const parsedDay = row?.parsedDate?.day;
-  const yearFromParsed = Number.isFinite(parsedYear) && parsedYear > 0 ? parsedYear : null;
-  const monthFromParsed = Number.isFinite(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12 ? parsedMonth : null;
-  const dayFromParsed = Number.isFinite(parsedDay) && parsedDay >= 1 && parsedDay <= 31 ? parsedDay : null;
-
-  if (yearFromParsed) {
-    return {
-      year: yearFromParsed,
-      month: monthFromParsed || 1,
-      day: dayFromParsed || 1,
-      precision: dayFromParsed ? 'day' : monthFromParsed ? 'month' : 'year',
-      sort: yearFromParsed * 372 + ((monthFromParsed || 1) - 1) * 31 + ((dayFromParsed || 1) - 1),
-    };
-  }
-
-  return null;
+  // Canonical temporal assertions are the row-level date authority. The shared
+  // helper retains the temporary legacy fallback for old/demo rows, so Analytics
+  // does not need its own parser or direct `parsedDate` dependency.
+  return getRowTemporalDateParts(row);
 }
 
 function getYearFromRow(row) {

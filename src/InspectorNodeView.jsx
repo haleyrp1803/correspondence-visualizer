@@ -20,6 +20,7 @@
  */
 
 import React, { useState } from 'react';
+import { getRowPrimaryTemporalDisplay, getRowTemporalSortBounds } from './timelinePlaybackHelpers.js';
 
 function detailLabelClassName() {
   return '[font-family:Georgia,"Palatino_Linotype","Book_Antiqua",Palatino,serif] text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--detail-label-text)]';
@@ -135,15 +136,36 @@ function sortCountMap(map) {
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
 
-function getUniqueDates(records = []) {
-  return Array.from(new Set(records.map((record) => normalizeEntityText(record.date || record.Date)).filter(Boolean))).sort();
+function getDateSpan(records = []) {
+  let earliest = null;
+  let latest = null;
+
+  records.forEach((record) => {
+    const bounds = getRowTemporalSortBounds(record);
+    const label = getRowPrimaryTemporalDisplay(record);
+    if (Number.isFinite(bounds.start) && (!earliest || bounds.start < earliest.key)) {
+      earliest = { key: bounds.start, label };
+    }
+    const latestKey = Number.isFinite(bounds.end) ? bounds.end : bounds.start;
+    if (Number.isFinite(latestKey) && (!latest || latestKey > latest.key)) {
+      latest = { key: latestKey, label };
+    }
+  });
+
+  if (!earliest && !latest) return '';
+  const firstLabel = earliest?.label || latest?.label || '';
+  const lastLabel = latest?.label || earliest?.label || '';
+  return firstLabel === lastLabel ? firstLabel : `${firstLabel}–${lastLabel}`;
 }
 
-function getDateSpan(records = []) {
-  const dates = getUniqueDates(records);
-  if (!dates.length) return '';
-  if (dates.length === 1) return dates[0];
-  return `${dates[0]}–${dates[dates.length - 1]}`;
+function getUniqueTemporalDisplays(records = []) {
+  return Array.from(
+    new Set(
+      records
+        .map((record) => normalizeEntityText(getRowPrimaryTemporalDisplay(record)))
+        .filter(Boolean),
+    ),
+  );
 }
 
 function makeRoleSections(sourceTitle, sourceItems, targetTitle, targetItems) {
@@ -236,7 +258,7 @@ function buildEntityProfile(selectedProps, selectedLetterMetadata = [], viewMode
     relatedPeopleCount: sectionItemCount(relatedPeopleSections),
     relatedPlacesCount: sectionItemCount(relatedPlacesSections),
     routeCount: sectionItemCount(routeSections),
-    dateCount: getUniqueDates(matchingLetters).length,
+    dateCount: getUniqueTemporalDisplays(matchingLetters).length,
   };
 }
 
@@ -409,7 +431,7 @@ function buildLeadSentence(selectedProps, profile) {
   const recordCount = getProfileRecordCount(selectedProps, profile);
   const degree = Number(selectedProps?.degree);
   const edgeCount = Number(selectedProps?.incidentEdgeCount);
-  const dateSpan = [selectedProps?.earliestDate, selectedProps?.latestDate].filter(Boolean).join('–') || profile.dateSpan;
+  const visibleRecordDates = profile.dateSpan;
   const coordinates = getCoordinateSummary(selectedProps);
   const associatedPlace = profile.entityType === 'place' ? null : getMostAssociatedPlace(profile);
 
@@ -424,7 +446,7 @@ function buildLeadSentence(selectedProps, profile) {
       {networkParts.length ? ` with ${networkParts.join(' and ')}` : ''}. It represents{' '}
       <span className="font-semibold text-[var(--panel-card-text)]">{recordCount}</span>
       {' '}related record{recordCount === 1 ? '' : 's'}
-      {dateSpan ? <> from <span className="font-semibold text-[var(--panel-card-text)]">{dateSpan}</span></> : null}
+      {visibleRecordDates ? <>. Dates of visible records: <span className="font-semibold text-[var(--panel-card-text)]">{visibleRecordDates}</span></> : null}
       {coordinates ? <> and is mapped at <span className="font-semibold text-[var(--panel-card-text)]">{coordinates}</span></> : null}
       {associatedPlace ? <>. It is most often associated with <span className="font-semibold text-[var(--panel-card-text)]">{associatedPlace.label}</span> in related records</> : null}.
     </>
@@ -584,7 +606,7 @@ export function InspectorNodeView({
         <InspectorSummaryCardComponent>
           <DetailRow label={entityType === 'place' ? 'Place' : 'Person / entity'} value={selectedLabel} />
           <DetailRow label="Related records" value={getProfileRecordCount(selectedProps, profile)} />
-          <DetailRow label="Span" value={[selectedProps.earliestDate, selectedProps.latestDate].filter(Boolean).join('–') || profile.dateSpan} />
+          <DetailRow label="Dates of Visible Records" value={profile.dateSpan} />
           {selectedProps.anchorLabel ? <DetailRow label="Anchor location" value={selectedProps.anchorLabel} /> : null}
           <DetailRow label="Network weight" value={selectedProps.degree} />
         </InspectorSummaryCardComponent>

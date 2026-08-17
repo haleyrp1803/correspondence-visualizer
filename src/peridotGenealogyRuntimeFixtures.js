@@ -96,7 +96,7 @@ export function runPeridotGenealogyRuntimeSelfAudit() {
     eventPlacesPreserved: runtime.places.some((place) => place.label === 'Florence')
       && runtime.places.some((place) => place.label === 'Rome'),
     timelineProjectionAvailable: runtime.normalizedRows.some(
-      (row) => row.parsedDate?.isTimelineUsable
+      (row) => (row.temporalAssertions || []).some((assertion) => assertion?.visualizationUsability?.timelinePositionable)
     ),
     personMetadataProjected: runtime.normalizedPersonMetadata.some(
       (person) => person.person === 'Parent One'

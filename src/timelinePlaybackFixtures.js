@@ -7,7 +7,10 @@ import {
   getTimelineRangeSortBounds,
   PERIDOT_TIMELINE_PLAYBACK_MODES,
   getAvailableTemporalRoles,
+  getRowPrimaryTemporalAssertion,
   getRowTemporalAssertions,
+  getRowTemporalDateParts,
+  getRowTemporalSortKey,
 } from './timelinePlaybackHelpers.js';
 
 function assertion({ role, start, end = start, positionable = true, consistency = 'valid', shape = 'point', display = '' }) {
@@ -48,6 +51,14 @@ export function runTimelinePlaybackAudit() {
     },
   ];
 
+  const participantAndRecordRow = {
+    id: 'mixed_subject_time',
+    temporalAssertions: [
+      { ...assertion({ role: 'Participant lifespan', start: 15000101, end: 15801231, shape: 'interval', display: '1500–1580' }), subjectParticipantIndex: 0, start: { year: 1500, month: null, day: null } },
+      { ...assertion({ role: 'Record date', start: 16050304, display: '1605/03/04' }), subjectParticipantIndex: null, start: { year: 1605, month: 3, day: 4 } },
+    ],
+  };
+
   const entries = buildTimelineEntries(rows);
   const roles = getAvailableTemporalRoles(rows);
   const months = buildTimelineMonths(rows);
@@ -84,6 +95,11 @@ export function runTimelinePlaybackAudit() {
   const checks = {
     canonicalAssertionsPreferred: getRowTemporalAssertions(rows[0]).length === 2,
     legacyFallbackAvailable: getRowTemporalAssertions(rows[4]).length === 1 && getRowTemporalAssertions(rows[4])[0].__legacyProjection === true,
+    rowLevelAssertionPreferredForConsumers: getRowPrimaryTemporalAssertion(participantAndRecordRow)?.role === 'Record date',
+    canonicalConsumerSortKey: getRowTemporalSortKey(participantAndRecordRow) === 16050304,
+    canonicalConsumerDateParts: getRowTemporalDateParts(participantAndRecordRow)?.year === 1605
+      && getRowTemporalDateParts(participantAndRecordRow)?.month === 3
+      && getRowTemporalDateParts(participantAndRecordRow)?.day === 4,
     multipleEntriesPerRow: entries.filter((entry) => entry.rowId === 'cardinal_1').length === 2,
     rolesDerived: roles.includes('Creation date') && roles.includes('Lifespan') && roles.includes('Date'),
     intervalBoundariesIncluded: months.includes('1562') && months.includes('1624'),

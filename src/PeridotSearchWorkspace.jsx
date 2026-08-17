@@ -1127,7 +1127,7 @@ function getResultDisplayParts(result) {
   ]) || routeTargetPlace;
 
   return {
-    date: cleanResultText(result?.displayDate || result?.date || result?.Date || result?.parsedDate) || '—',
+    date: cleanResultText(result?.displayDate || result?.date || result?.Date) || '—',
     sourceEntity: cleanResultText(sourceEntity) || 'Unknown source',
     targetEntity: cleanResultText(targetEntity) || '',
     entity: cleanResultText(sourceEntity) || cleanResultText(targetEntity) || cleanResultText(result?.title) || 'Unknown entity',

@@ -38,12 +38,16 @@ import {
   buildPlaybackRows,
   buildTimelineMonths,
   getAvailableTemporalRoles,
+  getRowPrimaryTemporalDisplay,
+  getRowTemporalDateParts,
+  getRowTemporalSortKey,
   getRowTimelineCapability,
   getTimelineRangeSortBounds,
   PERIDOT_TIMELINE_PLAYBACK_MODES,
   filterRowsByTimelineWindow,
   filterRowsForPlayback,
 } from './timelinePlaybackHelpers';
+import { parsePeridotTemporalValue } from './peridotTemporalAssertions.js';
 import { HoverCardOverlay, MapControlsOverlay, MapLegendOverlay, MapTitleBar } from './mapStageComponents';
 import {
   buildExportEdgeRows,
@@ -330,55 +334,38 @@ function makePlaceKey(label, lat, lon) {
   return `${label}__${lat}__${lon}`;
 }
 
-// Historical date parser used by the timeline and sorting logic.
-function parseHistoricalDate(rawValue) {
-  const raw = asText(rawValue);
-  if (!raw || raw === '0' || raw === '0000/00/00') {
-    return {
-      raw,
-      isKnown: false,
-      isTimelineUsable: false,
-      monthKey: null,
-      sortKey: null,
-      label: 'Unknown date',
-    };
-  }
-
-  const exact = raw.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
-  if (!exact) {
-    return {
-      raw,
-      isKnown: true,
-      isTimelineUsable: false,
-      monthKey: null,
-      sortKey: null,
-      label: raw,
-    };
-  }
-
-  const year = Number(exact[1]);
-  const month = Number(exact[2]);
-  const day = Number(exact[3]);
-  const hasKnownYear = year > 0;
-  const hasKnownMonth = month >= 1 && month <= 12;
-  const hasKnownDay = day >= 1 && day <= 31;
-  const isTimelineUsable = hasKnownYear;
-  const monthKey = isTimelineUsable ? String(year) : null;
-  const sortKey = hasKnownYear
-    ? year * 10000 + (hasKnownMonth ? month : 0) * 100 + (hasKnownDay ? day : 0)
-    : null;
+// Compatibility projection for the old direct geography/linked-record input
+// path. Canonical temporal assertions are authoritative even here; `parsedDate`
+// is derived from that assertion only so older consumers can survive until the
+// final retirement pass.
+function buildCanonicalTemporalState(rawValue, role = 'Date') {
+  const assertion = parsePeridotTemporalValue(rawValue, { role });
+  const endpoint = assertion?.start || assertion?.end || null;
+  const sortKey = Number.isFinite(assertion?.sortBounds?.start)
+    ? assertion.sortBounds.start
+    : Number.isFinite(assertion?.sortBounds?.end)
+      ? assertion.sortBounds.end
+      : null;
+  const year = Number(endpoint?.year) || null;
+  const month = Number(endpoint?.month) || null;
+  const day = Number(endpoint?.day) || null;
+  const timelineUsable = Boolean(assertion?.visualizationUsability?.timelinePositionable && Number.isFinite(sortKey));
 
   return {
-    raw,
-    year: hasKnownYear ? year : null,
-    month: hasKnownMonth ? month : null,
-    day: hasKnownDay ? day : null,
-    isKnown: hasKnownYear,
-    isTimelineUsable,
-    precision: hasKnownDay ? 'day' : hasKnownMonth ? 'month' : 'year',
-    monthKey,
-    sortKey,
-    label: raw,
+    temporalAssertions: [assertion],
+    parsedDate: {
+      raw: String(rawValue ?? '').trim(),
+      year,
+      month,
+      day,
+      isKnown: Boolean(year),
+      isTimelineUsable: timelineUsable,
+      precision: endpoint?.precision || assertion?.precision || 'unknown',
+      monthKey: year ? String(year) : null,
+      sortKey,
+      label: assertion?.display || assertion?.sourceText || (year ? String(year) : 'Unknown date'),
+      __canonicalCompatibilityProjection: true,
+    },
   };
 }
 
@@ -433,9 +420,11 @@ const PERSON_METADATA_HEADER_ALIASES = {
 
 // Geography-table normalization: maps uploaded headers into the internal route schema.
 function normalizeGeographyRows(rows) {
-  const cleaned = rows.map((row) => ({
-    date: asText(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.date)),
-    parsedDate: parseHistoricalDate(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.date)),
+  const cleaned = rows.map((row) => {
+    const date = asText(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.date));
+    return {
+    date,
+    ...buildCanonicalTemporalState(date),
     sourceLoc: asText(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.sourceLoc)),
     sourceLat: asNumber(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.sourceLat)),
     sourceLon: asNumber(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.sourceLon)),
@@ -446,7 +435,8 @@ function normalizeGeographyRows(rows) {
     targetLat: asNumber(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.targetLat)),
     targetLon: asNumber(getFieldValue(row, GEOGRAPHY_HEADER_ALIASES.targetLon)),
     targetPoliticalHint: extractPoliticalHintFromRow(row, 'target'),
-  }));
+    };
+  });
 
   const placeMap = new Map();
 
@@ -493,13 +483,14 @@ function normalizeLettersRows(rows) {
   return rows.map((row, idx) => {
     const source = asText(getFieldValue(row, LETTER_HEADER_ALIASES.source));
     const target = asText(getFieldValue(row, LETTER_HEADER_ALIASES.target));
+    const date = asText(getFieldValue(row, LETTER_HEADER_ALIASES.date));
     return {
       id: `letter_${idx + 1}`,
       archivalCollection: asText(getFieldValue(row, LETTER_HEADER_ALIASES.archivalCollection)),
       archivalPage: asText(getFieldValue(row, LETTER_HEADER_ALIASES.archivalPage)),
       pdfPage: asText(getFieldValue(row, LETTER_HEADER_ALIASES.pdfPage)),
-      date: asText(getFieldValue(row, LETTER_HEADER_ALIASES.date)),
-      parsedDate: parseHistoricalDate(getFieldValue(row, LETTER_HEADER_ALIASES.date)),
+      date,
+      ...buildCanonicalTemporalState(date),
       sourceLoc: asText(getFieldValue(row, LETTER_HEADER_ALIASES.sourceLoc)),
       source,
       sourceTitle: asText(getFieldValue(row, LETTER_HEADER_ALIASES.sourceTitle)),
@@ -563,8 +554,10 @@ function buildEdgeBuckets(rows) {
 
     const bucket = edgeMap.get(key);
     bucket.count += 1;
-    if (row.date) bucket.dates.add(row.date);
-    if (row.parsedDate?.monthKey) bucket.monthKeys.add(row.parsedDate.monthKey);
+    const temporalDisplay = getRowPrimaryTemporalDisplay(row);
+    const temporalParts = getRowTemporalDateParts(row);
+    if (temporalDisplay) bucket.dates.add(temporalDisplay);
+    if (temporalParts?.year) bucket.monthKeys.add(String(temporalParts.year));
     if (row.sourcePerson) bucket.sources.add(row.sourcePerson);
     if (row.targetPerson) bucket.targets.add(row.targetPerson);
     bucket.personKeys.add(`${row.sourcePerson}-->${row.targetPerson}`);
@@ -595,8 +588,8 @@ function finalizeAggregatedEdges(edgeMap, lettersByPersonKey) {
     });
 
     const matchingLetters = Array.from(matches.values()).sort((a, b) => {
-      const aDate = a.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
-      const bDate = b.parsedDate?.sortKey ?? Number.MAX_SAFE_INTEGER;
+      const aDate = getRowTemporalSortKey(a) ?? Number.MAX_SAFE_INTEGER;
+      const bDate = getRowTemporalSortKey(b) ?? Number.MAX_SAFE_INTEGER;
       if (aDate !== bDate) return aDate - bDate;
       return a.source.localeCompare(b.source);
     });
@@ -1264,16 +1257,13 @@ function CustomInspectorFieldsBlock({ fields }) {
 }
 
 function getLinkedRecordDateLabel(letter) {
-  return String(letter?.date || letter?.Date || '').trim() || 'undated';
+  return getRowPrimaryTemporalDisplay(letter) || 'undated';
 }
 
 function getLinkedRecordSortKey(letter, fallbackIndex = 0) {
-  const parsedSortKey = letter?.parsedDate?.sortKey;
-  if (Number.isFinite(parsedSortKey)) return parsedSortKey;
-  const dateLabel = getLinkedRecordDateLabel(letter);
-  if (dateLabel === 'undated') return Number.MAX_SAFE_INTEGER - 100000 + fallbackIndex;
-  const numericDate = Number(String(dateLabel).replace(/[^0-9]/g, '').slice(0, 8));
-  return Number.isFinite(numericDate) && numericDate > 0 ? numericDate : Number.MAX_SAFE_INTEGER - 100000 + fallbackIndex;
+  const canonicalSortKey = getRowTemporalSortKey(letter);
+  if (Number.isFinite(canonicalSortKey)) return canonicalSortKey;
+  return Number.MAX_SAFE_INTEGER - 100000 + fallbackIndex;
 }
 
 function sortLinkedRecordsChronologically(records = []) {
@@ -1513,7 +1503,7 @@ function LinkedLetterDetailPage({ letter, index, onBack, onOpenPersonDetail, onO
             value: letter.target || letter.targetPerson,
             onClick: onOpenPersonDetail ? () => onOpenPersonDetail(letter.target || letter.targetPerson) : undefined,
           },
-          { label: 'Date', value: letter.date || letter.Date },
+          { label: 'Date', value: getRowPrimaryTemporalDisplay(letter) },
           {
             label: 'Source place',
             value: letter.sourceLoc,
