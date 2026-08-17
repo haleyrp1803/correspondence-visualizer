@@ -1,4 +1,5 @@
 import { getRowTimelineCapability, getRowTemporalSearchValues, getRowTemporalYears, getRowTemporalDisplayLabels } from './timelinePlaybackHelpers.js';
+import { getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels, getPeridotRowEntityRelationships, rowHasPeridotEntityRelationship } from './peridotEntityNetwork.js';
 
 /*
  * Search-result helpers for Peridot's Advanced Search workspace.
@@ -285,7 +286,7 @@ export const CAPABILITY_FILTER_OPTIONS = Object.freeze([
     id: 'network-ready',
     label: 'Network-ready',
     shortLabel: 'Network',
-    description: 'Rows with source and target people/entities.',
+    description: 'Rows with at least one mapped entity relationship.',
   },
   {
     id: 'timeline-ready',
@@ -482,9 +483,10 @@ function facetItemsFromMap(map, limit = Number.POSITIVE_INFINITY) {
 function buildResultTitle(row, index) {
   const explicitTitle = firstText(row, TITLE_FIELDS);
   if (explicitTitle) return explicitTitle;
-  const sourcePerson = firstText(row, SOURCE_PERSON_FIELDS);
-  const targetPerson = firstText(row, TARGET_PERSON_FIELDS);
-  if (sourcePerson || targetPerson) return compactRouteLabel(sourcePerson, targetPerson);
+  const relationshipLabels = getPeridotRowEntityRelationshipLabels(row);
+  if (relationshipLabels.length) return relationshipLabels.join(' · ');
+  const participants = getPeridotRowEntityParticipants(row);
+  if (participants.length) return participants.join(' · ');
   const sourcePlace = firstText(row, SOURCE_PLACE_FIELDS);
   const targetPlace = firstText(row, TARGET_PLACE_FIELDS);
   if (sourcePlace || targetPlace) return compactRouteLabel(sourcePlace, targetPlace);
@@ -492,12 +494,11 @@ function buildResultTitle(row, index) {
 }
 
 function getRowCapabilityState(row) {
-  const sourcePerson = firstText(row, SOURCE_PERSON_FIELDS);
-  const targetPerson = firstText(row, TARGET_PERSON_FIELDS);
+  const participants = getPeridotRowEntityParticipants(row);
   const sourcePlace = firstText(row, SOURCE_PLACE_FIELDS);
   const targetPlace = firstText(row, TARGET_PLACE_FIELDS);
-  const hasPeople = Boolean(sourcePerson || targetPerson);
-  const hasEntityRoute = Boolean(sourcePerson && targetPerson);
+  const hasPeople = participants.length > 0;
+  const hasEntityRoute = rowHasPeridotEntityRelationship(row);
   const hasPlaces = Boolean(sourcePlace || targetPlace);
   const hasPlaceRoute = Boolean(sourcePlace && targetPlace);
   const temporalCapability = getRowTimelineCapability(row);
@@ -571,31 +572,32 @@ function normalizeEntityPairValue(value) {
 }
 
 function rowMatchesEntityPairCriterion(row, criterion) {
-  const source = firstText(row, SOURCE_PERSON_FIELDS);
-  const target = firstText(row, TARGET_PERSON_FIELDS);
-  const sourceIdentity = normalizeEntityPairValue(source);
-  const targetIdentity = normalizeEntityPairValue(target);
-  if (!source || !target || !sourceIdentity || sourceIdentity === targetIdentity) return false;
-
   const firstMode = criterion.firstMode || 'exact';
   const secondMode = criterion.secondMode || 'contains';
   const firstValue = criterion.firstValue;
   const secondValue = criterion.secondValue;
 
-  return (
-    (valueMatchesMode(source, firstMode, firstValue) && valueMatchesMode(target, secondMode, secondValue))
-    || (valueMatchesMode(target, firstMode, firstValue) && valueMatchesMode(source, secondMode, secondValue))
-  );
+  return getPeridotRowEntityRelationships(row).some((relationship) => {
+    const source = asText(relationship.source);
+    const target = asText(relationship.target);
+    const sourceIdentity = normalizeEntityPairValue(source);
+    const targetIdentity = normalizeEntityPairValue(target);
+    if (!source || !target || !sourceIdentity || sourceIdentity === targetIdentity) return false;
+    return (
+      (valueMatchesMode(source, firstMode, firstValue) && valueMatchesMode(target, secondMode, secondValue))
+      || (valueMatchesMode(target, firstMode, firstValue) && valueMatchesMode(source, secondMode, secondValue))
+    );
+  });
 }
 
 function valuesForStructuredField(row, field, metadataField = '') {
-  if (field === 'person') return SOURCE_PERSON_FIELDS.concat(TARGET_PERSON_FIELDS).map((key) => row?.[key]);
+  if (field === 'person') return getPeridotRowEntityParticipants(row);
   if (field === 'place') return SOURCE_PLACE_FIELDS.concat(TARGET_PLACE_FIELDS).map((key) => row?.[key]);
   if (field === 'routePlace') {
     return [compactRouteLabel(firstText(row, SOURCE_PLACE_FIELDS), firstText(row, TARGET_PLACE_FIELDS))];
   }
   if (field === 'routePeople') {
-    return [compactRouteLabel(firstText(row, SOURCE_PERSON_FIELDS), firstText(row, TARGET_PERSON_FIELDS))];
+    return getPeridotRowEntityRelationshipLabels(row);
   }
   if (field === 'date') return getRowTemporalSearchValues(row);
   if (field === 'evidenceFieldPresent' || field === 'metadataFieldPresent') {
@@ -751,12 +753,11 @@ function buildMatchedFields(row, appliedFilters) {
     });
   }
 
-  const personMatch = findFirstFieldMatch(
-    row,
-    appliedFilters.personFilter,
-    SOURCE_PERSON_FIELDS.concat(TARGET_PERSON_FIELDS),
-  );
-  if (personMatch) matches.push({ label: `Person in ${personMatch.label}`, value: personMatch.value });
+  const personQuery = asText(appliedFilters.personFilter);
+  if (personQuery) {
+    const participant = getPeridotRowEntityParticipants(row).find((value) => includesNeedle(value, personQuery));
+    if (participant) matches.push({ label: 'Person / entity', value: participant });
+  }
 
   const placeMatch = findFirstFieldMatch(
     row,
@@ -773,8 +774,8 @@ function buildMatchedFields(row, appliedFilters) {
 
   const routePeopleQuery = asText(appliedFilters.routePeopleFilter);
   if (routePeopleQuery) {
-    const peopleRoute = compactRouteLabel(firstText(row, SOURCE_PERSON_FIELDS), firstText(row, TARGET_PERSON_FIELDS));
-    if (includesNeedle(peopleRoute, routePeopleQuery)) matches.push({ label: 'Route entities', value: peopleRoute });
+    const peopleRoute = getPeridotRowEntityRelationshipLabels(row).find((label) => includesNeedle(label, routePeopleQuery));
+    if (peopleRoute) matches.push({ label: 'Entity relationship', value: peopleRoute });
   }
 
   const capabilityMatches = (appliedFilters.capabilityFilters || [])
@@ -864,17 +865,17 @@ export function buildPeridotSearchFacets(rows = [], options = {}) {
   const people = new Map();
   const places = new Map();
   const placeRoutes = new Map();
+  const entityRelationships = new Map();
   const years = new Map();
   const evidenceFields = new Map();
 
   rows.forEach((row) => {
-    const sourcePerson = firstText(row, SOURCE_PERSON_FIELDS);
-    const targetPerson = firstText(row, TARGET_PERSON_FIELDS);
+    const participants = getPeridotRowEntityParticipants(row);
     const sourcePlace = firstText(row, SOURCE_PLACE_FIELDS);
     const targetPlace = firstText(row, TARGET_PLACE_FIELDS);
     const temporalYears = getRowTemporalYears(row);
-    addFacetCount(people, sourcePerson);
-    addFacetCount(people, targetPerson);
+    participants.forEach((participant) => addFacetCount(people, participant));
+    getPeridotRowEntityRelationshipLabels(row).forEach((relationshipLabel) => addFacetCount(entityRelationships, relationshipLabel));
     addFacetCount(places, sourcePlace);
     addFacetCount(places, targetPlace);
     if (sourcePlace || targetPlace) addFacetCount(placeRoutes, compactRouteLabel(sourcePlace, targetPlace));
@@ -894,6 +895,7 @@ export function buildPeridotSearchFacets(rows = [], options = {}) {
     { id: 'people', label: 'People / entities', type: 'person', items: facetItemsFromMap(people, limit) },
     { id: 'places', label: 'Places', type: 'place', items: facetItemsFromMap(places, limit) },
     { id: 'placeRoutes', label: 'Place routes', type: 'routePlace', items: facetItemsFromMap(placeRoutes, limit) },
+    { id: 'entityRelationships', label: 'Entity relationships', type: 'routePeople', items: facetItemsFromMap(entityRelationships, limit) },
     { id: 'years', label: 'Years', type: 'year', items: facetItemsFromMap(years, limit) },
     { id: 'capabilities', label: 'Capabilities', type: 'capability', items: capabilityItems },
     { id: 'metadataFields', label: 'Metadata fields present', type: 'metadataFieldPresent', items: facetItemsFromMap(evidenceFields, limit) },
@@ -903,8 +905,16 @@ export function buildPeridotSearchFacets(rows = [], options = {}) {
 export function buildPeridotSearchResults(rows = [], appliedFilters = {}, options = {}) {
   const limit = Math.max(1, options.limit ?? 50);
   return rows.slice(0, limit).map((row, index) => {
-    const sourcePerson = firstText(row, SOURCE_PERSON_FIELDS);
-    const targetPerson = firstText(row, TARGET_PERSON_FIELDS);
+    const relationships = getPeridotRowEntityRelationships(row);
+    const participants = getPeridotRowEntityParticipants(row);
+    const relationshipLabels = relationships.map((relationship) => {
+      const connector = relationship.direction === 'directed' ? '→' : '—';
+      return `${relationship.source} ${connector} ${relationship.target}`;
+    });
+    const firstRelationship = relationships[0] || null;
+    const sourcePerson = firstRelationship?.source || participants[0] || '';
+    const targetPeople = Array.from(new Set(relationships.map((relationship) => relationship.target).filter(Boolean)));
+    const targetPerson = targetPeople.join(' · ');
     const sourcePlace = firstText(row, SOURCE_PLACE_FIELDS);
     const targetPlace = firstText(row, TARGET_PLACE_FIELDS);
     const displayDate = getRowTemporalDisplayLabels(row).slice(0, 2).join(' · ') || firstText(row, DATE_FIELDS) || 'Undated';
@@ -915,7 +925,9 @@ export function buildPeridotSearchResults(rows = [], appliedFilters = {}, option
       row,
       title: buildResultTitle(row, index),
       displayDate,
-      peopleRoute: compactRouteLabel(sourcePerson, targetPerson),
+      peopleRoute: relationshipLabels.join(' · '),
+      peopleRoutes: relationshipLabels,
+      networkParticipants: participants,
       placeRoute: compactRouteLabel(sourcePlace, targetPlace),
       sourcePerson,
       targetPerson,
