@@ -20,29 +20,48 @@ This document owns the detailed checkpoint, milestone chronology, deferred/archi
 ## 1. Current Synchronized Checkpoint
 
 ```text
-2d5e668 — Generalize temporal mapping and timeline playback
+4076e5b — Checkpoint generalized identity mapping groundwork
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
 
-This checkpoint closes a major Phase 2 authority and temporal-model sequence. Generalized single-table and workbook mappings now feed canonical/runtime semantics authoritatively, temporal evidence is preserved as repeatable canonical assertions, and Timeline consumes those assertions directly rather than treating one legacy Date as the only chronology.
+This checkpoint preserves the latest completed groundwork before the planned generalized Inspector overhaul. Since the previous documentation baseline, Peridot has completed the remaining temporal-authority migration, generalized Search/Network relationship semantics substantially, checkpointed incomplete geographic-network foundations, added a generalized mapped-information reader for Inspector/Search legibility, propagated canonical entity IDs through several existing runtime/selection paths, and introduced the first researcher-facing generalized Identity mapping model.
 
 Current architectural significance:
 
-- generalized mappings are authoritative for single-table and workbook imports;
-- workbook join validation and Network availability checks recognize generalized relationship structure;
-- temporal assertions preserve original source text, known/unknown date components, approximation, interval boundedness, consistency warnings, open ranges, and researcher-note columns without inventing missing precision;
-- a record/entity can carry multiple typed temporal assertions simultaneously;
-- runtime compatibility rows now carry canonical `temporalAssertions[]`, while legacy `parsedDate` remains only as a fallback for unmigrated/demo paths;
-- Time mapping is repeatable and user-named: Date or Period / range assertions can use one source column or separate Y/M/D components, period endpoints can each use combined or component fields, source columns can be reused across assertions, and temporal assertions can attach to the record or a mapped relationship participant;
-- Timeline derives available Time types from canonical assertions, filters intervals by temporal intersection, and supports **Cumulative Events** and **Co-current Events**;
-- a co-current playback moment with zero active records is treated as a valid empty visualization state rather than a visualization-capability failure;
-- Search/Timeline readiness diagnostics and temporal result labels now use canonical temporal information rather than one privileged legacy Date;
-- remaining work is concentrated in Network consumer/layout repairs and deliberate retirement of compatibility paths, not another generalized-mapper redesign.
+- canonical Temporal Assertions are now the sole active temporal interpretation system; `parsedDate`, `parseHistoricalDate`, duplicate capability parsing, lexical chronology fallback, and related old authority paths are retired from active `src`;
+- Search relationship readiness, participant/entity facets, connected-entity criteria, and related summaries now use generalized relationship semantics rather than only Source/Target pairs;
+- `peridotEntityNetwork.js` is the shared generalized relationship boundary for Search/Network semantics, including multipart relationships and canonical endpoint IDs where available;
+- geographic People Map groundwork now separates Search-filtered structural relationship scope from Timeline/playback-visible event/place scope, but correct relationship/event scoping and transparent geographic anchors remain unfinished;
+- `peridotRecordStructure.js`, `PeridotRecordStructure.jsx`, and fixtures expose mapped dates/periods, participants, places, generalized relationships, and evidence as a direct QA surface;
+- the SI1 legibility work revealed a deeper identity rule: display labels are not sufficient universal identity, especially when multiple historical entities share a name or one recurring entity appears in different roles;
+- `PeridotIdentityMappingControls.jsx` and current `PeridotColumnMappingModal.jsx` state now let researchers describe record identity and multiple recurring entity groups using label, one field, several fields together, or row-level uniqueness, including equivalent identifying information across different roles/sheets;
+- Identity mapping is checkpointed **interaction/state groundwork**, not yet authoritative runtime identity;
+- the current generalized Identity step appears after Places in the UI; the next small mapping-flow correction will move it immediately after Relations;
+- the legacy upper Inspector profile still derives people/places substantially through Source/Target-era compatibility logic. This causes later n-part participants to disappear in some profiles, non-correspondence geography to appear as meaningless directed routes, and mapped places to miss generalized person associations;
+- the next implementation program is therefore a generalized Inspector overhaul across **both compact and expanded views**, preserving linked-data navigation and central multi-step Back history as hard behavior contracts.
 
 The active Correspondence / Directed Record and Genealogy / Person-Centered profiles remain compatibility/specialization paths and should not be retired without a no-loss repository-wide audit.
-
 ## 2. Recent Milestones, Newest First
+
+
+### Temporal retirement, generalized relationship semantics, identity groundwork, and Inspector legibility checkpoint — 2026-08-19
+
+- **`9fe62a3` — `Synchronize documentation for temporal and timeline updates`** preserved the earlier `2d5e668` temporal/Timeline milestone before downstream temporal consumers were fully migrated.
+- **`df9511b` — `Migrate temporal consumers and checkpoint network foundations`** made canonical Temporal Assertions authoritative across Inspector chronology, Analytics/Charts, App-level chronological aggregation, genealogy Timeline readiness, and linked-record sorting while establishing the first generalized entity-network semantic layer.
+- **`9cc9d93` — `Retire legacy temporal interpretation paths`** removed `parsedDate` from active source, replaced the duplicate capability parser with canonical temporal interpretation, fixed null/open-bound handling, and removed lexical date sorting. Peridot now has one active temporal interpretation system.
+- **`3b3c537` — `Use generalized relationships in search and network capabilities`** and **`ccc2482` — `Complete generalized relationship search helpers`** migrated Search relationship readiness, people/entity facets, relationship facets, structured connected-entity criteria, and summaries to generalized participant relationships.
+- **`a24034f` — `Checkpoint generalized geographic network groundwork`** separated structural relationship scope from Timeline-visible event/place scope for geographic People Map derivation. The checkpoint is intentionally incomplete: relationship/event scoping, transparent geographic anchoring, generalized playback highlighting, force viewport fitting, and arrowhead geometry remain deferred.
+- The Network audit established that multipart relationships should connect the primary mapped participant to each explicitly mapped counterpart without inventing relationships among all co-occurring participants.
+- Network testing also exposed a new requirement for semantically named participant-place associations so the same place can mean different things for different participants (e.g. place of birth versus place of childbirth); that mapping enhancement remains planned after current Inspector/identity work.
+- SI1 introduced **`peridotRecordStructure.js`**, **`PeridotRecordStructure.jsx`**, and **`peridotRecordStructureFixtures.js`** as a generalized record/entity-attribution reader. Search/Inspector can now expose mapped temporal assertions, participants, places, semantic relationships, and evidence directly rather than only through correspondence-shaped summaries.
+- Live genealogy testing revealed that same-label people can be conflated when the generalized mapping runtime lacks a stable entity-identity rule. Downstream canonical-ID preference alone cannot solve identity if the mapping layer never supplies an ID.
+- The project therefore adopted a broader researcher-owned identity model: records and recurring entities may be distinguished by a displayed label, one identifying field, several fields used together, or intentional row-level uniqueness. Multiple recurring entity groups such as People and Places can use independent rules, and equivalent identity components can be mapped across different roles/sheets (for example `Source + Source Title` and `Target + Target Title` as Name + Title).
+- **`4076e5b` — `Checkpoint generalized identity mapping groundwork`** preserves the current Identity UI/state plus canonical-ID groundwork in network/Inspector-related paths. The Identity page is accepted as a workable first mapping flow but is not yet authoritative in the generalized runtime.
+- Current live QA confirms that the lower generalized mapped-information reader is much closer to the user's mapping than the legacy upper Inspector profile. Remaining failures—such as fathers omitted while mothers appear, place profiles reporting no connected people despite mapped birth places, and genealogy `Unknown` routes—come from old Source/Target profile derivation rather than from the generalized relationship mapping itself.
+- Next implementation: move Identity immediately after Relations, then overhaul compact and expanded Inspector profiles from generalized semantics while preserving linked-data navigation and multi-step Back history.
+- Prepared a bounded core-documentation synchronization against `4076e5b` for fresh-chat handoff; the Governance Protocol remains unchanged.
+
 
 ### Generalized runtime authority, Temporal Assertions, and canonical Timeline playback — 2026-08-17
 
@@ -56,7 +75,7 @@ The active Correspondence / Directed Record and Genealogy / Person-Centered prof
 - **`2d5e668` — `Generalize temporal mapping and timeline playback`** completed the current user-facing temporal milestone: repeatable user-named Date/Period mappings; one-column or Y/M/D representations; six-column start/end component periods; reusable source columns; relationship-participant attachment; temporal note columns; dataset-derived Time types; canonical Timeline readiness/Search diagnostics; and **Cumulative Events** / **Co-current Events** playback.
 - Live regression testing used the Maria Maddalena correspondence workbook, a Cardinals workbook with Creation date + Lifespan, and a genealogy/family-tree workbook. These tests confirmed nuanced partial-date handling, multiple simultaneous temporal assertions, source-column reuse, interval participation, role-specific Timeline controls, and co-current disappearance of ended periods.
 - Empty Co-current moments now remain valid empty visualization states rather than triggering the visualization-unavailable screen.
-- Deferred temporal cleanup: retire `parseHistoricalDate()` / `parsedDate` only after remaining consumers migrate, and consider optional Approximate/Partial/etc. Timeline structure filters only if they remain human-readable.
+- Historical note: this milestone still deferred retirement of `parseHistoricalDate()` / `parsedDate`; that cleanup was completed later at `9cc9d93`. Optional Approximate/Partial/etc. Timeline structure filters remain deferred if they can stay human-readable.
 - Deferred Network follow-up remains separate: consume all generalized relationships where needed, fit the Force-Directed Network to the viewport, and terminate arrowheads at node boundaries.
 
 ### Progressive universal upload redesign and Review checkpoint — 2026-08-08
@@ -458,15 +477,15 @@ The following milestone narratives are retained as historical records. They rema
 ---
 ## 3. Deferred, Archived, and Rolled-Back Work
 
-### Current deferred temporal and Network cleanup after `2d5e668`
+### Current deferred identity, Inspector, Search-place, and Network work after `4076e5b`
 
-- Retire the legacy `parseHistoricalDate()` / `parsedDate` compatibility path only after all remaining consumers have migrated to canonical `temporalAssertions[]` or have an explicit reason to remain on the fallback.
-- Consider optional Timeline filters for machine-derived temporal structures such as approximate, partial, or open-ended values only if the controls remain legible to humanistic researchers; do not treat researcher certainty/completeness notes as equivalent to machine-derived temporal structure.
-- Complete the generalized Network consumer follow-up: ensure relevant person/entity networks consume all generalized relationships rather than only the first where that limitation remains.
-- Repair Force-Directed Network fit-to-viewport behavior.
-- Terminate force/network arrowheads at node boundaries rather than allowing them to run beneath nodes.
+- **Inspector overhaul is next.** Replace Source/Target-era person/place profile derivation in both compact and expanded Inspector with generalized relationships, participant-place associations, temporal assertions, entity identity, and evidence. Preserve linked-data navigation and central multi-step Back history.
+- **Identity runtime authority remains incomplete.** Move Identity directly after Relations, then compile accepted label/field/composite/row identity rules into stable identities used by Inspector, Search, Network, and related consumers.
+- **Search places remain less generalized than Search relationships.** Migrate place Browse/facets/criteria/results to all mapped place associations.
+- **Geographic Network semantics remain checkpointed, not complete.** Correct relationship/event scoping, use transparent/user-selected geographic anchors, migrate playback highlighting to all generalized relationships, then address Force-Directed viewport fitting and arrowhead termination.
+- **Named place associations remain planned.** The same underlying place can support distinct participant-specific meanings such as place of birth, place of childbirth, residence, court, office, origin, or destination; exact user labels should be preserved.
+- Optional Timeline structure filters for approximate/partial/open values remain deferred, but there is no longer a legacy temporal-parser retirement task: that cleanup was completed at `9cc9d93`.
 - Preserve the distinction between a temporarily empty Co-current playback moment and genuine visualization unavailability.
-
 ### Tutorial attention-animation experiments rolled back before `619bab0`
 
 The following tutorial experiments were intentionally removed and are not current functionality:
@@ -513,6 +532,13 @@ This is the single authoritative place in the documentation for the cumulative c
 
 | Date | Commit | Message | Branch/tag decoration |
 |---|---|---|---|
+| 2026-08-19 | `4076e5b` | Checkpoint generalized identity mapping groundwork | (HEAD -> main, origin/main, origin/HEAD) |
+| 2026-08-19 | `a24034f` | Checkpoint generalized geographic network groundwork |  |
+| 2026-08-19 | `ccc2482` | Complete generalized relationship search helpers |  |
+| 2026-08-19 | `3b3c537` | Use generalized relationships in search and network capabilities |  |
+| 2026-08-19 | `9cc9d93` | Retire legacy temporal interpretation paths |  |
+| 2026-08-19 | `df9511b` | Migrate temporal consumers and checkpoint network foundations |  |
+| 2026-08-19 | `9fe62a3` | Synchronize documentation for temporal and timeline updates |  |
 | 2026-08-17 | `2d5e668` | Generalize temporal mapping and timeline playback | (HEAD -> main, origin/main, origin/HEAD) |
 | 2026-08-17 | `ce46f08` | Derive timeline from canonical temporal assertions |  |
 | 2026-08-17 | `ac95c13` | Bridge canonical temporal assertions to runtime rows |  |

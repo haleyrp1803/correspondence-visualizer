@@ -24,7 +24,7 @@ This Charter owns mandatory process rules, source-of-truth continuity, delivery/
 Current synchronized checkpoint:
 
 ```text
-2d5e668 — Generalize temporal mapping and timeline playback
+4076e5b — Checkpoint generalized identity mapping groundwork
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
@@ -305,7 +305,7 @@ Future cluster changes should preserve:
 
 ### Data import, canonical normalization, and mapping caution
 
-Data import is a fragile boundary. Keep the public direction intact: unified CSV / TSV / XLSX / XLS upload, user-confirmed/user-owned mapping, active correspondence and genealogy profiles, permissive database-first admission, and no silent standardization. The accepted Phase 2 correspondence/directed-record mapper now uses Preview/orientation, Time, repeatable Places, n-part Relations, Evidence, and Review; workbook Places/Relations use sheet-qualified versions of the same model. Correspondence still passes through the canonical normalized model and a legacy runtime adapter; genealogy uses a direct canonical runtime projection; broader universal structures may remain canonical-only until a consumer deliberately adopts them.
+Data import is a fragile boundary. Keep the public direction intact: unified CSV / TSV / XLSX / XLS upload, user-confirmed/user-owned mapping, active correspondence and genealogy profiles, permissive database-first admission, and no silent standardization. The generalized correspondence/directed-record mapper now includes Preview/orientation, n-part Relations, repeatable Time, repeatable Places, the checkpointed Identity mapping surface, Evidence, and Review; workbook mappings use sheet-qualified versions of the same model. At `4076e5b`, Identity is still interaction/state groundwork rather than authoritative downstream identity. The next small flow correction should place Identity immediately after Relations before later assertions attach to participants. Correspondence still passes through the canonical normalized model and a legacy runtime adapter; genealogy uses a direct canonical runtime projection; broader universal structures may remain canonical-only until a consumer deliberately adopts them.
 
 Generalized `placeParts`, `relationshipParts`, temporal/evidence assignments, and workbook references are now authoritative through normalization/runtime consumption. Do not let legacy Source/Target, point/route, or single-Date fields silently override a user's accepted mapping merely because older consumers still exist. Compatibility projection is allowed only as an explicit downstream bridge and is now a retirement-audit target rather than a competing architecture.
 
@@ -343,7 +343,7 @@ Detailed historical decision rationale remains preserved in the archived invento
 - Arbitrary tables use explicit user-confirmed mapping; current correspondence workbooks use user-confirmed unique-ID joins rather than row-order matching.
 - The Phase 1 universal mapping foundation is deterministic and user-owned: saved variables, field assignments, sheet-purpose assignments, repeated-heading groups, source-table/field descriptors, transformations, and table connections record what the user has told Peridot. Peridot may suggest broad recognizable forms such as dates or coordinates, but the user is ultimately responsible for the accepted mapping.
 - Broader universal datasets must not be forced into correspondence- or genealogy-shaped runtime rows merely because those are the current active consumer projections. Canonical-only preservation is valid until appropriate downstream consumers are implemented.
-- Phase 2's progressive mapping UI and generalized runtime authority are now accepted. The correspondence/directed-record grammar is Preview/orientation → n-part Relations → repeatable Time → repeatable Places → Evidence → Review, with workbook Sheets where needed. Major tabs remain visible rather than disappearing because Peridot thinks a capability is unused.
+- Phase 2's progressive mapping UI and generalized runtime authority are accepted for relationship/place/temporal/evidence semantics. The `4076e5b` checkpoint adds Identity mapping for records and recurring entities; its current UI position after Places is a known transitional detail, with a planned correction to place Identity immediately after Relations. Major tabs remain visible rather than disappearing because Peridot thinks a capability is unused.
 - Generalized mappings are authoritative through canonical normalization/runtime consumption. Legacy fields may remain only as explicit compatibility projections while the repository-wide retirement audit determines which paths are still required.
 - The repository-wide retirement audit should classify old code as delete now, still-required compatibility layer, legitimate profile-specific specialization, or uncertain/retain. Do not perform broad deletion before the replacement has carried real data end-to-end.
 - Phase 3 should begin only after that Phase 2 boundary is clean. It should build chart controls from saved variables, including a structured autocomplete sentence builder that mirrors scholarly questions without implementing unrestricted natural-language prompting.
@@ -390,7 +390,29 @@ Reason:
 The canonical model must preserve historical uncertainty and partiality while still supporting defensible chronological filtering, playback, and comparison of overlapping periods.
 
 Maintenance consequence:
-Temporal consumers should use canonical temporalAssertions[] first and legacy parsedDate only as a temporary fallback. Future structure filters must distinguish machine-derived temporal form from researcher-supplied notes.
+Temporal consumers use canonical `temporalAssertions[]`; the former `parsedDate`/duplicate-parser fallback paths have been retired. Future structure filters must distinguish machine-derived temporal form from researcher-supplied notes.
+```
+
+#### Researcher-declared record and entity identity decision
+
+```text
+Decision:
+Treat identity as an explicit researcher-owned mapping concern, separate from display labels and from the row/record unit.
+
+Context:
+Generalized datasets can contain repeated display names, several roles for the same recurring entity, multiple kinds of recurring entities, and source tables without a pre-existing database ID. The same historical person may appear in sender, recipient, parent, partner, or profile columns, while different people may share the same displayed name.
+
+Chosen approach:
+Provide an Identity mapping surface that distinguishes record identity from recurring entity identity. Allow record/entity recognition by displayed label, one identifying field, several fields used together, or intentional row-level uniqueness. Allow multiple independently configured entity groups such as People and Places. When the same kind of identifying information appears in different roles or sheets, the researcher maps equivalent conceptual components—for example Name → Source plus Title → Source Title and Name → Target plus Title → Target Title—so the source column names do not themselves define identity.
+
+Rejected alternative:
+Assume matching display names always identify one entity; require every user to add a dedicated ID column; infer entity merges automatically; or force one universal identity rule across all recurring things in a dataset.
+
+Reason:
+Humanistic source structures often encode identity relationally or through combinations of fields rather than modern database keys. The researcher is better positioned than Peridot to state what makes two appearances the same historical entity.
+
+Maintenance consequence:
+Display labels are presentation, not universal identity. Downstream consumers should prefer stable identities produced from the accepted rule and fall back to exact labels only when no stronger identity is available. At `4076e5b`, the UI/state is checkpointed but runtime authority remains unfinished; do not claim full identity resolution until the next integration pass proves it end-to-end.
 ```
 
 ### 7.2 Routing and workspace model
@@ -401,9 +423,12 @@ Temporal consumers should use canonical temporalAssertions[] first and legacy pa
 
 ### 7.3 Inspector
 
-- Inspector is dual-mode: compact visualization-click summaries and full dossier navigation share selection state and Back history.
-- Full Inspector overlays rather than remounts Visualizations. Linked records, routes, people/entities, and places participate in shared history.
-- `Unknown` remains a first-class place-like bucket; connected-record tables are capability-aware and support date-first sorting/filtering/pagination.
+- Inspector is dual-mode: compact visualization-click summaries and full dossier navigation share selection state and **central multi-step Back history**.
+- Full Inspector overlays rather than remounts Visualizations. Linked records, legitimate routes, people/entities, places, and clusters participate in shared history.
+- Linked-data curiosity is a hard preservation contract: a researcher must be able to follow a chain such as node → connected person → another connected person → connected place → connected record, use Back several times, and then branch from an earlier dossier.
+- The planned generalized Inspector overhaul must change the **derivation model**, not merely replace Source/Target wording. Compact and expanded views should consume the same generalized relationship/place/temporal/identity semantics at different densities.
+- Correspondence-specific sender/recipient or origin/destination summaries may remain when the mapped data genuinely supports them; non-correspondence datasets must not inherit fake directed routes or omit later n-part participants because of a legacy binary projection.
+- `Unknown` remains a first-class bucket only for genuinely unresolved source evidence; connected-record sorting/filtering/pagination behavior should survive the overhaul.
 
 ### 7.4 Search and data scope
 
@@ -487,6 +512,9 @@ Current notable decisions:
 - Arbitrary CSV/TSV imports should use an explicit user-confirmed column-mapping workflow rather than silent guessing.
 - Core correspondence-compatible Peridot variables remain supported for route/network workflows, but the upload mapping UI should present field roles rather than asking users to conform to correspondence-only “Peridot variables.”
 - Peridot should support broader humanistic datasets through role-based mapping for record identity, time, places, relationships, evidence/analysis, and capability review.
+- Generalized Identity mapping should let researchers declare how records and recurring people/places/other things are recognized, including label, single-field, composite-field, and row-unique strategies; display labels are not universal identity.
+- The same recurring entity may appear in different roles or sheets. Equivalent identity components should be mapped across those contexts rather than treating source column names such as Source and Target as different identities.
+
 - Point/site datasets with one mapped location should be valid Place Map datasets even when they have no People Network or Force-Directed network readiness.
 - People Network and Force-Directed views should remain unavailable or empty for datasets that do not map source-target entity relationships; that is correct behavior, not a failed import.
 - Coordinate pairs should be interpreted as latitude first, longitude second, including `POINT(latitude longitude)` strings.
@@ -588,7 +616,7 @@ Each implementation pass should end with:
 
 ### Fresh-chat handoff
 
-A new chat should begin with the confirmed source-of-truth folder, active branch, and current synchronized checkpoint from the most recent clean sync ritual. It should also receive the narrow current task, relevant current source files, and the applicable planning/contract documents. Each new conversation should begin by rereading the four core documents before any development work is done.
+A new chat should begin with the confirmed source-of-truth folder, active branch, and current synchronized checkpoint from the most recent clean sync ritual. At the current checkpoint, local development on the user's Windows machine is started with `npm.cmd run dev`. It should also receive the narrow current task, relevant current source files, and the applicable planning/contract documents. Each new conversation should begin by rereading the four core documents before any development work is done.
 
 For core documentation work, provide all four core documents and `PERIDOT_CORE_DOCUMENTATION_GOVERNANCE_PROTOCOL.md` before edits begin.
 
