@@ -17,6 +17,7 @@ export const SINGLE_TABLE_STEP_KEYS = Object.freeze([
   'relationships',
   'time',
   'places',
+  'identity',
   'evidence',
   'review',
 ]);
@@ -27,6 +28,7 @@ export const WORKBOOK_STEP_KEYS = Object.freeze([
   'workbook-relationships',
   'workbook-time',
   'workbook-places',
+  'workbook-identity',
   'workbook-evidence',
   'workbook-review',
 ]);

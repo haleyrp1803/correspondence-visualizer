@@ -65,6 +65,7 @@ import { InspectorConnectedCorrespondents } from './InspectorConnectedCorrespond
 import { InspectorPersonPlaces } from './InspectorPersonPlaces';
 import { InspectorBackButton } from './InspectorBackButton';
 import { InspectorContent } from './InspectorPanel.jsx';
+import { PeridotRecordStructure } from './PeridotRecordStructure.jsx';
 import { LeftControlPanel } from './LeftControlPanel';
 import { PeridotHamburgerMenu } from './PeridotHamburgerMenu';
 import { PeridotHomeWorkspace } from './PeridotHomeWorkspace';
@@ -789,22 +790,45 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
     ? derivePeridotGeographicEntityNetworkSemantics(semanticOptions.relationshipRows, semanticOptions.locationRows)
     : derivePeridotEntityNetworkSemantics(rows);
 
+  const relationshipPersonKey = (relationship, side) => (
+    side === 'source'
+      ? (relationship.sourceId || relationship.source)
+      : (relationship.targetId || relationship.target)
+  );
+
   relationships.forEach((relationship) => {
-    [relationship.source, relationship.target].forEach((person) => {
-      if (!personMap.has(person)) {
-        personMap.set(person, { id: person, label: person, appearances: 0, locationCounts: new Map() });
+    [
+      { key: relationshipPersonKey(relationship, 'source'), label: relationship.source, entityId: relationship.sourceId || '' },
+      { key: relationshipPersonKey(relationship, 'target'), label: relationship.target, entityId: relationship.targetId || '' },
+    ].forEach((person) => {
+      if (!person.key) return;
+      if (!personMap.has(person.key)) {
+        personMap.set(person.key, {
+          id: person.key,
+          entityId: person.entityId,
+          label: person.label || person.key,
+          appearances: 0,
+          locationCounts: new Map(),
+        });
       }
-      personMap.get(person).appearances += relationship.count;
+      personMap.get(person.key).appearances += relationship.count;
     });
   });
 
   locations.forEach((location) => {
-    const person = location.person;
-    if (!personMap.has(person)) {
-      personMap.set(person, { id: person, label: person, appearances: 0, locationCounts: new Map() });
+    const personKey = location.personId || location.person;
+    if (!personKey) return;
+    if (!personMap.has(personKey)) {
+      personMap.set(personKey, {
+        id: personKey,
+        entityId: location.personId || '',
+        label: location.person || personKey,
+        appearances: 0,
+        locationCounts: new Map(),
+      });
     }
     const key = `${location.label}__${location.latitude}__${location.longitude}`;
-    const personRecord = personMap.get(person);
+    const personRecord = personMap.get(personKey);
     personRecord.locationCounts.set(key, (personRecord.locationCounts.get(key) || 0) + 1);
   });
 
@@ -829,8 +853,8 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
 
   const peopleInUse = new Set();
   filteredEdgeRecords.forEach((edge) => {
-    peopleInUse.add(edge.source);
-    peopleInUse.add(edge.target);
+    peopleInUse.add(edge.sourceId || edge.source);
+    peopleInUse.add(edge.targetId || edge.target);
   });
 
   let people = Array.from(personMap.values())
@@ -872,8 +896,8 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
   let personById = new Map(people.map((p) => [p.id, p]));
 
   filteredEdgeRecords.forEach((edge) => {
-    const source = personById.get(edge.source);
-    const target = personById.get(edge.target);
+    const source = personById.get(edge.sourceId || edge.source);
+    const target = personById.get(edge.targetId || edge.target);
     if (!source || !target) return;
     source.degree += edge.count;
     target.degree += edge.count;
@@ -893,8 +917,8 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
     const settledPositions = buildForcePersonPositions({
       nodes: people,
       links: filteredEdgeRecords.map((edge) => ({
-        source: edge.source,
-        target: edge.target,
+        source: edge.sourceId || edge.source,
+        target: edge.targetId || edge.target,
         count: edge.count,
       })),
       width,
@@ -918,14 +942,18 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
 
   const edges = filteredEdgeRecords
     .map((edge) => {
-      const source = personById.get(edge.source);
-      const target = personById.get(edge.target);
+      const source = personById.get(edge.sourceId || edge.source);
+      const target = personById.get(edge.targetId || edge.target);
       if (!source || !target) return null;
       const directionalGlyph = edge.direction === 'directed' ? '→' : '—';
       return {
         ...edge,
         sourceLabel: source.label,
         targetLabel: target.label,
+        sourceEntityId: edge.sourceId || source.entityId || '',
+        targetEntityId: edge.targetId || target.entityId || '',
+        sourceNodeId: source.id,
+        targetNodeId: target.id,
         path: curvedPath({ x: source.x, y: source.y }, { x: target.x, y: target.y }, layoutMode === 'geographic' ? 0.12 : 0.22),
         width: computePersonEdgeWidth(edge.count),
         letterMetadata: edge.rows,
@@ -1448,7 +1476,6 @@ function LinkedLetterListItem({ letter, index, onOpenLetter }) {
 }
 
 function LinkedLetterDetailPage({ letter, index, onBack, onOpenPersonDetail, onOpenPlaceDetail }) {
-  const customInspectorFields = normalizeLinkedLetterCustomInspectorFields(letter);
   const uniqueId = getLinkedLetterUniqueId(letter, index);
 
   return (
@@ -1465,60 +1492,12 @@ function LinkedLetterDetailPage({ letter, index, onBack, onOpenPersonDetail, onO
         </button>
       </div>
 
-      <DetailFieldList
-        rows={[
-          {
-            label: 'Source',
-            value: letter.source || letter.sourcePerson,
-            onClick: onOpenPersonDetail ? () => onOpenPersonDetail(letter.source || letter.sourcePerson) : undefined,
-          },
-          {
-            label: 'Target',
-            value: letter.target || letter.targetPerson,
-            onClick: onOpenPersonDetail ? () => onOpenPersonDetail(letter.target || letter.targetPerson) : undefined,
-          },
-          { label: 'Date', value: getRowPrimaryTemporalDisplay(letter) },
-          {
-            label: 'Source place',
-            value: letter.sourceLoc,
-            onClick: onOpenPlaceDetail ? () => onOpenPlaceDetail(letter.sourceLoc) : undefined,
-          },
-          {
-            label: 'Target place',
-            value: letter.targetLoc,
-            onClick: onOpenPlaceDetail ? () => onOpenPlaceDetail(letter.targetLoc) : undefined,
-          },
-          { label: 'Archival collection', value: letter.archivalCollection || letter.collection },
-          { label: 'Archival page', value: letter.archivalPage || letter.pdfPage },
-          { label: 'Relationship', value: letter.relationship },
-          { label: 'Topic', value: letter.topic },
-          { label: 'Language', value: letter.language },
-          { label: 'Links', value: letter.links },
-        ]}
+      <PeridotRecordStructure
+        row={letter}
+        onOpenPersonDetail={onOpenPersonDetail}
+        onOpenPlaceDetail={onOpenPlaceDetail}
       />
 
-      <CustomInspectorFieldsBlock fields={customInspectorFields} />
-
-      {letter.notes ? (
-        <div className="mt-3 rounded-xl border border-[var(--section-border)]/70 bg-[var(--section-bg)]/70 p-3 text-sm text-[var(--panel-card-text)]">
-          <div className="font-semibold uppercase tracking-[0.14em] text-[11px] text-[var(--panel-card-muted-text)]">Notes</div>
-          <div className="mt-2 whitespace-pre-wrap">{letter.notes}</div>
-        </div>
-      ) : null}
-
-      {letter.transcription ? (
-        <div className="mt-3 rounded-xl border border-[var(--section-border)]/70 bg-[var(--section-bg)]/70 p-3 text-sm text-[var(--panel-card-text)]">
-          <div className="font-semibold uppercase tracking-[0.14em] text-[11px] text-[var(--panel-card-muted-text)]">Transcription</div>
-          <div className="mt-2 whitespace-pre-wrap">{letter.transcription}</div>
-        </div>
-      ) : null}
-
-      {letter.translation ? (
-        <div className="mt-3 rounded-xl border border-[var(--section-border)]/70 bg-[var(--section-bg)]/70 p-3 text-sm text-[var(--panel-card-text)]">
-          <div className="font-semibold uppercase tracking-[0.14em] text-[11px] text-[var(--panel-card-muted-text)]">Translation</div>
-          <div className="mt-2 whitespace-pre-wrap">{letter.translation}</div>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -3199,8 +3178,8 @@ export default function EuropeNetworkMapApp() {
   const [hoveredNodeId, setHoveredNodeId] = useState('');
   const [hoverCard, setHoverCard] = useState(null);
 
-  const openInspectorPersonDetail = (name) => {
-    if (!name) return;
+  const openInspectorPersonDetail = (name, entityId = '') => {
+    if (!name && !entityId) return;
     if (selectedSelection) {
       setInspectorHistory((prev) => [...prev, selectedSelection]);
     }
@@ -3208,7 +3187,7 @@ export default function EuropeNetworkMapApp() {
     setInspectorPresentationMode(INSPECTOR_PRESENTATION_MODES.WORKSPACE);
     setIsSidePanelOpen(false);
     setActivePanelTab('inspector');
-    setSelectedSelection({ kind: 'person-detail', name });
+    setSelectedSelection({ kind: 'person-detail', name, entityId: String(entityId || '').trim() });
     setShowAllLinkedLetters(false);
   };
 
@@ -3428,6 +3407,14 @@ export default function EuropeNetworkMapApp() {
     const map = new Map();
     normalizedPersonMetadata.forEach((row) => {
       if (!map.has(row.person)) map.set(row.person, row);
+    });
+    return map;
+  }, [normalizedPersonMetadata]);
+  const personMetadataById = useMemo(() => {
+    const map = new Map();
+    normalizedPersonMetadata.forEach((row) => {
+      const entityId = String(row?.canonicalEntityId || row?.id || '').trim();
+      if (entityId && !map.has(entityId)) map.set(entityId, row);
     });
     return map;
   }, [normalizedPersonMetadata]);
@@ -3766,13 +3753,14 @@ export default function EuropeNetworkMapApp() {
 
     return resolveSelection(selectedSelection, graph, personMetadataByName, {
       personGraphFallback: personGraph,
+      personMetadataById,
     });
-  }, [selectedSelection, graph, personMetadataByName, personGraph]);
+  }, [selectedSelection, graph, personMetadataByName, personMetadataById, personGraph]);
 
   const selectedLetterMetadata = useMemo(() => {
     if (selectedProps?.__kind === 'letter-detail') return [];
-    return sortLinkedRecordsChronologically(enrichSelectedLetters(selectedProps, personMetadataByName));
-  }, [selectedProps, personMetadataByName]);
+    return sortLinkedRecordsChronologically(enrichSelectedLetters(selectedProps, personMetadataByName, personMetadataById));
+  }, [selectedProps, personMetadataByName, personMetadataById]);
 
   const linkedLettersToShow = showAllLinkedLetters ? selectedLetterMetadata : selectedLetterMetadata.slice(0, 10);
 

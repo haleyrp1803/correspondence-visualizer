@@ -44,6 +44,8 @@ function normalizeDirection(value, fallback = UNDIRECTED) {
 function semanticRelationshipKey({
   source,
   target,
+  sourceId,
+  targetId,
   direction,
   relationshipType,
   relationshipLabel,
@@ -53,8 +55,8 @@ function semanticRelationshipKey({
 }) {
   if (relationshipIdentity) return `relationship:${relationshipIdentity}`;
   return [
-    asText(source),
-    asText(target),
+    asText(sourceId) || asText(source),
+    asText(targetId) || asText(target),
     normalizeDirection(direction),
     asText(relationshipType),
     asText(relationshipLabel),
@@ -63,12 +65,13 @@ function semanticRelationshipKey({
   ].join('::');
 }
 
-function addLocation(locations, person, label, latitude, longitude, role = '', sourceRow = null) {
+function addLocation(locations, person, label, latitude, longitude, role = '', sourceRow = null, personId = '') {
   const personLabel = asText(person);
   const placeLabel = asText(label);
   if (!personLabel || !validCoordinatePair(latitude, longitude)) return;
   locations.push({
     person: personLabel,
+    personId: asText(personId),
     label: placeLabel,
     latitude: Number(latitude),
     longitude: Number(longitude),
@@ -93,6 +96,8 @@ function generalizedRelationshipsFromRow(row, rowIndex) {
   return participants.slice(1).map((participant, index) => ({
     source: asText(focal.value),
     target: asText(participant.value),
+    sourceId: asText(focal.entityId || focal.canonicalEntityId || focal.id),
+    targetId: asText(participant.entityId || participant.canonicalEntityId || participant.id),
     direction,
     relationshipType,
     relationshipLabel,
@@ -116,6 +121,8 @@ function canonicalRelationshipFromRow(row, rowIndex) {
   return {
     source,
     target,
+    sourceId: asText(row.sourceEntityId || canonical.participantAId),
+    targetId: asText(row.targetEntityId || canonical.participantBId),
     direction: normalizeDirection(canonical.direction || row.relationshipDirection, UNDIRECTED),
     relationshipType: asText(canonical.relationshipType || row.relationshipType || row.relationship),
     relationshipLabel: asText(canonical.label),
@@ -135,6 +142,8 @@ function legacyRelationshipFromRow(row, rowIndex) {
   return {
     source,
     target,
+    sourceId: asText(row.sourceEntityId),
+    targetId: asText(row.targetEntityId),
     direction: normalizeDirection(row.relationshipDirection, DIRECTED),
     relationshipType: asText(row.relationshipType || row.relationship),
     relationshipLabel: '',
@@ -165,6 +174,7 @@ function locationsFromRow(row) {
         place.longitude,
         place.role,
         row,
+        participant.entityId || participant.canonicalEntityId || participant.id || '',
       );
     });
     return locations;
@@ -180,12 +190,13 @@ function locationsFromRow(row) {
       row.sourceLon,
       row.eventType,
       row,
+      row.entityId || row.personEntityId || row.sourceEntityId || '',
     );
     return locations;
   }
 
-  addLocation(locations, row?.sourcePerson, row?.sourceLoc, row?.sourceLat, row?.sourceLon, row?.sourceRole, row);
-  addLocation(locations, row?.targetPerson, row?.targetLoc, row?.targetLat, row?.targetLon, row?.targetRole, row);
+  addLocation(locations, row?.sourcePerson, row?.sourceLoc, row?.sourceLat, row?.sourceLon, row?.sourceRole, row, row?.sourceEntityId);
+  addLocation(locations, row?.targetPerson, row?.targetLoc, row?.targetLat, row?.targetLon, row?.targetRole, row, row?.targetEntityId);
   return locations;
 }
 
@@ -228,6 +239,8 @@ export function derivePeridotEntityNetworkSemantics(rows = [], options = {}) {
           id: `entity-edge:${key}`,
           source: draft.source,
           target: draft.target,
+          sourceId: draft.sourceId || '',
+          targetId: draft.targetId || '',
           direction: draft.direction,
           relationshipType: draft.relationshipType,
           relationshipLabel: draft.relationshipLabel,
@@ -284,24 +297,44 @@ export function getPeridotRowEntityRelationships(row = {}) {
   return legacy ? [legacy] : [];
 }
 
-export function getPeridotRowEntityParticipants(row = {}) {
-  const participants = new Set();
+export function getPeridotRowEntityParticipantEntries(row = {}) {
+  const participants = new Map();
+  const addParticipant = (label, id = '', role = '') => {
+    const normalizedLabel = asText(label);
+    const normalizedId = asText(id);
+    if (!normalizedLabel && !normalizedId) return;
+    const key = normalizedId ? `id:${normalizedId}` : `label:${normalizedLabel}`;
+    if (!participants.has(key)) {
+      participants.set(key, {
+        id: normalizedId,
+        label: normalizedLabel || normalizedId,
+        role: asText(role),
+      });
+    }
+  };
+
   getPeridotRowEntityRelationships(row).forEach((relationship) => {
-    if (relationship.source) participants.add(relationship.source);
-    if (relationship.target) participants.add(relationship.target);
+    addParticipant(relationship.source, relationship.sourceId, relationship.sourceRole);
+    addParticipant(relationship.target, relationship.targetId, relationship.targetRole);
   });
 
   // A row may carry a person/entity without asserting an edge (for example a
-  // genealogy event). Preserve it for entity indexes without inventing a
-  // relationship.
+  // genealogy event). Preserve its canonical identity when available without
+  // inventing a relationship.
   if (!participants.size) {
-    [row?.person, row?.entity, row?.sourcePerson, row?.targetPerson]
-      .map(asText)
-      .filter(Boolean)
-      .forEach((value) => participants.add(value));
+    addParticipant(
+      row?.person || row?.entity || row?.sourcePerson,
+      row?.personEntityId || row?.entityId || row?.sourceEntityId,
+      row?.eventType || row?.sourceRole,
+    );
+    addParticipant(row?.targetPerson, row?.targetEntityId, row?.targetRole);
   }
 
-  return Array.from(participants);
+  return Array.from(participants.values());
+}
+
+export function getPeridotRowEntityParticipants(row = {}) {
+  return getPeridotRowEntityParticipantEntries(row).map((participant) => participant.label);
 }
 
 export function formatPeridotEntityRelationshipLabel(relationship = {}) {

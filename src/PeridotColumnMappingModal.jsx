@@ -73,6 +73,10 @@ import {
   WorkbookTemporalMappingTable,
 } from './PeridotMappingFieldControls.jsx';
 import {
+  IdentityMappingPanel,
+  WorkbookIdentityMappingPanel,
+} from './PeridotIdentityMappingControls.jsx';
+import {
   GenealogyAttributesStep,
   GenealogyIdentityStep,
   GenealogyLifeEventsStep,
@@ -859,6 +863,30 @@ function formatSingleRole(part = {}) {
   return part?.participantColumn ? 'role from column heading' : 'role unassigned';
 }
 
+function formatIdentityStrategy(strategy = '') {
+  if (strategy === 'field') return 'One ID field';
+  if (strategy === 'composite') return 'Several fields together';
+  if (strategy === 'row') return 'Each row is distinct';
+  if (strategy === 'workbook-key') return 'Primary workbook ID';
+  return 'Displayed label';
+}
+
+function formatSingleIdentityComponents(identity = {}) {
+  if (identity?.strategy === 'row' || identity?.strategy === 'label') return '';
+  return (identity?.components || [])
+    .filter((component) => component?.column)
+    .map((component) => `${component?.key || 'Field'}: ${component.column}`)
+    .join(' · ');
+}
+
+function formatWorkbookIdentityComponents(identity = {}) {
+  if (identity?.strategy === 'row' || identity?.strategy === 'label' || identity?.strategy === 'workbook-key') return '';
+  return (identity?.components || [])
+    .filter((component) => workbookRefLabel(component?.ref))
+    .map((component) => `${component?.key || 'Field'}: ${workbookRefLabel(component.ref)}`)
+    .join(' · ');
+}
+
 function temporalMappingSourceSummary(mapping = {}, workbook = false) {
   const fmt = (value) => workbook ? workbookRefLabel(value) : String(value || '').trim();
   const parts = (prefix = '') => [
@@ -895,6 +923,7 @@ function SingleTableReviewAssignments({
   placeParts = [],
   relationshipParts = [],
   relationshipMetadataMapping = {},
+  identityMapping = {},
   customFieldSelections = [],
 }) {
   const structuralColumns = getSingleTableStructuralColumnsForReview({
@@ -913,6 +942,37 @@ function SingleTableReviewAssignments({
       <ReviewAssignmentIntro />
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <ReviewAssignmentSection title="Identity">
+          <ReviewAssignmentLine
+            label="Records"
+            value={formatIdentityStrategy(identityMapping?.record?.strategy || 'row')}
+            detail={(identityMapping?.record?.columns || []).filter(Boolean).join(' + ')}
+          />
+          {Array.isArray(identityMapping?.entityGroups) && identityMapping.entityGroups.length
+            ? identityMapping.entityGroups.map((group, index) => (
+                <ReviewAssignmentLine
+                  key={group.id || `review-identity-group-${index}`}
+                  label={group.label || `Tracked group ${index + 1}`}
+                  value={formatIdentityStrategy(group.strategy || 'label')}
+                  detail={[
+                    ...(group.keys || []).filter(Boolean),
+                    `${(group.appearanceIds || []).length} mapped appearance${(group.appearanceIds || []).length === 1 ? '' : 's'}`,
+                  ].filter(Boolean).join(' · ')}
+                />
+              ))
+            : assignedRelationships.map((part, index) => {
+                const identity = identityMapping?.participants?.[index] || { strategy: 'label', components: [] };
+                return (
+                  <ReviewAssignmentLine
+                    key={`review-identity-${index}`}
+                    label={`Part ${String.fromCharCode(65 + index)}`}
+                    value={formatIdentityStrategy(identity.strategy || 'label')}
+                    detail={formatSingleIdentityComponents(identity)}
+                  />
+                );
+              })}
+        </ReviewAssignmentSection>
+
         <ReviewAssignmentSection title="Time">
           {(temporalAssertionsMapping || []).filter((mapping) => temporalMappingSourceSummary(mapping)).length
             ? (temporalAssertionsMapping || []).filter((mapping) => temporalMappingSourceSummary(mapping)).map((mapping, index) => <ReviewAssignmentLine key={mapping.id || index} label={mapping.role || `Time ${index + 1}`} value={temporalMappingSourceSummary(mapping)} detail={`${mapping.kind === 'period' ? 'Period / range' : 'Date'} · ${singleTemporalSubjectDetail(mapping, relationshipParts)}`} />)
@@ -1066,6 +1126,39 @@ function WorkbookReviewAssignments({ workbookMapping = {} }) {
       <ReviewAssignmentIntro />
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <ReviewAssignmentSection title="Identity">
+          <ReviewAssignmentLine
+            label="Records"
+            value={formatIdentityStrategy(workbookMapping?.identityMapping?.record?.strategy || (workbookMapping?.primaryLetterIdColumn ? 'workbook-key' : 'row'))}
+            detail={workbookMapping?.identityMapping?.record?.strategy === 'field' || workbookMapping?.identityMapping?.record?.strategy === 'composite'
+              ? (workbookMapping?.identityMapping?.record?.refs || []).map(workbookRefLabel).filter(Boolean).join(' + ')
+              : (workbookMapping?.primaryLetterIdColumn ? `${workbookMapping.primarySheetName} — ${workbookMapping.primaryLetterIdColumn}` : '')}
+          />
+          {Array.isArray(workbookMapping?.identityMapping?.entityGroups) && workbookMapping.identityMapping.entityGroups.length
+            ? workbookMapping.identityMapping.entityGroups.map((group, index) => (
+                <ReviewAssignmentLine
+                  key={group.id || `workbook-review-identity-group-${index}`}
+                  label={group.label || `Tracked group ${index + 1}`}
+                  value={formatIdentityStrategy(group.strategy || 'label')}
+                  detail={[
+                    ...(group.keys || []).filter(Boolean),
+                    `${(group.appearanceIds || []).length} mapped appearance${(group.appearanceIds || []).length === 1 ? '' : 's'}`,
+                  ].filter(Boolean).join(' · ')}
+                />
+              ))
+            : assignedRelationships.map((part, index) => {
+                const identity = workbookMapping?.identityMapping?.participants?.[index] || { strategy: 'label', components: [] };
+                return (
+                  <ReviewAssignmentLine
+                    key={`workbook-review-identity-${index}`}
+                    label={`Part ${String.fromCharCode(65 + index)}`}
+                    value={formatIdentityStrategy(identity.strategy || 'label')}
+                    detail={formatWorkbookIdentityComponents(identity)}
+                  />
+                );
+              })}
+        </ReviewAssignmentSection>
+
         <ReviewAssignmentSection title="Time">
           {(workbookMapping.temporalAssertionMappings || []).filter((mapping) => temporalMappingSourceSummary(mapping, true)).length
             ? (workbookMapping.temporalAssertionMappings || []).filter((mapping) => temporalMappingSourceSummary(mapping, true)).map((mapping, index) => <ReviewAssignmentLine key={mapping.id || index} label={mapping.role || `Time ${index + 1}`} value={temporalMappingSourceSummary(mapping, true)} detail={`${mapping.kind === 'period' ? 'Period / range' : 'Date'} · ${workbookTemporalSubjectDetail(mapping, workbookMapping.relationshipParts || [])}`} />)
@@ -1259,6 +1352,7 @@ function ReviewStep({
   placeParts,
   relationshipParts,
   relationshipMetadataMapping,
+  identityMapping,
   customFieldSelections,
   temporalReviewSummary,
 }) {
@@ -1281,6 +1375,7 @@ function ReviewStep({
         placeParts={placeParts}
         relationshipParts={relationshipParts}
         relationshipMetadataMapping={relationshipMetadataMapping}
+        identityMapping={identityMapping}
         customFieldSelections={customFieldSelections}
       />
 
@@ -2051,12 +2146,14 @@ export function PeridotColumnMappingModal({
   const [routeCoordinatePairMapping, setRouteCoordinatePairMapping] = useState(mappingState.routeCoordinatePairMapping || {});
   const [placeParts, setPlaceParts] = useState(() => buildInitialPlaceParts(mappingState));
   const [relationshipParts, setRelationshipParts] = useState(() => buildInitialRelationshipParts(mappingState));
+  const [identityMapping, setIdentityMapping] = useState(mappingState.identityMapping || { record: { strategy: 'row', columns: [] }, participants: [] });
   const [relationshipMetadataMapping, setRelationshipMetadataMapping] = useState(normalizeRelationshipMetadataMapping(mappingState.relationshipMetadataMapping || {}));
   const [customFieldSelections, setCustomFieldSelections] = useState(mappingState.customFieldSelections || []);
   const [workbookMapping, setWorkbookMapping] = useState(() => ({
     ...stripWorkbookDisplayDateMapping(mappingState),
     placeParts: buildInitialWorkbookPlaceParts(mappingState),
     relationshipParts: buildInitialWorkbookRelationshipParts(mappingState),
+    identityMapping: mappingState.identityMapping || { record: {}, participants: [] },
     temporalAssertionMappings: buildInitialWorkbookTemporalAssertions(mappingState),
   }));
   const [genealogyFieldMapping, setGenealogyFieldMapping] = useState(
@@ -2088,6 +2185,7 @@ export function PeridotColumnMappingModal({
     setTemporalAssertionsMapping(normalizeTemporalAssertionMappings(mappingState.temporalAssertionMappings?.length ? mappingState.temporalAssertionMappings : buildTemporalAssertionMappingsFromLegacy(stripDisplayDateMapping(mappingState.temporalMapping || {}), mappingState.temporalNoteMappings || {})));
     setPlaceParts(buildInitialPlaceParts(mappingState));
     setRelationshipParts(buildInitialRelationshipParts(mappingState));
+    setIdentityMapping(mappingState.identityMapping || { record: { strategy: 'row', columns: [] }, participants: [] });
     setRelationshipMetadataMapping(normalizeRelationshipMetadataMapping(mappingState.relationshipMetadataMapping || {}));
     setCustomFieldSelections(mappingState.customFieldSelections || []);
     setGenealogyFieldMapping(
@@ -2102,6 +2200,7 @@ export function PeridotColumnMappingModal({
             ...stripWorkbookDisplayDateMapping(mappingState || {}),
             placeParts: buildInitialWorkbookPlaceParts(mappingState || {}),
             relationshipParts: buildInitialWorkbookRelationshipParts(mappingState || {}),
+            identityMapping: mappingState.identityMapping || { record: {}, participants: [] },
             temporalAssertionMappings: buildInitialWorkbookTemporalAssertions(mappingState || {}),
             relationshipMetadataMappings: normalizeWorkbookRelationshipMetadataMappings(mappingState.relationshipMetadataMappings || {}),
             customFieldSelections: applyWorkbookRelationshipMetadataSelections(
@@ -2113,7 +2212,7 @@ export function PeridotColumnMappingModal({
               normalizeWorkbookRelationshipMetadataMappings(mappingState.relationshipMetadataMappings || {})
             ),
           }
-        : { ...stripWorkbookDisplayDateMapping(mappingState || {}), placeParts: buildInitialWorkbookPlaceParts(mappingState || {}), temporalAssertionMappings: buildInitialWorkbookTemporalAssertions(mappingState || {}) }
+        : { ...stripWorkbookDisplayDateMapping(mappingState || {}), placeParts: buildInitialWorkbookPlaceParts(mappingState || {}), relationshipParts: buildInitialWorkbookRelationshipParts(mappingState || {}), identityMapping: mappingState.identityMapping || { record: {}, participants: [] }, temporalAssertionMappings: buildInitialWorkbookTemporalAssertions(mappingState || {}) }
     );
     setShowCancelConfirmation(false);
   }, [open, staging?.stagedAt]);
@@ -2284,6 +2383,7 @@ export function PeridotColumnMappingModal({
   const singleStepLabels = {
     preview: 'Preview',
     relationships: 'Relations',
+    identity: 'Identity',
     time: 'Time',
     places: 'Places',
     evidence: 'Evidence',
@@ -2294,6 +2394,7 @@ export function PeridotColumnMappingModal({
     'workbook-preview': 'Preview',
     'workbook-setup': 'Sheets',
     'workbook-relationships': 'Relations',
+    'workbook-identity': 'Identity',
     'workbook-time': 'Time',
     'workbook-places': 'Places',
     'workbook-evidence': 'Evidence',
@@ -2834,6 +2935,7 @@ export function PeridotColumnMappingModal({
       tableOrientation,
       placeParts,
       relationshipParts,
+      identityMapping,
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
       temporalNoteMappings,
@@ -2950,14 +3052,6 @@ export function PeridotColumnMappingModal({
             </div>
           ) : null}
 
-          {!isWorkbookMode && stepForRender === 'identify' ? (
-            <IdentifyRecordsStep
-              staging={staging}
-              previewRows={previewRows}
-              headers={headers}
-            />
-          ) : null}
-
           {!isWorkbookMode && stepForRender === 'time' ? (
             <TimeMappingStep
               headers={headers}
@@ -2989,6 +3083,16 @@ export function PeridotColumnMappingModal({
             />
           ) : null}
 
+          {!isWorkbookMode && stepForRender === 'identity' ? (
+            <IdentityMappingPanel
+              headers={headers}
+              relationshipParts={relationshipParts}
+              placeParts={placeParts}
+              identityMapping={identityMapping}
+              onChange={setIdentityMapping}
+            />
+          ) : null}
+
           {!isWorkbookMode && stepForRender === 'evidence' ? (
             <InspectorFieldsStep
               selections={effectiveCustomSelections}
@@ -3014,6 +3118,7 @@ export function PeridotColumnMappingModal({
               placeParts={placeParts}
               relationshipParts={relationshipParts}
               relationshipMetadataMapping={relationshipMetadataMapping}
+              identityMapping={identityMapping}
               customFieldSelections={effectiveCustomSelections}
               temporalReviewSummary={temporalReviewSummary}
             />
@@ -3034,13 +3139,6 @@ export function PeridotColumnMappingModal({
               onJoinSheetChange={handleWorkbookJoinSheetChange}
               onJoinPrimaryColumnChange={handleWorkbookJoinPrimaryColumnChange}
               onJoinTargetColumnChange={handleWorkbookJoinTargetColumnChange}
-            />
-          ) : null}
-
-          {isWorkbookMode && stepForRender === 'workbook-identify' ? (
-            <WorkbookIdentifyRecordsStep
-              workbookModel={workbookModel}
-              workbookMapping={workbookMapping}
             />
           ) : null}
 
@@ -3067,6 +3165,15 @@ export function PeridotColumnMappingModal({
               workbookMapping={workbookMapping}
               onRelationshipPartsChange={handleWorkbookRelationshipPartsChange}
               onMetadataChange={handleWorkbookRelationshipMetadataMappingChange}
+            />
+          ) : null}
+
+          {isWorkbookMode && stepForRender === 'workbook-identity' ? (
+            <WorkbookIdentityMappingPanel
+              workbookModel={workbookModel}
+              workbookMapping={workbookMapping}
+              identityMapping={workbookMapping.identityMapping || { record: {}, participants: [] }}
+              onChange={(nextIdentityMapping) => setWorkbookMapping((current) => ({ ...current, identityMapping: nextIdentityMapping }))}
             />
           ) : null}
 

@@ -78,7 +78,18 @@ export function runPeridotGenealogyRuntimeSelfAudit() {
     (row) => row.recordType === 'genealogy-event'
   );
 
+  const firstRelationshipRow = relationshipRows[0] || {};
+  const firstEventRow = eventRows[0] || {};
+
   const checks = Object.freeze({
+    relationshipIdentityPreserved:
+      Boolean(firstRelationshipRow.sourceEntityId)
+      && Boolean(firstRelationshipRow.targetEntityId)
+      && firstRelationshipRow.sourceEntityId === firstRelationshipRow.originalCanonicalItem?.participantAId
+      && firstRelationshipRow.targetEntityId === firstRelationshipRow.originalCanonicalItem?.participantBId,
+    eventIdentityPreserved:
+      Boolean(firstEventRow.entityId)
+      && firstEventRow.entityId === firstEventRow.originalCanonicalItem?.participantIds?.[0],
     canonicalDatasetActivated: runtime.canonicalDataset?.mappingProfile?.id === 'peridot.genealogy-person-centered',
     canonicalValidationPassed: runtime.canonicalDataset?.validation?.valid === true
       && runtime.canonicalDataset?.validation?.canCommit === true,

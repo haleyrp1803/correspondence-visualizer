@@ -138,17 +138,27 @@ function buildDateBounds(incidentEdges) {
   return { earliestDate: '', latestDate: '' };
 }
 
-function buildCounterpartDetailsFromEdges(label, incidentEdges) {
+function buildCounterpartDetailsFromEdges(label, incidentEdges, entityId = '') {
   const counterpartMap = new Map();
+  const normalizedEntityId = String(entityId || '').trim();
+
   incidentEdges.forEach((edge) => {
-    const counterpartLabel = edge.sourceLabel === label ? edge.targetLabel : edge.sourceLabel;
+    const selectedIsSource = normalizedEntityId
+      ? (edge.sourceNodeId === normalizedEntityId || edge.sourceEntityId === normalizedEntityId)
+      : edge.sourceLabel === label;
+    const counterpartLabel = selectedIsSource ? edge.targetLabel : edge.sourceLabel;
+    const counterpartEntityId = selectedIsSource
+      ? (edge.targetEntityId || edge.targetNodeId || '')
+      : (edge.sourceEntityId || edge.sourceNodeId || '');
     if (!counterpartLabel) return;
-    const existing = counterpartMap.get(counterpartLabel) || {
+    const key = counterpartEntityId || counterpartLabel;
+    const existing = counterpartMap.get(key) || {
       label: counterpartLabel,
+      entityId: counterpartEntityId,
       count: 0,
     };
     existing.count += edge.count || 0;
-    counterpartMap.set(counterpartLabel, existing);
+    counterpartMap.set(key, existing);
   });
 
   return Array.from(counterpartMap.values()).sort((a, b) => {
@@ -157,8 +167,8 @@ function buildCounterpartDetailsFromEdges(label, incidentEdges) {
   });
 }
 
-function buildCounterpartLabelsFromEdges(label, incidentEdges) {
-  return buildCounterpartDetailsFromEdges(label, incidentEdges).map((item) => item.label);
+function buildCounterpartLabelsFromEdges(label, incidentEdges, entityId = '') {
+  return buildCounterpartDetailsFromEdges(label, incidentEdges, entityId).map((item) => item.label);
 }
 
 function buildTopPlacesFromLetters(linkedLetters) {
@@ -173,10 +183,16 @@ function buildTopPlacesFromLetters(linkedLetters) {
     .slice(0, 12);
 }
 
-function buildPlaceDetailsForPerson(linkedLetters, personLabel, mode) {
+function buildPlaceDetailsForPerson(linkedLetters, personLabel, mode, entityId = '') {
   const placeMap = new Map();
   linkedLetters.forEach((letter) => {
-    const matchesMode = mode === 'sent' ? getLetterSourcePerson(letter) === personLabel : getLetterTargetPerson(letter) === personLabel;
+    const normalizedEntityId = String(entityId || '').trim();
+    const sourceEntityId = getLetterSourceEntityId(letter);
+    const targetEntityId = getLetterTargetEntityId(letter);
+    const hasCanonicalIds = Boolean(sourceEntityId || targetEntityId);
+    const matchesMode = normalizedEntityId && hasCanonicalIds
+      ? (mode === 'sent' ? sourceEntityId === normalizedEntityId : targetEntityId === normalizedEntityId)
+      : (mode === 'sent' ? getLetterSourcePerson(letter) === personLabel : getLetterTargetPerson(letter) === personLabel);
     if (!matchesMode) return;
     const placeLabel = normalizePlaceLabel(letter.targetLoc);
     const existing = placeMap.get(placeLabel) || {
@@ -276,6 +292,20 @@ function getLetterTargetPerson(letter) {
   return letter?.targetPerson || letter?.target || '';
 }
 
+function getLetterSourceEntityId(letter) {
+  return String(letter?.sourceEntityId || '').trim();
+}
+
+function getLetterTargetEntityId(letter) {
+  return String(letter?.targetEntityId || '').trim();
+}
+
+function getPersonMetadata(personMetadataByName, personMetadataById, entityId, label) {
+  const normalizedId = String(entityId || '').trim();
+  if (normalizedId && personMetadataById?.has(normalizedId)) return personMetadataById.get(normalizedId);
+  return personMetadataByName?.get(label) || null;
+}
+
 function normalizePlaceLabel(value) {
   const normalized = String(value ?? '').trim();
   return normalized || 'Unknown';
@@ -285,26 +315,45 @@ function placeMatchesLabel(value, placeLabel) {
   return normalizePlaceLabel(value).toLowerCase() === String(placeLabel ?? '').trim().toLowerCase();
 }
 
-function letterMatchesPerson(letter, personLabel) {
+function letterMatchesPerson(letter, personLabel, entityId = '') {
+  const normalizedEntityId = String(entityId || '').trim();
+  const sourceEntityId = getLetterSourceEntityId(letter);
+  const targetEntityId = getLetterTargetEntityId(letter);
+  if (normalizedEntityId && (sourceEntityId || targetEntityId)) {
+    return sourceEntityId === normalizedEntityId || targetEntityId === normalizedEntityId;
+  }
   return getLetterSourcePerson(letter) === personLabel || getLetterTargetPerson(letter) === personLabel;
 }
 
-function buildPersonCounterpartDetailsFromLetters(personLabel, linkedLetters = []) {
+function buildPersonCounterpartDetailsFromLetters(personLabel, linkedLetters = [], entityId = '') {
   const counterpartMap = new Map();
+  const normalizedEntityId = String(entityId || '').trim();
 
   linkedLetters.forEach((letter) => {
     const sourcePerson = getLetterSourcePerson(letter);
     const targetPerson = getLetterTargetPerson(letter);
-    const counterpartLabel = sourcePerson === personLabel ? targetPerson : targetPerson === personLabel ? sourcePerson : '';
+    const sourceEntityId = getLetterSourceEntityId(letter);
+    const targetEntityId = getLetterTargetEntityId(letter);
+    const hasCanonicalIds = Boolean(sourceEntityId || targetEntityId);
+    const selectedIsSource = normalizedEntityId && hasCanonicalIds
+      ? sourceEntityId === normalizedEntityId
+      : sourcePerson === personLabel;
+    const selectedIsTarget = normalizedEntityId && hasCanonicalIds
+      ? targetEntityId === normalizedEntityId
+      : targetPerson === personLabel;
+    const counterpartLabel = selectedIsSource ? targetPerson : selectedIsTarget ? sourcePerson : '';
+    const counterpartEntityId = selectedIsSource ? targetEntityId : selectedIsTarget ? sourceEntityId : '';
 
     if (!counterpartLabel) return;
 
-    const existing = counterpartMap.get(counterpartLabel) || {
+    const key = counterpartEntityId || counterpartLabel;
+    const existing = counterpartMap.get(key) || {
       label: counterpartLabel,
+      entityId: counterpartEntityId,
       count: 0,
     };
     existing.count += 1;
-    counterpartMap.set(counterpartLabel, existing);
+    counterpartMap.set(key, existing);
   });
 
   return Array.from(counterpartMap.values()).sort((a, b) => {
@@ -313,15 +362,16 @@ function buildPersonCounterpartDetailsFromLetters(personLabel, linkedLetters = [
   });
 }
 
-function buildPersonDetailSelectionFromLetters(name, linkedLetters = [], personMetadataByName) {
-  const personLetters = linkedLetters.filter((letter) => letterMatchesPerson(letter, name));
+function buildPersonDetailSelectionFromLetters(name, linkedLetters = [], personMetadataByName, personMetadataById, entityId = '') {
+  const personLetters = linkedLetters.filter((letter) => letterMatchesPerson(letter, name, entityId));
   if (!personLetters.length) return null;
 
   const { earliestDate, latestDate } = buildDateBoundsFromLetters(personLetters);
-  const counterpartDetails = buildPersonCounterpartDetailsFromLetters(name, personLetters);
+  const counterpartDetails = buildPersonCounterpartDetailsFromLetters(name, personLetters, entityId);
 
   return {
-    id: `person-detail:${name}`,
+    id: `person-detail:${entityId || name}`,
+    entityId: String(entityId || '').trim(),
     label: name,
     degree: personLetters.length,
     radius: 6,
@@ -334,25 +384,29 @@ function buildPersonDetailSelectionFromLetters(name, linkedLetters = [], personM
     earliestDate,
     latestDate,
     anchorLabel: '',
-    personMetadata: personMetadataByName.get(name) || null,
+    personMetadata: getPersonMetadata(personMetadataByName, personMetadataById, entityId, name),
     detailLabel: name,
     detailPlaces: buildTopPlacesFromLetters(personLetters),
-    sentPlaceDetails: buildPlaceDetailsForPerson(personLetters, name, 'sent'),
-    sentPlaceLabels: buildPlaceDetailsForPerson(personLetters, name, 'sent').map((item) => `${item.label} (${item.count})`),
-    receivedPlaceDetails: buildPlaceDetailsForPerson(personLetters, name, 'received'),
-    receivedPlaceLabels: buildPlaceDetailsForPerson(personLetters, name, 'received').map((item) => `${item.label} (${item.count})`),
+    sentPlaceDetails: buildPlaceDetailsForPerson(personLetters, name, 'sent', entityId),
+    sentPlaceLabels: buildPlaceDetailsForPerson(personLetters, name, 'sent', entityId).map((item) => `${item.label} (${item.count})`),
+    receivedPlaceDetails: buildPlaceDetailsForPerson(personLetters, name, 'received', entityId),
+    receivedPlaceLabels: buildPlaceDetailsForPerson(personLetters, name, 'received', entityId).map((item) => `${item.label} (${item.count})`),
   };
 }
 
 
-export function buildNodeSelection(node, graph, personMetadataByName) {
-  const incidentEdges = graph.edges.filter(
-    (edge) => edge.sourceLabel === node.label || edge.targetLabel === node.label,
-  );
+export function buildNodeSelection(node, graph, personMetadataByName, personMetadataById = null) {
+  const incidentEdges = graph.edges.filter((edge) => {
+    if (node.entityId || edge.sourceNodeId || edge.targetNodeId) {
+      return edge.sourceNodeId === node.id || edge.targetNodeId === node.id
+        || edge.sourceEntityId === node.entityId || edge.targetEntityId === node.entityId;
+    }
+    return edge.sourceLabel === node.label || edge.targetLabel === node.label;
+  });
   const linkedLetters = buildLinkedLettersFromIncidentEdges(incidentEdges);
   const { earliestDate, latestDate } = buildDateBounds(incidentEdges);
-  const matchedPersonMetadata = personMetadataByName.get(node.label) || null;
-  const counterpartDetails = buildCounterpartDetailsFromEdges(node.label, incidentEdges);
+  const matchedPersonMetadata = getPersonMetadata(personMetadataByName, personMetadataById, node.entityId, node.label);
+  const counterpartDetails = buildCounterpartDetailsFromEdges(node.label, incidentEdges, node.entityId);
 
   return {
     ...node,
@@ -366,46 +420,56 @@ export function buildNodeSelection(node, graph, personMetadataByName) {
     latestDate,
     anchorLabel: node.anchorLabel || '',
     personMetadata: matchedPersonMetadata,
-    sentPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, node.label, 'sent'),
-    sentPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, node.label, 'sent').map((item) => `${item.label} (${item.count})`),
-    receivedPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, node.label, 'received'),
-    receivedPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, node.label, 'received').map((item) => `${item.label} (${item.count})`),
+    sentPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, node.label, 'sent', node.entityId),
+    sentPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, node.label, 'sent', node.entityId).map((item) => `${item.label} (${item.count})`),
+    receivedPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, node.label, 'received', node.entityId),
+    receivedPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, node.label, 'received', node.entityId).map((item) => `${item.label} (${item.count})`),
   };
 }
 
-export function buildPersonDetailSelection(name, graph, personMetadataByName) {
-  const directNode = graph.nodes.find((item) => item.label === name && !item.isCluster);
+export function buildPersonDetailSelection(name, graph, personMetadataByName, options = {}) {
+  const entityId = String(options.entityId || '').trim();
+  const personMetadataById = options.personMetadataById || null;
+  const directNode = graph.nodes.find((item) => (
+    !item.isCluster && (entityId ? (item.entityId === entityId || item.id === entityId) : item.label === name)
+  ));
   if (directNode) {
-    const nodeSelection = buildNodeSelection(directNode, graph, personMetadataByName);
+    const nodeSelection = buildNodeSelection(directNode, graph, personMetadataByName, personMetadataById);
     return {
       ...nodeSelection,
       __kind: 'person-detail',
-      detailLabel: name,
+      detailLabel: directNode.label || name,
       detailPlaces: buildTopPlacesFromLetters(nodeSelection.linkedLetters || []),
-      sentPlaceDetails: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], name, 'sent'),
-      sentPlaceLabels: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], name, 'sent').map((item) => `${item.label} (${item.count})`),
-      receivedPlaceDetails: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], name, 'received'),
-      receivedPlaceLabels: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], name, 'received').map((item) => `${item.label} (${item.count})`),
+      sentPlaceDetails: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], directNode.label || name, 'sent', entityId || directNode.entityId),
+      sentPlaceLabels: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], directNode.label || name, 'sent', entityId || directNode.entityId).map((item) => `${item.label} (${item.count})`),
+      receivedPlaceDetails: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], directNode.label || name, 'received', entityId || directNode.entityId),
+      receivedPlaceLabels: buildPlaceDetailsForPerson(nodeSelection.linkedLetters || [], directNode.label || name, 'received', entityId || directNode.entityId).map((item) => `${item.label} (${item.count})`),
     };
   }
 
-  const incidentEdges = graph.edges.filter(
-    (edge) => edge.sourceLabel === name || edge.targetLabel === name,
-  );
+  const incidentEdges = graph.edges.filter((edge) => (
+    entityId
+      ? edge.sourceEntityId === entityId || edge.targetEntityId === entityId
+        || edge.sourceNodeId === entityId || edge.targetNodeId === entityId
+      : edge.sourceLabel === name || edge.targetLabel === name
+  ));
   if (!incidentEdges.length) {
     return buildPersonDetailSelectionFromLetters(
       name,
       buildLinkedLettersFromGraphEdges(graph),
       personMetadataByName,
+      personMetadataById,
+      entityId,
     );
   }
 
   const linkedLetters = buildLinkedLettersFromIncidentEdges(incidentEdges);
   const { earliestDate, latestDate } = buildDateBounds(incidentEdges);
-  const counterpartDetails = buildCounterpartDetailsFromEdges(name, incidentEdges);
+  const counterpartDetails = buildCounterpartDetailsFromEdges(name, incidentEdges, entityId);
 
   return {
-    id: `person-detail:${name}`,
+    id: `person-detail:${entityId || name}`,
+    entityId,
     label: name,
     degree: incidentEdges.reduce((sum, edge) => sum + (edge.count || 0), 0),
     radius: 6,
@@ -418,13 +482,13 @@ export function buildPersonDetailSelection(name, graph, personMetadataByName) {
     earliestDate,
     latestDate,
     anchorLabel: '',
-    personMetadata: personMetadataByName.get(name) || null,
+    personMetadata: getPersonMetadata(personMetadataByName, personMetadataById, entityId, name),
     detailLabel: name,
     detailPlaces: buildTopPlacesFromLetters(linkedLetters),
-    sentPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, name, 'sent'),
-    sentPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, name, 'sent').map((item) => `${item.label} (${item.count})`),
-    receivedPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, name, 'received'),
-    receivedPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, name, 'received').map((item) => `${item.label} (${item.count})`),
+    sentPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, name, 'sent', entityId),
+    sentPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, name, 'sent', entityId).map((item) => `${item.label} (${item.count})`),
+    receivedPlaceDetails: buildPlaceDetailsForPerson(linkedLetters, name, 'received', entityId),
+    receivedPlaceLabels: buildPlaceDetailsForPerson(linkedLetters, name, 'received', entityId).map((item) => `${item.label} (${item.count})`),
   };
 }
 
@@ -502,16 +566,22 @@ export function resolveSelection(selectedSelection, graph, personMetadataByName,
 
   if (selectedSelection.kind === 'node') {
     const node = graph.nodes.find((item) => item.id === selectedSelection.id && !item.isCluster);
-    return node ? buildNodeSelection(node, graph, personMetadataByName) : null;
+    return node ? buildNodeSelection(node, graph, personMetadataByName, options.personMetadataById) : null;
   }
 
   if (selectedSelection.kind === 'person-detail') {
-    const currentGraphSelection = buildPersonDetailSelection(selectedSelection.name, graph, personMetadataByName);
+    const currentGraphSelection = buildPersonDetailSelection(selectedSelection.name, graph, personMetadataByName, {
+      entityId: selectedSelection.entityId,
+      personMetadataById: options.personMetadataById,
+    });
     if (currentGraphSelection) return currentGraphSelection;
 
     const fallbackGraph = options.personGraphFallback;
     if (fallbackGraph && fallbackGraph !== graph) {
-      return buildPersonDetailSelection(selectedSelection.name, fallbackGraph, personMetadataByName);
+      return buildPersonDetailSelection(selectedSelection.name, fallbackGraph, personMetadataByName, {
+        entityId: selectedSelection.entityId,
+        personMetadataById: options.personMetadataById,
+      });
     }
 
     return null;
@@ -524,7 +594,7 @@ export function resolveSelection(selectedSelection, graph, personMetadataByName,
   return null;
 }
 
-export function enrichSelectedLetters(selectedProps, personMetadataByName) {
+export function enrichSelectedLetters(selectedProps, personMetadataByName, personMetadataById = null) {
   if (!selectedProps) return [];
   const baseLetters = selectedProps.__kind === 'edge'
     ? selectedProps.letterMetadata || []
@@ -534,7 +604,17 @@ export function enrichSelectedLetters(selectedProps, personMetadataByName) {
 
   return baseLetters.map((letter) => ({
     ...letter,
-    sourcePersonMetadata: personMetadataByName.get(getLetterSourcePerson(letter)) || null,
-    targetPersonMetadata: personMetadataByName.get(getLetterTargetPerson(letter)) || null,
+    sourcePersonMetadata: getPersonMetadata(
+      personMetadataByName,
+      personMetadataById,
+      getLetterSourceEntityId(letter),
+      getLetterSourcePerson(letter),
+    ),
+    targetPersonMetadata: getPersonMetadata(
+      personMetadataByName,
+      personMetadataById,
+      getLetterTargetEntityId(letter),
+      getLetterTargetPerson(letter),
+    ),
   }));
 }

@@ -82,6 +82,7 @@ import {
   getSearchableEvidenceFieldEntries,
 } from './peridotSearchResultHelpers.js';
 import { getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels, rowHasPeridotEntityRelationship } from './peridotEntityNetwork.js';
+import { PeridotRecordStructure } from './PeridotRecordStructure.jsx';
 
 const SHELL_CLASS = 'peridot-search-folio-shell';
 const CARD_CLASS = 'peridot-search-tab-card';
@@ -1195,6 +1196,7 @@ function SearchResultCard({ result, onInspectSearchResult, isRouteCapable }) {
             Inspect
           </button>
         </div>
+        <PeridotRecordStructure row={result?.row || result} compact />
       </article>
     );
   }
@@ -1239,6 +1241,7 @@ function SearchResultCard({ result, onInspectSearchResult, isRouteCapable }) {
           Inspect
         </button>
       </div>
+        <PeridotRecordStructure row={result?.row || result} compact />
     </article>
   );
 }

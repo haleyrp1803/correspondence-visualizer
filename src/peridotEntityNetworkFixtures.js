@@ -1,4 +1,4 @@
-import { derivePeridotEntityNetworkSemantics, derivePeridotGeographicEntityNetworkSemantics, getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels, rowHasPeridotEntityRelationship } from './peridotEntityNetwork.js';
+import { derivePeridotEntityNetworkSemantics, derivePeridotGeographicEntityNetworkSemantics, getPeridotRowEntityParticipantEntries, getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels, rowHasPeridotEntityRelationship } from './peridotEntityNetwork.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -75,6 +75,54 @@ export function runPeridotEntityNetworkSelfAudit() {
 
   assert(genealogy.relationships.find((edge) => edge.relationshipType === 'parent-child')?.direction === 'directed', 'Canonical directed genealogy relationship should remain directed.');
   assert(genealogy.relationships.find((edge) => edge.relationshipType === 'partner')?.direction === 'undirected', 'Canonical partnership should remain undirected.');
+
+
+  const duplicateLabelCanonicalRows = [
+    {
+      sourcePerson: 'Anne von Habsburg',
+      targetPerson: 'Child A',
+      sourceEntityId: 'anne-1549',
+      targetEntityId: 'child-a',
+      originalCanonicalItem: {
+        id: 'rel-anne-1549-child-a',
+        participantAId: 'anne-1549',
+        participantBId: 'child-a',
+        relationshipType: 'parent-child',
+        direction: 'directed',
+        participantARole: 'mother',
+        participantBRole: 'child',
+      },
+    },
+    {
+      sourcePerson: 'Anne von Habsburg',
+      targetPerson: 'Child B',
+      sourceEntityId: 'anne-1573',
+      targetEntityId: 'child-b',
+      originalCanonicalItem: {
+        id: 'rel-anne-1573-child-b',
+        participantAId: 'anne-1573',
+        participantBId: 'child-b',
+        relationshipType: 'parent-child',
+        direction: 'directed',
+        participantARole: 'mother',
+        participantBRole: 'child',
+      },
+    },
+  ];
+  const duplicateLabelSemantics = derivePeridotEntityNetworkSemantics(duplicateLabelCanonicalRows);
+  assert(
+    duplicateLabelSemantics.relationships.some((edge) => edge.source === 'Anne von Habsburg' && edge.sourceId === 'anne-1549'),
+    'Canonical network semantics should preserve the first same-label entity ID.',
+  );
+  assert(
+    duplicateLabelSemantics.relationships.some((edge) => edge.source === 'Anne von Habsburg' && edge.sourceId === 'anne-1573'),
+    'Canonical network semantics should preserve the second same-label entity ID.',
+  );
+  const duplicateParticipantEntries = getPeridotRowEntityParticipantEntries(duplicateLabelCanonicalRows[0]);
+  assert(
+    duplicateParticipantEntries.some((participant) => participant.id === 'anne-1549' && participant.label === 'Anne von Habsburg'),
+    'Structured participant helper should keep canonical identity separate from display label.',
+  );
 
   const distinct = derivePeridotEntityNetworkSemantics([
     { sourcePerson: 'A', targetPerson: 'B', relationshipType: 'letter', relationshipDirection: 'directed' },

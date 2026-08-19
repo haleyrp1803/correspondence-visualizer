@@ -21,6 +21,9 @@
 
 import React, { useState } from 'react';
 import { getRowPrimaryTemporalDisplay, getRowTemporalSortBounds } from './timelinePlaybackHelpers.js';
+import { getPeridotRowEntityParticipantEntries } from './peridotEntityNetwork.js';
+import { buildPeridotEntityAttributedStructure, buildPeridotRecordStructure } from './peridotRecordStructure.js';
+import { PeridotRecordStructure } from './PeridotRecordStructure.jsx';
 
 function detailLabelClassName() {
   return '[font-family:Georgia,"Palatino_Linotype","Book_Antiqua",Palatino,serif] text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--detail-label-text)]';
@@ -51,6 +54,14 @@ function getSelectedEntityLabel(selectedProps) {
   return normalizeEntityText(selectedProps?.detailLabel || selectedProps?.label);
 }
 
+function getSelectedEntityId(selectedProps) {
+  return normalizeEntityText(
+    selectedProps?.entityId
+    || selectedProps?.personMetadata?.canonicalEntityId
+    || selectedProps?.personMetadata?.id,
+  );
+}
+
 function getSelectedEntityType(selectedProps, viewMode) {
   if (selectedProps?.__kind === 'person-detail') return 'person';
   if (selectedProps?.__kind === 'place-detail') return 'place';
@@ -67,14 +78,17 @@ function letterMatchesSelectedEntity(letter, selectedProps, viewMode) {
   const entityType = getSelectedEntityType(selectedProps, viewMode);
 
   if (entityType === 'person') {
-    return [
-      letter?.source,
-      letter?.target,
-      letter?.sourcePerson,
-      letter?.targetPerson,
-    ].some((value) => normalizeComparable(value) === normalizedLabel);
+    const selectedEntityId = getSelectedEntityId(selectedProps);
+    const participants = getPeridotRowEntityParticipantEntries(letter);
+    const rowHasCanonicalIdentity = participants.some((participant) => normalizeEntityText(participant?.id));
+    if (selectedEntityId && rowHasCanonicalIdentity) {
+      return participants.some((participant) => normalizeEntityText(participant?.id) === selectedEntityId);
+    }
+    return participants.some((participant) => normalizeComparable(participant?.label) === normalizedLabel);
   }
 
+  const mappedPlaces = buildPeridotRecordStructure(letter || {}).places || [];
+  if (mappedPlaces.some((entry) => normalizeComparable(normalizePlaceLabel(entry?.value)) === normalizedLabel)) return true;
   return [letter?.sourceLoc, letter?.targetLoc].some((value) => normalizeComparable(normalizePlaceLabel(value)) === normalizedLabel);
 }
 
@@ -90,37 +104,35 @@ function normalizeLetterCustomFields(letter) {
     .filter((field) => field.label && field.value);
 }
 
-function buildEntityCustomFieldSummaries(selectedProps, selectedLetterMetadata = [], viewMode) {
-  const matchingLetters = selectedLetterMetadata.filter((letter) => letterMatchesSelectedEntity(letter, selectedProps, viewMode));
-  const fieldMap = new Map();
+function buildEntityCustomFieldSummaries(selectedProps, viewMode) {
+  /*
+   * Entity profiles must describe the selected entity, not its entire record
+   * neighborhood.  `customInspectorFields` on linked records can describe a
+   * spouse, parent, child, event, or the record as a whole, so aggregating those
+   * values here causes unrelated attributes to leak into the selected profile.
+   *
+   * Person-centered canonical imports already project entity-owned attributes
+   * through `selectedProps.personMetadata.customInspectorFields`.  Those are the
+   * only custom fields safe to present as attributes of a selected person.
+   * Record-level evidence remains available in linked-record detail through the
+   * generalized `PeridotRecordStructure` reader.
+   *
+   * Place-specific arbitrary attributes do not yet have an equivalent canonical
+   * projection.  Until that ownership exists, a place profile intentionally
+   * shows no generic custom-field card rather than borrowing values from related
+   * records or people.
+   */
+  const entityType = getSelectedEntityType(selectedProps, viewMode);
+  if (entityType !== 'person') return [];
 
-  matchingLetters.forEach((letter) => {
-    normalizeLetterCustomFields(letter).forEach((field) => {
-      if (!fieldMap.has(field.label)) {
-        fieldMap.set(field.label, {
-          label: field.label,
-          values: new Map(),
-          recordCount: 0,
-        });
-      }
-
-      const entry = fieldMap.get(field.label);
-      entry.recordCount += 1;
-      entry.values.set(field.value, (entry.values.get(field.value) || 0) + 1);
-    });
-  });
-
-  return Array.from(fieldMap.values())
+  const fields = normalizeLetterCustomFields(selectedProps?.personMetadata || {});
+  return fields
     .map((field) => ({
       label: field.label,
-      recordCount: field.recordCount,
-      values: Array.from(field.values.entries())
-        .map(([value, count]) => ({ value, count }))
-        .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
-        .slice(0, 8),
-      additionalValueCount: Math.max(0, field.values.size - 8),
+      recordCount: 1,
+      values: [{ value: field.value, count: 1 }],
+      additionalValueCount: 0,
     }))
-    .filter((field) => field.values.length)
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
@@ -182,6 +194,7 @@ function sectionItemCount(sections = []) {
 function buildEntityProfile(selectedProps, selectedLetterMetadata = [], viewMode) {
   const entityType = getSelectedEntityType(selectedProps, viewMode);
   const entityLabel = getSelectedEntityLabel(selectedProps);
+  const entityId = getSelectedEntityId(selectedProps);
   const normalizedEntityLabel = normalizeComparable(entityLabel);
   const matchingLetters = selectedLetterMetadata.filter((letter) => letterMatchesSelectedEntity(letter, selectedProps, viewMode));
   const routesWhenSource = new Map();
@@ -197,8 +210,15 @@ function buildEntityProfile(selectedProps, selectedLetterMetadata = [], viewMode
     const targetPerson = normalizeEntityText(letter.target || letter.targetPerson);
     const sourcePlace = normalizePlaceLabel(letter.sourceLoc);
     const targetPlace = normalizePlaceLabel(letter.targetLoc);
-    const isSelectedSourcePerson = normalizeComparable(sourcePerson) === normalizedEntityLabel;
-    const isSelectedTargetPerson = normalizeComparable(targetPerson) === normalizedEntityLabel;
+    const sourceEntityId = normalizeEntityText(letter.sourceEntityId);
+    const targetEntityId = normalizeEntityText(letter.targetEntityId);
+    const rowHasCanonicalIdentity = Boolean(sourceEntityId || targetEntityId);
+    const isSelectedSourcePerson = entityId && rowHasCanonicalIdentity
+      ? sourceEntityId === entityId
+      : normalizeComparable(sourcePerson) === normalizedEntityLabel;
+    const isSelectedTargetPerson = entityId && rowHasCanonicalIdentity
+      ? targetEntityId === entityId
+      : normalizeComparable(targetPerson) === normalizedEntityLabel;
     const isSelectedSourcePlace = normalizeComparable(sourcePlace) === normalizedEntityLabel;
     const isSelectedTargetPlace = normalizeComparable(targetPlace) === normalizedEntityLabel;
 
@@ -361,12 +381,12 @@ function CountSectionCard({ title, sections, emptyMessage, onOpenItem }) {
   );
 }
 
-function EntityCustomFieldsCard({ selectedProps, selectedLetterMetadata, viewMode }) {
-  const fields = buildEntityCustomFieldSummaries(selectedProps, selectedLetterMetadata, viewMode);
+function EntityCustomFieldsCard({ selectedProps, viewMode }) {
+  const fields = buildEntityCustomFieldSummaries(selectedProps, viewMode);
   if (!fields.length) return null;
 
   return (
-    <SectionShell title="Selected fields">
+    <SectionShell title="Entity fields">
       <div className="grid gap-3 md:grid-cols-2">
         {fields.map((field) => (
           <div key={field.label} className="min-w-0 rounded-xl border border-[var(--section-border)]/75 bg-[var(--section-bg)]/75 px-3 py-2">
@@ -599,6 +619,15 @@ export function InspectorNodeView({
   const entityType = getSelectedEntityType(selectedProps, viewMode);
   const profile = buildEntityProfile(selectedProps, selectedLetterMetadata, viewMode);
   const selectedLabel = getSelectedEntityLabel(selectedProps);
+  const entityEvidence = getSelectedEntityType(selectedProps, viewMode) === 'person'
+    ? normalizeLetterCustomFields(selectedProps?.personMetadata || {})
+    : [];
+  const entityMappedStructure = buildPeridotEntityAttributedStructure(profile.matchingLetters, {
+    entityLabel: selectedLabel,
+    entityId: getSelectedEntityId(selectedProps),
+    entityType,
+    entityEvidence,
+  });
 
   if (isCompact) {
     return (
@@ -667,10 +696,11 @@ export function InspectorNodeView({
         onOpenLetterDetail={onOpenLetterDetail}
       />
 
-      <EntityCustomFieldsCard
-        selectedProps={selectedProps}
-        selectedLetterMetadata={selectedLetterMetadata}
-        viewMode={viewMode}
+      <PeridotRecordStructure
+        structure={entityMappedStructure}
+        title={entityType === 'place' ? 'Mapped information about this place' : 'Mapped information about this person / entity'}
+        onOpenPersonDetail={onOpenPersonDetail}
+        onOpenPlaceDetail={onOpenPlaceDetail}
       />
 
       <div className="flex justify-end">
