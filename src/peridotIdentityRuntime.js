@@ -67,6 +67,52 @@ function makeEntityId({ groupId, strategy, label, components, rowIndex, id }) {
   return `peridot-entity:${namespace}:${strategy}:${values.map(stablePart).join('+')}`;
 }
 
+
+function findHeaderExact(headers = [], candidate = '') {
+  const target = asText(candidate).toLowerCase();
+  if (!target) return '';
+  return (headers || []).find((header) => asText(header).toLowerCase() === target) || '';
+}
+
+function workbookSheetHeaders(workbookModel = {}, sheetName = '') {
+  return (workbookModel?.sheets || []).find((sheet) => asText(sheet?.sheetName) === asText(sheetName))?.headers || [];
+}
+
+function suggestedSingleIdentityColumn(headers = [], sourceColumn = '', key = '') {
+  const base = asText(sourceColumn);
+  const identityKey = asText(key);
+  if (!base || !identityKey) return '';
+  if (identityKey.toLowerCase() === 'name') return base;
+  return findHeaderExact(headers, `${base} ${identityKey}`);
+}
+
+function suggestedWorkbookIdentityRef(workbookModel = {}, sourceRef = {}, key = '') {
+  const sheetName = asText(sourceRef?.sheetName);
+  const base = asText(sourceRef?.columnName);
+  const identityKey = asText(key);
+  if (!sheetName || !base || !identityKey) return { sheetName: '', columnName: '' };
+  if (identityKey.toLowerCase() === 'name') return { sheetName, columnName: base };
+  const found = findHeaderExact(workbookSheetHeaders(workbookModel, sheetName), `${base} ${identityKey}`);
+  return found ? { sheetName, columnName: found } : { sheetName: '', columnName: '' };
+}
+
+function identityAppearanceSources(relationshipParts = [], placeParts = [], workbook = false) {
+  const sources = new Map();
+  (relationshipParts || []).forEach((part, index) => {
+    const source = workbook ? part?.participantRef : part?.participantColumn;
+    if (workbook) {
+      if (asText(source?.sheetName) && asText(source?.columnName)) sources.set(`relationship:${index}`, source);
+    } else if (asText(source)) sources.set(`relationship:${index}`, source);
+  });
+  (placeParts || []).forEach((part, index) => {
+    const source = workbook ? part?.placeRef : part?.placeColumn;
+    if (workbook) {
+      if (asText(source?.sheetName) && asText(source?.columnName)) sources.set(`place:${index}`, source);
+    } else if (asText(source)) sources.set(`place:${index}`, source);
+  });
+  return sources;
+}
+
 export function resolvePeridotMappedEntityIdentity({
   row = {},
   rowIndex = 0,
@@ -156,6 +202,72 @@ export function resolvePeridotMappedRecordIdentity({ row = {}, rowIndex = 0, ide
     complete,
     source: 'researcher-declared-identity',
   });
+}
+
+export function materializePeridotSingleTableIdentityMappingSuggestions({
+  identityMapping = {},
+  relationshipParts = [],
+  placeParts = [],
+  headers = [],
+} = {}) {
+  const sources = identityAppearanceSources(relationshipParts, placeParts, false);
+  const entityGroups = (Array.isArray(identityMapping?.entityGroups) ? identityMapping.entityGroups : []).map((group) => {
+    if (!['field', 'composite'].includes(group?.strategy)) return { ...group };
+    const keys = Array.isArray(group?.keys) ? group.keys : [];
+    const mappings = { ...(group?.mappings || {}) };
+    (group?.appearanceIds || []).forEach((id) => {
+      const sourceColumn = sources.get(id);
+      if (!sourceColumn) return;
+      const current = Array.isArray(mappings[id]) ? [...mappings[id]] : [];
+      keys.forEach((key, index) => {
+        // An undefined slot means the UI was displaying an untouched suggestion.
+        // An explicit blank component means the researcher deliberately cleared
+        // the field; preserve that choice instead of silently re-suggesting it.
+        if (current[index] !== undefined) return;
+        const suggested = suggestedSingleIdentityColumn(headers, sourceColumn, key);
+        if (suggested) current[index] = { key: asText(key), column: suggested };
+      });
+      if (current.some(Boolean)) mappings[id] = current;
+    });
+    return { ...group, mappings };
+  });
+  return { ...identityMapping, entityGroups };
+}
+
+export function materializePeridotWorkbookIdentityMappingSuggestions({
+  identityMapping = {},
+  relationshipParts = [],
+  placeParts = [],
+  workbookModel = {},
+} = {}) {
+  const sources = identityAppearanceSources(relationshipParts, placeParts, true);
+  const customSources = new Map();
+  (identityMapping?.entityGroups || []).forEach((group) => {
+    (group?.customAppearances || []).forEach((appearance) => {
+      if (appearance?.id && asText(appearance?.ref?.sheetName) && asText(appearance?.ref?.columnName)) customSources.set(appearance.id, appearance.ref);
+    });
+  });
+  const entityGroups = (Array.isArray(identityMapping?.entityGroups) ? identityMapping.entityGroups : []).map((group) => {
+    if (!['field', 'composite'].includes(group?.strategy)) return { ...group };
+    const keys = Array.isArray(group?.keys) ? group.keys : [];
+    const mappings = { ...(group?.mappings || {}) };
+    (group?.appearanceIds || []).forEach((id) => {
+      const sourceRef = sources.get(id) || customSources.get(id);
+      if (!sourceRef) return;
+      const current = Array.isArray(mappings[id]) ? [...mappings[id]] : [];
+      keys.forEach((key, index) => {
+        // See the single-table branch above: only materialize a suggestion that
+        // was never explicitly represented in saved state. A researcher-cleared
+        // blank remains blank and therefore unresolved rather than being guessed.
+        if (current[index] !== undefined) return;
+        const suggested = suggestedWorkbookIdentityRef(workbookModel, sourceRef, key);
+        if (asText(suggested.sheetName) && asText(suggested.columnName)) current[index] = { key: asText(key), ref: suggested };
+      });
+      if (current.some(Boolean)) mappings[id] = current;
+    });
+    return { ...group, mappings };
+  });
+  return { ...identityMapping, entityGroups };
 }
 
 export function convertWorkbookIdentityMappingToRuntime(identityMapping = {}, workbookRefRuntimeKey = () => '') {

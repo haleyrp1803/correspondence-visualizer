@@ -61,7 +61,7 @@ import {
   buildPeridotGeneralizedObservation,
   projectGeneralizedObservationToLegacyRow,
 } from './peridotGeneralizedMappingRuntime.js';
-import { convertWorkbookIdentityMappingToRuntime, getWorkbookIdentityRefs } from './peridotIdentityRuntime.js';
+import { convertWorkbookIdentityMappingToRuntime, getWorkbookIdentityRefs, materializePeridotWorkbookIdentityMappingSuggestions } from './peridotIdentityRuntime.js';
 
 export const PERIDOT_WORKBOOK_JOIN_TYPES = Object.freeze({
   letterId: 'letter_id',
@@ -905,6 +905,23 @@ export function validatePeridotWorkbookMapping(workbookModel, mappingState = {})
     const toIssue = getReferenceValidationIssue(workbookModel, join?.to, 'record_join_to', `Unique-ID join ${index + 1} target`);
     if (fromIssue) issues.push({ ...fromIssue, severity: 'error' });
     if (toIssue) issues.push({ ...toIssue, severity: 'error' });
+    if (fromIssue || toIssue) return;
+
+    const summary = getLetterIdJoinMatchSummary(workbookModel, join);
+    if (summary.primaryDuplicateIdCount > 0) {
+      issues.push({
+        code: 'duplicate_record_join_source_ids',
+        severity: 'error',
+        message: `Unique-ID join ${index + 1} cannot be used because ${summary.primaryDuplicateIdCount} ID value${summary.primaryDuplicateIdCount === 1 ? '' : 's'} occur more than once on the primary/source side. Choose a field whose populated values identify one record each.`,
+      });
+    }
+    if (summary.joinedDuplicateIdCount > 0) {
+      issues.push({
+        code: 'duplicate_record_join_target_ids',
+        severity: 'error',
+        message: `Unique-ID join ${index + 1} cannot be used because ${summary.joinedDuplicateIdCount} ID value${summary.joinedDuplicateIdCount === 1 ? '' : 's'} occur more than once on the joined-sheet side. Peridot will not silently choose the first matching row.`,
+      });
+    }
   });
 
   (mappingState.lookupJoins || []).forEach((join, index) => {
@@ -999,7 +1016,8 @@ export function getLetterIdJoinMatchSummary(workbookModel, join = {}) {
   }).length;
   const joinedOnlyIdCount = Array.from(toKeys).filter((key) => !fromKeys.has(key)).length;
 
-  const message = `${matchingIds.length} matching unique ID${matchingIds.length === 1 ? '' : 's'}; ${unmatchedPrimaryRowCount} primary row${unmatchedPrimaryRowCount === 1 ? '' : 's'} without a match.`;
+  const uniquenessNote = primaryDuplicateIdCount || joinedDuplicateIdCount ? ' Duplicate ID values make this join ambiguous.' : ' Both join columns are unique for populated values.';
+  const message = `${matchingIds.length} matching ID value${matchingIds.length === 1 ? '' : 's'}; ${unmatchedPrimaryRowCount} primary row${unmatchedPrimaryRowCount === 1 ? '' : 's'} without a match.${uniquenessNote}`;
 
   return Object.freeze({
     isConfigured: true,
@@ -1075,11 +1093,11 @@ export function previewWorkbookCoreMappedRows(workbookModel, mappingState = {}, 
 
 
 
-function getPrimaryWorkbookRowContext(workbookModel, mappingState = {}, primaryRow = {}) {
+function getPrimaryWorkbookRowContext(workbookModel, mappingState = {}, primaryRow = {}, preparedJoinIndexes = []) {
   const primarySheetName = asText(mappingState.primarySheetName);
   const context = { [primarySheetName]: primaryRow };
 
-  (mappingState.letterLevelJoins || []).forEach((join) => {
+  (mappingState.letterLevelJoins || []).forEach((join, joinIndex) => {
     const fromRef = join?.from || {};
     const toRef = join?.to || {};
     const fromSheetName = asText(fromRef.sheetName);
@@ -1093,9 +1111,12 @@ function getPrimaryWorkbookRowContext(workbookModel, mappingState = {}, primaryR
     const key = asText(primaryRow?.[fromColumnName]);
     if (!key) return;
 
-    const joinedRows = getSheetRows(workbookModel, toSheetName);
-    const match = joinedRows.find((row) => asText(row?.[toColumnName]) === key);
-    if (match) context[toSheetName] = match;
+    const prepared = preparedJoinIndexes[joinIndex];
+    const joinedIndex = prepared?.toIndex || indexRowsByColumn(getSheetRows(workbookModel, toSheetName), toColumnName);
+    const matches = joinedIndex.get(key) || [];
+    // Validation guarantees one-to-one record joins. Do not reintroduce the old
+    // ambiguous first-match behavior if this helper is called independently.
+    if (matches.length === 1) context[toSheetName] = matches[0];
   });
 
   return context;
@@ -1128,8 +1149,14 @@ function workbookRefRuntimeKey(ref = {}) {
   return isWorkbookColumnRefPresent(ref) ? makeWorkbookColumnRefKey(ref) : '';
 }
 
-function buildWorkbookGeneralizedRuntimeMapping(mappingState = {}) {
-  const identityMapping = convertWorkbookIdentityMappingToRuntime(mappingState.identityMapping || {}, workbookRefRuntimeKey);
+function buildWorkbookGeneralizedRuntimeMapping(mappingState = {}, workbookModel = {}) {
+  const materializedIdentityMapping = materializePeridotWorkbookIdentityMappingSuggestions({
+    identityMapping: mappingState.identityMapping || {},
+    relationshipParts: mappingState.relationshipParts || [],
+    placeParts: mappingState.placeParts || [],
+    workbookModel,
+  });
+  const identityMapping = convertWorkbookIdentityMappingToRuntime(materializedIdentityMapping, workbookRefRuntimeKey);
   if (identityMapping?.record?.strategy === 'workbook-key' && mappingState.primarySheetName && mappingState.primaryLetterIdColumn) {
     identityMapping.record = {
       ...identityMapping.record,
@@ -1213,13 +1240,24 @@ export function buildPeridotRowsFromWorkbookMapping(workbookModel, mappingState 
     throw new Error(firstError?.message || 'Workbook mapping is not valid.');
   }
 
-  const primarySheetName = asText(mappingState.primarySheetName);
+  const effectiveIdentityMapping = materializePeridotWorkbookIdentityMappingSuggestions({
+    identityMapping: mappingState.identityMapping || {},
+    relationshipParts: mappingState.relationshipParts || [],
+    placeParts: mappingState.placeParts || [],
+    workbookModel,
+  });
+  const effectiveMappingState = { ...mappingState, identityMapping: effectiveIdentityMapping };
+  const primarySheetName = asText(effectiveMappingState.primarySheetName);
   const primaryRows = getSheetRows(workbookModel, primarySheetName);
-  const runtimeMapping = buildWorkbookGeneralizedRuntimeMapping(mappingState);
+  const runtimeMapping = buildWorkbookGeneralizedRuntimeMapping(effectiveMappingState, workbookModel);
+  // Build indexes once per import. The previous implementation scanned every
+  // joined sheet again for every primary row, which made larger workbooks much
+  // more expensive than their row counts warranted.
+  const preparedJoinIndexes = buildLetterIdJoinIndexes(workbookModel, effectiveMappingState);
 
   return primaryRows.map((primaryRow, index) => {
-    const context = getPrimaryWorkbookRowContext(workbookModel, mappingState, primaryRow);
-    const semanticRow = buildWorkbookSemanticRuntimeRow(workbookModel, context, mappingState);
+    const context = getPrimaryWorkbookRowContext(workbookModel, effectiveMappingState, primaryRow, preparedJoinIndexes);
+    const semanticRow = buildWorkbookSemanticRuntimeRow(workbookModel, context, effectiveMappingState);
     const generalizedObservation = buildPeridotGeneralizedObservation(semanticRow, runtimeMapping, index);
     const authoritativeObservation = Object.freeze({
       ...generalizedObservation,

@@ -79,6 +79,38 @@ export function runPeridotIdentityRuntimeFixtures() {
     },
   });
 
+
+  const suggestedCompositeRows = applyPeridotGeneralizedColumnMapping([
+    { Source: 'Maria', 'Source Title': 'Grand Duchess', Target: 'Carlo', 'Target Title': 'Cardinal' },
+    { Source: 'Carlo', 'Source Title': 'Cardinal', Target: 'Maria', 'Target Title': 'Grand Duchess' },
+  ], {
+    relationshipParts: [
+      { participantColumn: 'Source', roleLabel: 'Source' },
+      { participantColumn: 'Target', roleLabel: 'Target' },
+    ],
+    identityMapping: {
+      entityGroups: [{
+        id: 'people', label: 'People', appearanceIds: ['relationship:0', 'relationship:1'], strategy: 'composite', keys: ['Name', 'Title'], mappings: {},
+      }],
+    },
+  });
+  const suggestedMariaIds = suggestedCompositeRows.flatMap((row) => row.generalizedObservation.participants)
+    .filter((participant) => participant.value === 'Maria')
+    .map((participant) => participant.entityId);
+
+  const explicitlyClearedRows = applyPeridotGeneralizedColumnMapping([
+    { Source: 'Maria', 'Source Title': 'Grand Duchess' },
+    { Source: 'Maria', 'Source Title': 'Grand Duchess' },
+  ], {
+    relationshipParts: [{ participantColumn: 'Source', roleLabel: 'Source' }],
+    identityMapping: {
+      entityGroups: [{
+        id: 'people', label: 'People', appearanceIds: ['relationship:0'], strategy: 'composite', keys: ['Name', 'Title'],
+        mappings: { 'relationship:0': [{ key: 'Name', column: 'Source' }, { key: 'Title', column: '' }] },
+      }],
+    },
+  });
+
   return [
     assert('same label with different mapped IDs stays distinct at generalized runtime', anneA.entityId && anneB.entityId && anneA.entityId !== anneB.entityId),
     assert('equivalent identity concept maps across relationship roles', motherA.entityId.includes(encodeURIComponent('MOTHER-A'))),
@@ -86,5 +118,7 @@ export function runPeridotIdentityRuntimeFixtures() {
     assert('canonical generalized normalization preserves declared entity separation', canonical.entities.filter((entity) => entity.label === 'Anne von Habsburg').length === 2),
     assert('missing researcher-declared IDs do not fall back to label merging', missingIdRows[0].generalizedObservation.participants[0].entityId !== missingIdRows[1].generalizedObservation.participants[0].entityId),
     assert('legacy compatibility projection exposes participant entity IDs', mapped[0].sourceEntityId === anneA.entityId && mapped[0].targetEntityId === motherA.entityId),
+    assert('untouched single-table identity suggestions become authoritative', new Set(suggestedMariaIds).size === 1 && Boolean(suggestedMariaIds[0])),
+    assert('explicitly cleared identity fields are not silently re-suggested', explicitlyClearedRows[0].generalizedObservation.participants[0].entityId !== explicitlyClearedRows[1].generalizedObservation.participants[0].entityId),
   ];
 }

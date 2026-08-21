@@ -31,6 +31,7 @@ import {
   validatePeridotColumnMapping,
 } from './peridotColumnMapping.js';
 import { applyPeridotGeneralizedColumnMapping } from './peridotGeneralizedMappingRuntime.js';
+import { materializePeridotSingleTableIdentityMappingSuggestions, materializePeridotWorkbookIdentityMappingSuggestions } from './peridotIdentityRuntime.js';
 import { buildTemporalAssertionMappingsFromLegacy, deriveLegacyTemporalMapping, getTemporalAssertionSourceColumns, normalizeTemporalAssertionMappings, temporalAssertionMappingHasSource } from './peridotTemporalMapping.js';
 import { normalizePeridotGeneralizedMappedRows } from './peridotCorrespondenceProfile.js';
 import {
@@ -904,13 +905,13 @@ function temporalMappingSourceSummary(mapping = {}, workbook = false) {
 }
 
 function singleMappedSubjectDetail(mapping = {}, relationshipParts = []) {
-  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'Describes this row / record as a whole';
+  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'Describes only this row / record (not a participant)';
   const part = relationshipParts[mapping.subjectParticipantIndex];
   return part?.participantColumn ? `Describes ${part.participantColumn}` : `Describes relationship part ${mapping.subjectParticipantIndex + 1}`;
 }
 
 function workbookMappedSubjectDetail(mapping = {}, relationshipParts = []) {
-  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'Describes this row / record as a whole';
+  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'Describes only this row / record (not a participant)';
   const part = relationshipParts[mapping.subjectParticipantIndex];
   const ref = part?.participantRef || {};
   return ref?.columnName ? `Describes ${ref.sheetName} — ${ref.columnName}` : `Describes relationship part ${mapping.subjectParticipantIndex + 1}`;
@@ -2928,10 +2929,17 @@ export function PeridotColumnMappingModal({
       };
     }
     if (isWorkbookMode) {
+      const effectiveWorkbookIdentityMapping = materializePeridotWorkbookIdentityMappingSuggestions({
+        identityMapping: workbookMapping.identityMapping || {},
+        relationshipParts: workbookMapping.relationshipParts || [],
+        placeParts: workbookMapping.placeParts || [],
+        workbookModel,
+      });
       return {
         datasetProfileId: datasetProfile.id,
         workbookMappingState: {
           ...stripWorkbookDisplayDateMapping(workbookMapping),
+          identityMapping: effectiveWorkbookIdentityMapping,
           datasetProfileId: datasetProfile.id,
         },
         workbookValidation,
@@ -2944,7 +2952,12 @@ export function PeridotColumnMappingModal({
       tableOrientation,
       placeParts,
       relationshipParts,
-      identityMapping,
+      identityMapping: materializePeridotSingleTableIdentityMappingSuggestions({
+        identityMapping,
+        relationshipParts,
+        placeParts,
+        headers,
+      }),
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
       temporalNoteMappings,
@@ -2989,13 +3002,15 @@ export function PeridotColumnMappingModal({
     moveToStep(stepKeys[nextIndex]);
   };
 
-  const footerHelper = isGenealogyProfile
-    ? 'Confirm import activates this validated canonical genealogy dataset. Geographic routes remain unavailable unless the source explicitly records routes.'
-    : !datasetProfile.canConfirmImport
-      ? `${datasetProfile.label} is routed correctly.`
-      : isWorkbookMode
-      ? 'Confirm import replaces the active dataset with assembled workbook rows.'
-      : 'Confirm import replaces the active dataset with this mapped table.';
+  const footerHelper = staging?.editingActiveData
+    ? 'Apply changes recompiles the active dataset from the original uploaded source using these revised mapping choices.'
+    : isGenealogyProfile
+      ? 'Confirm import activates this validated canonical genealogy dataset. Geographic routes remain unavailable unless the source explicitly records routes.'
+      : !datasetProfile.canConfirmImport
+        ? `${datasetProfile.label} is routed correctly.`
+        : isWorkbookMode
+        ? 'Confirm import replaces the active dataset with assembled workbook rows.'
+        : 'Confirm import replaces the active dataset with this mapped table.';
 
   const renderStepContent = (stepForRender) => (
     <>
@@ -3220,11 +3235,13 @@ export function PeridotColumnMappingModal({
               {staging.fileLabel || 'Uploaded data'}
             </div>
             <h2 className="[font-family:Georgia,'Palatino_Linotype','Book_Antiqua',Palatino,serif] text-2xl font-bold leading-tight text-[var(--heading-text)]">
-              {isGenealogyProfile
-                ? 'Genealogy import profile'
-                : isWorkbookMode
-                  ? 'Assign workbook data roles for Peridot'
-                  : 'Assign data roles for Peridot'}
+              {staging?.editingActiveData
+                ? (isWorkbookMode ? 'Edit workbook data roles' : 'Edit data roles for Peridot')
+                : isGenealogyProfile
+                  ? 'Genealogy import profile'
+                  : isWorkbookMode
+                    ? 'Assign workbook data roles for Peridot'
+                    : 'Assign data roles for Peridot'}
             </h2>
           </div>
           <button type="button" onClick={handleRequestCancel} className={buttonClassName({ variant: 'secondary' })}>
@@ -3268,7 +3285,7 @@ export function PeridotColumnMappingModal({
                     disabled={!genealogyValidation?.isValid}
                     className={buttonClassName({ variant: 'primary' })}
                   >
-                    Confirm import
+                    {staging?.editingActiveData ? 'Apply changes' : 'Confirm import'}
                   </button>
                 )}
                 <button type="button" onClick={handleRequestCancel} className={buttonClassName({ variant: 'secondary' })}>Cancel</button>
@@ -3289,11 +3306,11 @@ export function PeridotColumnMappingModal({
                     disabled={!workbookValidation?.isValid}
                     className={buttonClassName({ variant: 'primary' })}
                   >
-                    Confirm import
+                    {staging?.editingActiveData ? 'Apply changes' : 'Confirm import'}
                   </button>
                 ) : (
                   <button type="button" onClick={handleConfirmImport} className={buttonClassName({ variant: 'primary' })}>
-                    Confirm import
+                    {staging?.editingActiveData ? 'Apply changes' : 'Confirm import'}
                   </button>
                 )}
                 <button type="button" onClick={handleRequestCancel} className={buttonClassName({ variant: 'secondary' })}>
@@ -3308,16 +3325,20 @@ export function PeridotColumnMappingModal({
       {showCancelConfirmation ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[var(--peridot-role-interface-scrim)] p-4">
           <div className="w-full max-w-md rounded-3xl border border-[var(--panel-card-border)] bg-[var(--sidebar-bg)] p-5 shadow-[0_24px_60px_var(--peridot-color-rgba-rgba-0-0-0-0-55)]">
-            <h3 className="text-lg font-bold text-[var(--heading-text)]">Discard this upload?</h3>
+            <h3 className="text-lg font-bold text-[var(--heading-text)]">
+              {staging?.editingActiveData ? 'Discard these changes?' : 'Discard this upload?'}
+            </h3>
             <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
-              This will discard the uploaded file from the mapping workspace. The active dataset will not change.
+              {staging?.editingActiveData
+                ? 'This will discard the mapping edits you made in this session. The active dataset will not change.'
+                : 'This will discard the uploaded file from the mapping workspace. The active dataset will not change.'}
             </p>
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={handleReturnToWorkspace} className={buttonClassName({ variant: 'secondary' })}>
                 Keep mapping
               </button>
               <button type="button" onClick={handleConfirmCancel} className={buttonClassName({ variant: 'danger' })}>
-                Discard upload
+                {staging?.editingActiveData ? 'Discard changes' : 'Discard upload'}
               </button>
             </div>
           </div>

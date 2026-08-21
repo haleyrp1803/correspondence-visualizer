@@ -182,7 +182,7 @@ function TemporalSubjectSelect({ relationshipParts = [], value, onChange }) {
         onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
         className={`${SOURCE_SELECT_CLASS} mt-1`}
       >
-        <option value="">This row / record as a whole</option>
+        <option value="">Only this row / record (not a participant)</option>
         {(relationshipParts || []).map((part, participantIndex) => {
           const participantLabel = part?.participantColumn || `Relationship part ${participantIndex + 1}`;
           return <option key={`time-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
@@ -693,7 +693,7 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
             onChange={(event) => onChange({ subjectParticipantIndex: event.target.value === '' ? '' : Number(event.target.value) })}
             className={SOURCE_SELECT_CLASS}
           >
-            <option value="">This row / record as a whole</option>
+            <option value="">Only this row / record (not a participant)</option>
             {(relationshipParts || []).map((relationshipPart, participantIndex) => {
               const participantRef = relationshipPart?.participantRef || makeWorkbookColumnRef('', '');
               const participantLabel = participantRef?.columnName
@@ -705,8 +705,8 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
           <p className={`mt-1.5 text-[11px] leading-relaxed ${subjectParticipantIndex === '' && (relationshipParts || []).length ? 'font-semibold text-[var(--danger-text,var(--panel-card-muted-text))]' : 'text-[var(--panel-card-muted-text)]'}`}>
             {subjectParticipantIndex === ''
               ? ((relationshipParts || []).length
-                ? 'Currently attached to the row / record as a whole. It will not appear as an associated place for a participant unless you choose one here.'
-                : 'This place is attached to the row / record as a whole.')
+                ? 'Currently attached only to the row / record, not to any participant. Choose a participant here if this place should be associated with that person or thing.'
+                : 'This place is attached only to the row / record, not to any participant.')
               : (() => {
                   const ref = (relationshipParts || [])[subjectParticipantIndex]?.participantRef || {};
                   return `This place will be attributed to ${ref?.columnName ? `${ref.sheetName} — ${ref.columnName}` : `relationship part ${subjectParticipantIndex + 1}`}.`;
@@ -913,7 +913,7 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
             onChange={(event) => onChange({ subjectParticipantIndex: event.target.value === '' ? '' : Number(event.target.value) })}
             className={SOURCE_SELECT_CLASS}
           >
-            <option value="">This row / record as a whole</option>
+            <option value="">Only this row / record (not a participant)</option>
             {(relationshipParts || []).map((relationshipPart, participantIndex) => {
               const participantLabel = relationshipPart?.participantColumn || `Relationship part ${participantIndex + 1}`;
               return <option key={`place-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
@@ -922,8 +922,8 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
           <p className={`mt-1.5 text-[11px] leading-relaxed ${subjectParticipantIndex === '' && (relationshipParts || []).length ? 'font-semibold text-[var(--danger-text,var(--panel-card-muted-text))]' : 'text-[var(--panel-card-muted-text)]'}`}>
             {subjectParticipantIndex === ''
               ? ((relationshipParts || []).length
-                ? 'Currently attached to the row / record as a whole. It will not appear as an associated place for a participant unless you choose one here.'
-                : 'This place is attached to the row / record as a whole.')
+                ? 'Currently attached only to the row / record, not to any participant. Choose a participant here if this place should be associated with that person or thing.'
+                : 'This place is attached only to the row / record, not to any participant.')
               : `This place will be attributed to ${(relationshipParts || [])[subjectParticipantIndex]?.participantColumn || `relationship part ${subjectParticipantIndex + 1}`}.`}
           </p>
         </div>
@@ -1597,7 +1597,7 @@ function WorkbookTemporalSubjectSelect({ relationshipParts = [], value, onChange
         onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
         className={`${SOURCE_SELECT_CLASS} mt-1`}
       >
-        <option value="">This row / record as a whole</option>
+        <option value="">Only this row / record (not a participant)</option>
         {(relationshipParts || []).map((part, participantIndex) => {
           const ref = part?.participantRef || makeWorkbookColumnRef('', '');
           const participantLabel = ref?.columnName ? `${ref.sheetName} — ${ref.columnName}` : `Relationship part ${participantIndex + 1}`;

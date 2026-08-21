@@ -108,7 +108,6 @@ import {
   getPeridotDatasetProfile,
   isPeridotCorrespondenceProfile,
   isPeridotGenealogyProfile,
-  PERIDOT_DATASET_PROFILES,
   resolvePeridotDatasetProfileId,
 } from './peridotDatasetProfiles.js';
 import { PERIDOT_APP_THEME_DEFAULTS, PERIDOT_MAP_STYLE_PRESETS } from './peridotTheme.js';
@@ -3094,9 +3093,11 @@ export default function EuropeNetworkMapApp() {
   const [isPeridotValidationModalOpen, setIsPeridotValidationModalOpen] = useState(false);
   const [peridotNormalizedData, setPeridotNormalizedData] = useState(null);
   const [columnMappingStaging, setColumnMappingStaging] = useState(null);
-  const [selectedDatasetProfileId, setSelectedDatasetProfileId] = useState(
-    DEFAULT_PERIDOT_DATASET_PROFILE_ID
-  );
+  // Preserve the original uploaded source + accepted mapping configuration so
+  // researchers can reopen and revise mapped roles without re-uploading the file.
+  // This is intentionally separate from transient `columnMappingStaging`: cancelling
+  // an edit abandons only the draft edit, never the currently active dataset.
+  const [activeMappedDataSource, setActiveMappedDataSource] = useState(null);
   const [isColumnMappingModalOpen, setIsColumnMappingModalOpen] = useState(false);
 
   // ------------------------------------------------------------
@@ -3559,19 +3560,29 @@ export default function EuropeNetworkMapApp() {
     () => derivePeridotEntityNetworkSemantics(filteredRowsByTime),
     [filteredRowsByTime]
   );
+  // Force layout is intentionally expensive (hundreds of synchronous D3 ticks).
+  // Do not compute it merely because Force Directed was the last selected person
+  // layout while the researcher is viewing Maps, Charts, Search, or another
+  // workspace. A lightweight semantic graph is sufficient for off-stage
+  // Inspector/export fallbacks; geometry is derived only for the active person
+  // visualization.
+  const isPersonNetworkGeometryActive = workspaceMode === PERIDOT_WORKSPACE_MODES.VISUALIZATIONS
+    && ['people-network', 'force-directed'].includes(visualizationsWorkspacePanel)
+    && viewMode === 'person';
+  const personGraphLayoutMode = isPersonNetworkGeometryActive ? personLayoutMode : 'semantic';
   const personGraph = useMemo(
     () => buildPersonGraph(
       filteredRowsByTime,
       mapViewportSize.width,
       mapViewportSize.height,
-      personLayoutMode,
+      personGraphLayoutMode,
       minCount,
       '',
-      personLayoutMode === 'geographic'
+      personGraphLayoutMode === 'geographic'
         ? { relationshipRows: entityRelationshipStructureRows, locationRows: filteredRowsByTime }
         : null
     ),
-    [entityRelationshipStructureRows, filteredRowsByTime, mapViewportSize.width, mapViewportSize.height, personLayoutMode, minCount]
+    [entityRelationshipStructureRows, filteredRowsByTime, mapViewportSize.width, mapViewportSize.height, personGraphLayoutMode, minCount]
   );
   const graph = viewMode === 'geographic' ? geographicGraph : personGraph;
 
@@ -3984,6 +3995,7 @@ export default function EuropeNetworkMapApp() {
       });
 
       setPeridotNormalizedData(normalized);
+      setActiveMappedDataSource(null);
 
       setPeridotFileLabel(fileLabel);
 
@@ -4020,7 +4032,11 @@ export default function EuropeNetworkMapApp() {
     if (!file) return;
 
     const fileLabel = file.name || 'Uploaded table';
-    const datasetProfileId = resolvePeridotDatasetProfileId(selectedDatasetProfileId);
+    // The public upload flow now always enters the generalized mapper. Dataset
+    // profiles remain an internal compatibility token while legacy profile-specific
+    // code is retired separately; researchers no longer choose correspondence vs.
+    // genealogy before mapping.
+    const datasetProfileId = DEFAULT_PERIDOT_DATASET_PROFILE_ID;
     const datasetProfile = getPeridotDatasetProfile(datasetProfileId);
     const lowerName = fileLabel.toLowerCase();
     const displayFileType = lowerName.endsWith('.tsv')
@@ -4334,10 +4350,16 @@ export default function EuropeNetworkMapApp() {
         setPeridotFileLabel(fileLabel);
         setPeridotValidationSummary(finalValidationSummary);
         setIsPeridotValidationModalOpen(true);
-        // A completed mapping import is durable through `peridotValidationSummary`
-        // and the active normalized dataset. The staged upload itself remains
-        // transient, so remove it once import succeeds instead of showing a
-        // resumable staging card in the Data workspace.
+        setActiveMappedDataSource({
+          ...columnMappingStaging,
+          status: 'ready',
+          mappingState: nextWorkbookMapping,
+          mappingMode: 'workbook',
+          workbookMappingRequired: true,
+          savedMappingAt: new Date().toLocaleTimeString(),
+        });
+        // The transient editing/staging copy can now be removed. The active mapped
+        // source above retains the original workbook plus accepted mapping state.
         setColumnMappingStaging(null);
         setIsColumnMappingModalOpen(false);
         resetActiveDataInteractionState();
@@ -4385,10 +4407,32 @@ export default function EuropeNetworkMapApp() {
       setPeridotFileLabel(fileLabel);
       setPeridotValidationSummary(finalValidationSummary);
       setIsPeridotValidationModalOpen(true);
-      // A completed mapping import is durable through `peridotValidationSummary`
-      // and the active normalized dataset. The staged upload itself remains
-      // transient, so remove it once import succeeds instead of showing a
-      // resumable staging card in the Data workspace.
+      const acceptedMappingState = {
+        ...(columnMappingStaging.mappingState || {}),
+        datasetProfileId: activeDatasetProfileId,
+        tableOrientation: tableOrientation || columnMappingStaging.mappingState?.tableOrientation || 'columns',
+        placeParts: nextPlaceParts,
+        relationshipParts: nextRelationshipParts,
+        identityMapping: nextIdentityMapping,
+        relationshipMetadataMapping: nextRelationshipMetadataMapping,
+        coreMapping: nextCoreMapping,
+        temporalMapping: nextTemporalMapping,
+        temporalNoteMappings: nextTemporalNoteMappings,
+        temporalAssertionMappings: nextTemporalAssertionMappings,
+        pointMapping: nextPointMapping,
+        routeCoordinatePairMapping: nextRouteCoordinatePairMapping,
+        customFieldSelections: nextCustomFieldSelections,
+      };
+      setActiveMappedDataSource({
+        ...columnMappingStaging,
+        status: 'ready',
+        mappingState: acceptedMappingState,
+        mappingMode: 'single-table',
+        workbookMappingRequired: false,
+        savedMappingAt: new Date().toLocaleTimeString(),
+      });
+      // The transient editing/staging copy can now be removed. The active mapped
+      // source above retains the original rows plus accepted mapping state.
       setColumnMappingStaging(null);
       setIsColumnMappingModalOpen(false);
       resetActiveDataInteractionState();
@@ -4415,6 +4459,17 @@ export default function EuropeNetworkMapApp() {
       });
       setIsPeridotValidationModalOpen(true);
     }
+  };
+
+  const openActiveMappedDataEditor = () => {
+    if (!activeMappedDataSource) return;
+    setColumnMappingStaging({
+      ...activeMappedDataSource,
+      status: 'ready',
+      editingActiveData: true,
+      stagedAt: new Date().toLocaleTimeString(),
+    });
+    setIsColumnMappingModalOpen(true);
   };
 
   const clearColumnMappingStaging = () => {
@@ -4797,6 +4852,18 @@ export default function EuropeNetworkMapApp() {
     setIsSidePanelOpen(false);
   };
 
+  const useSampleData = () => {
+    setPeridotNormalizedData(null);
+    setPeridotFileLabel('Sample Data');
+    setPeridotValidationSummary(null);
+    setIsPeridotValidationModalOpen(false);
+    setActiveMappedDataSource(null);
+    setColumnMappingStaging(null);
+    setIsColumnMappingModalOpen(false);
+    resetActiveDataInteractionState();
+    openVisualizationsWorkspace();
+  };
+
   const selectPlaceMapVisualization = () => {
     setVisualizationsWorkspacePanel('place-map');
     setViewMode('geographic');
@@ -4897,7 +4964,7 @@ export default function EuropeNetworkMapApp() {
 
   const homeWorkspaceProps = {
     onUploadData: openDataWorkspace,
-    onUseSampleData: openVisualizationsWorkspace,
+    onUseSampleData: useSampleData,
     onStartTutorial: startTutorial,
   };
 
@@ -4905,18 +4972,13 @@ export default function EuropeNetworkMapApp() {
     peridotFileLabel,
     peridotValidationSummary,
     columnMappingStaging,
-    datasetProfiles: PERIDOT_DATASET_PROFILES,
-    selectedDatasetProfileId,
-    onSelectDatasetProfile: (profileId) => {
-      setSelectedDatasetProfileId(resolvePeridotDatasetProfileId(profileId));
-      setColumnMappingStaging(null);
-      setIsColumnMappingModalOpen(false);
-    },
+    activeMappedDataSource,
     handleDownloadPeridotTemplate,
     handleColumnMappingTableUpload,
     openColumnMappingModal: () => setIsColumnMappingModalOpen(true),
+    openActiveMappedDataEditor,
     clearColumnMappingStaging,
-    onOpenVisualizations: openVisualizationsWorkspace,
+    onUseSampleData: useSampleData,
   };
 
   const themeWorkspaceProps = {

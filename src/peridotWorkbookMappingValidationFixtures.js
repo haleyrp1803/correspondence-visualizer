@@ -82,6 +82,28 @@ export function runPeridotWorkbookMappingValidationSelfAudit() {
   };
   const crossSheetValidation = validatePeridotWorkbookMapping(workbookModel, crossSheetMapping);
 
+  const duplicateJoinWorkbook = {
+    fileName: 'Duplicate join fixture.xlsx',
+    sheets: [
+      sheet('Records', ['ID', 'Person'], [{ ID: '1', Person: 'A' }, { ID: '2', Person: 'B' }]),
+      sheet('Joined', ['ID', 'Place'], [{ ID: '1', Place: 'Rome' }, { ID: '1', Place: 'Florence' }, { ID: '2', Place: 'Mantua' }]),
+    ],
+  };
+  const duplicateJoinMapping = {
+    ...primaryOnlyMapping,
+    primarySheetName: 'Records',
+    primaryLetterIdColumn: 'ID',
+    relationshipParts: [{ participantRef: ref('Records', 'Person'), roleMode: 'heading' }],
+    placeParts: [{ placeRef: ref('Joined', 'Place'), roleMode: 'heading', subjectParticipantIndex: 0 }],
+    temporalMappings: {},
+    letterLevelJoins: [{
+      type: 'letter_id',
+      from: ref('Records', 'ID'),
+      to: ref('Joined', 'ID'),
+    }],
+  };
+  const duplicateJoinValidation = validatePeridotWorkbookMapping(duplicateJoinWorkbook, duplicateJoinMapping);
+
   const checks = Object.freeze({
     primaryOnlyMultiSheetWorkbookAccepted: primaryOnlyValidation.isValid === true,
     noLetterIdErrorForUnusedSheets: !primaryOnlyValidation.issues.some((issue) =>
@@ -97,6 +119,9 @@ export function runPeridotWorkbookMappingValidationSelfAudit() {
     crossSheetLanguageIsDatasetNeutral: crossSheetValidation.issues
       .filter((issue) => ['missing_primary_join_id', 'missing_unique_id_join_for_mapped_sheet', 'cross_sheet_id_requirement'].includes(issue?.code))
       .every((issue) => !/Letter_ID|letter-level/i.test(String(issue?.message || ''))),
+    duplicateJoinedIdsAreRejected:
+      duplicateJoinValidation.isValid === false
+      && duplicateJoinValidation.issues.some((issue) => issue?.code === 'duplicate_record_join_target_ids'),
   });
 
   return Object.freeze({

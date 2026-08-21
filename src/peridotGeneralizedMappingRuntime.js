@@ -10,7 +10,7 @@
 
 import { parsePeridotCoordinatePair } from './peridotDataCapabilityAudit.js';
 import { composeTemporalPartsValue, getTemporalAssertionSourceColumns, normalizeTemporalAssertionMappings } from './peridotTemporalMapping.js';
-import { getPeridotIdentityRuntimeSourceColumns, resolvePeridotMappedEntityIdentity, resolvePeridotMappedRecordIdentity } from './peridotIdentityRuntime.js';
+import { getPeridotIdentityRuntimeSourceColumns, materializePeridotSingleTableIdentityMappingSuggestions, resolvePeridotMappedEntityIdentity, resolvePeridotMappedRecordIdentity } from './peridotIdentityRuntime.js';
 
 function asText(value) {
   return String(value ?? '').trim();
@@ -325,8 +325,19 @@ export function projectGeneralizedObservationToLegacyRow(observation = {}, mappi
 }
 
 export function applyPeridotGeneralizedColumnMapping(rows = [], mapping = {}) {
-  return (Array.isArray(rows) ? rows : []).map((row, index) => {
-    const observation = buildPeridotGeneralizedObservation(row, mapping, index);
-    return projectGeneralizedObservationToLegacyRow(observation, mapping);
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const headers = Array.from(new Set(sourceRows.flatMap((row) => Object.keys(row || {}))));
+  const effectiveMapping = {
+    ...mapping,
+    identityMapping: materializePeridotSingleTableIdentityMappingSuggestions({
+      identityMapping: mapping.identityMapping || {},
+      relationshipParts: mapping.relationshipParts || [],
+      placeParts: mapping.placeParts || [],
+      headers,
+    }),
+  };
+  return sourceRows.map((row, index) => {
+    const observation = buildPeridotGeneralizedObservation(row, effectiveMapping, index);
+    return projectGeneralizedObservationToLegacyRow(observation, effectiveMapping);
   });
 }
