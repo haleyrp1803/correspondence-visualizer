@@ -4133,7 +4133,7 @@ export default function EuropeNetworkMapApp() {
     }
   };
 
-  const handleSaveColumnMappingState = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionMappings, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
+  const handleSaveColumnMappingState = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, identityMapping, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionMappings, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
     setColumnMappingStaging((current) => {
       if (!current || current.status !== 'ready') return current;
 
@@ -4177,6 +4177,7 @@ export default function EuropeNetworkMapApp() {
           tableOrientation: tableOrientation || current.mappingState?.tableOrientation || 'columns',
           placeParts: placeParts || current.mappingState?.placeParts || [],
           relationshipParts: relationshipParts || current.mappingState?.relationshipParts || [],
+          identityMapping: identityMapping || current.mappingState?.identityMapping || { record: { strategy: 'row', columns: [] }, entityGroups: [] },
           relationshipMetadataMapping: relationshipMetadataMapping || current.mappingState?.relationshipMetadataMapping || {},
           coreMapping: coreMapping || current.mappingState?.coreMapping || {},
           temporalMapping: temporalMapping || current.mappingState?.temporalMapping || {},
@@ -4192,7 +4193,7 @@ export default function EuropeNetworkMapApp() {
     });
   };
 
-  const handleConfirmColumnMappingImport = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionMappings, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
+  const handleConfirmColumnMappingImport = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, identityMapping, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionMappings, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
     if (!columnMappingStaging || columnMappingStaging.status !== 'ready') return;
     const activeDatasetProfileId = resolvePeridotDatasetProfileId(
       datasetProfileId
@@ -4355,12 +4356,14 @@ export default function EuropeNetworkMapApp() {
       const nextRouteCoordinatePairMapping = routeCoordinatePairMapping || columnMappingStaging.mappingState?.routeCoordinatePairMapping || {};
       const nextPlaceParts = placeParts || columnMappingStaging.mappingState?.placeParts || [];
       const nextRelationshipParts = relationshipParts || columnMappingStaging.mappingState?.relationshipParts || [];
+      const nextIdentityMapping = identityMapping || columnMappingStaging.mappingState?.identityMapping || { record: { strategy: 'row', columns: [] }, entityGroups: [] };
       const nextRelationshipMetadataMapping = relationshipMetadataMapping || columnMappingStaging.mappingState?.relationshipMetadataMapping || {};
       const nextCustomFieldSelections = customFieldSelections || columnMappingStaging.mappingState?.customFieldSelections || [];
       const mappedRows = applyPeridotGeneralizedColumnMapping(columnMappingStaging.rows || [], {
         tableOrientation: tableOrientation || columnMappingStaging.mappingState?.tableOrientation || 'columns',
         placeParts: nextPlaceParts,
         relationshipParts: nextRelationshipParts,
+        identityMapping: nextIdentityMapping,
         relationshipMetadataMapping: nextRelationshipMetadataMapping,
         coreMapping: nextCoreMapping,
         temporalMapping: nextTemporalMapping,

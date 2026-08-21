@@ -10,6 +10,7 @@
 
 import { parsePeridotCoordinatePair } from './peridotDataCapabilityAudit.js';
 import { composeTemporalPartsValue, getTemporalAssertionSourceColumns, normalizeTemporalAssertionMappings } from './peridotTemporalMapping.js';
+import { getPeridotIdentityRuntimeSourceColumns, resolvePeridotMappedEntityIdentity, resolvePeridotMappedRecordIdentity } from './peridotIdentityRuntime.js';
 
 function asText(value) {
   return String(value ?? '').trim();
@@ -67,15 +68,20 @@ function coordinatesFromPlacePart(row = {}, part = {}) {
   };
 }
 
-function buildGeneralizedParticipants(row = {}, relationshipParts = []) {
+function buildGeneralizedParticipants(row = {}, relationshipParts = [], identityMapping = {}, rowIndex = 0) {
   return (relationshipParts || [])
     .map((part, index) => {
       const sourceColumn = asText(part?.participantColumn);
       const value = asText(valueFrom(row, sourceColumn));
       if (!sourceColumn || !value) return null;
+      const identity = resolvePeridotMappedEntityIdentity({
+        row, rowIndex, identityMapping, appearanceKind: 'relationship', appearanceIndex: index, label: value,
+      });
       return {
         index,
         value,
+        entityId: identity.entityId,
+        identity,
         role: roleFromPart(row, part, 'participantColumn') || `participant-${index + 1}`,
         sourceColumn,
         roleSourceColumn: part?.roleMode === 'column' ? asText(part?.roleColumn) : '',
@@ -84,7 +90,7 @@ function buildGeneralizedParticipants(row = {}, relationshipParts = []) {
     .filter(Boolean);
 }
 
-function buildGeneralizedPlaces(row = {}, placeParts = []) {
+function buildGeneralizedPlaces(row = {}, placeParts = [], identityMapping = {}, rowIndex = 0) {
   return (placeParts || [])
     .map((part, index) => {
       const sourceColumn = asText(part?.placeColumn);
@@ -93,9 +99,14 @@ function buildGeneralizedPlaces(row = {}, placeParts = []) {
       const hasCoordinates = Number.isFinite(coordinates.latitude) && Number.isFinite(coordinates.longitude);
       if (!sourceColumn && !hasCoordinates) return null;
       if (!label && !hasCoordinates) return null;
+      const identity = resolvePeridotMappedEntityIdentity({
+        row, rowIndex, identityMapping, appearanceKind: 'place', appearanceIndex: index, label,
+      });
       return {
         index,
         label,
+        entityId: identity.entityId,
+        identity,
         role: roleFromPart(row, part, 'placeColumn') || `place-${index + 1}`,
         sourceColumn,
         roleSourceColumn: part?.roleMode === 'column' ? asText(part?.roleColumn) : '',
@@ -209,12 +220,15 @@ function buildEvidenceFields(row = {}, selections = []) {
 }
 
 export function buildPeridotGeneralizedObservation(row = {}, mapping = {}, rowIndex = 0) {
+  const recordIdentity = resolvePeridotMappedRecordIdentity({ row, rowIndex, identityMapping: mapping.identityMapping || {} });
   return Object.freeze({
     schemaVersion: '1.0.0-draft',
     rowIndex,
+    recordId: recordIdentity.recordId,
+    recordIdentity,
     originalUploadedRow: { ...(row || {}) },
-    participants: Object.freeze(buildGeneralizedParticipants(row, mapping.relationshipParts || [])),
-    places: Object.freeze(buildGeneralizedPlaces(row, mapping.placeParts || [])),
+    participants: Object.freeze(buildGeneralizedParticipants(row, mapping.relationshipParts || [], mapping.identityMapping || {}, rowIndex)),
+    places: Object.freeze(buildGeneralizedPlaces(row, mapping.placeParts || [], mapping.identityMapping || {}, rowIndex)),
     temporal: Object.freeze(buildGeneralizedTemporal(row, mapping.temporalMapping || {}, mapping.temporalNoteMappings || {}, mapping.temporalAssertionMappings || [])),
     relationship: Object.freeze(buildGeneralizedRelationshipMetadata(row, mapping.relationshipMetadataMapping || {})),
     evidenceFields: Object.freeze(buildEvidenceFields(row, mapping.customFieldSelections || [])),
@@ -257,6 +271,9 @@ export function projectGeneralizedObservationToLegacyRow(observation = {}, mappi
 
   legacyRow.Source_Name = sourceParticipant?.value || '';
   legacyRow.Target_Name = targetParticipant?.value || '';
+  legacyRow.sourceEntityId = sourceParticipant?.entityId || '';
+  legacyRow.targetEntityId = targetParticipant?.entityId || '';
+  legacyRow.recordId = observation.recordId || legacyRow.recordId || legacyRow.id || '';
 
   const temporal = observation.temporal || {};
   legacyRow.Date = temporal.date || temporal.dateRange || temporal.dateStart || temporal.dateEnd || '';
@@ -294,6 +311,7 @@ export function projectGeneralizedObservationToLegacyRow(observation = {}, mappi
     ...Object.values(temporal.noteSourceColumns || {}).flat(),
     ...getTemporalAssertionSourceColumns(mapping.temporalAssertionMappings || []),
     ...Object.values(relationship.sourceColumns || {}),
+    ...getPeridotIdentityRuntimeSourceColumns(mapping.identityMapping || {}),
     ...customInspectorFields.map((field) => field.sourceColumn),
   ].filter(Boolean));
 

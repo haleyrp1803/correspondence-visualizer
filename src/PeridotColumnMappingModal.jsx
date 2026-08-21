@@ -903,14 +903,14 @@ function temporalMappingSourceSummary(mapping = {}, workbook = false) {
   return mapping.sourceMode === 'parts' ? parts('') : fmt(mapping.column);
 }
 
-function singleTemporalSubjectDetail(mapping = {}, relationshipParts = []) {
-  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'This row / record as a whole';
+function singleMappedSubjectDetail(mapping = {}, relationshipParts = []) {
+  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'Describes this row / record as a whole';
   const part = relationshipParts[mapping.subjectParticipantIndex];
   return part?.participantColumn ? `Describes ${part.participantColumn}` : `Describes relationship part ${mapping.subjectParticipantIndex + 1}`;
 }
 
-function workbookTemporalSubjectDetail(mapping = {}, relationshipParts = []) {
-  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'This row / record as a whole';
+function workbookMappedSubjectDetail(mapping = {}, relationshipParts = []) {
+  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'Describes this row / record as a whole';
   const part = relationshipParts[mapping.subjectParticipantIndex];
   const ref = part?.participantRef || {};
   return ref?.columnName ? `Describes ${ref.sheetName} — ${ref.columnName}` : `Describes relationship part ${mapping.subjectParticipantIndex + 1}`;
@@ -975,7 +975,7 @@ function SingleTableReviewAssignments({
 
         <ReviewAssignmentSection title="Time">
           {(temporalAssertionsMapping || []).filter((mapping) => temporalMappingSourceSummary(mapping)).length
-            ? (temporalAssertionsMapping || []).filter((mapping) => temporalMappingSourceSummary(mapping)).map((mapping, index) => <ReviewAssignmentLine key={mapping.id || index} label={mapping.role || `Time ${index + 1}`} value={temporalMappingSourceSummary(mapping)} detail={`${mapping.kind === 'period' ? 'Period / range' : 'Date'} · ${singleTemporalSubjectDetail(mapping, relationshipParts)}`} />)
+            ? (temporalAssertionsMapping || []).filter((mapping) => temporalMappingSourceSummary(mapping)).map((mapping, index) => <ReviewAssignmentLine key={mapping.id || index} label={mapping.role || `Time ${index + 1}`} value={temporalMappingSourceSummary(mapping)} detail={`${mapping.kind === 'period' ? 'Period / range' : 'Date'} · ${singleMappedSubjectDetail(mapping, relationshipParts)}`} />)
             : <ReviewAssignmentLine label="Time" value="Unassigned" />}
         </ReviewAssignmentSection>
 
@@ -998,7 +998,7 @@ function SingleTableReviewAssignments({
                   participantColumn: part.placeColumn,
                   roleMode: part.roleMode,
                   roleColumn: part.roleColumn,
-                }), coordinateDetail].filter(Boolean).join(' · ')}
+                }), singleMappedSubjectDetail(part, relationshipParts), coordinateDetail].filter(Boolean).join(' · ')}
               />
             );
           }) : (
@@ -1161,7 +1161,7 @@ function WorkbookReviewAssignments({ workbookMapping = {} }) {
 
         <ReviewAssignmentSection title="Time">
           {(workbookMapping.temporalAssertionMappings || []).filter((mapping) => temporalMappingSourceSummary(mapping, true)).length
-            ? (workbookMapping.temporalAssertionMappings || []).filter((mapping) => temporalMappingSourceSummary(mapping, true)).map((mapping, index) => <ReviewAssignmentLine key={mapping.id || index} label={mapping.role || `Time ${index + 1}`} value={temporalMappingSourceSummary(mapping, true)} detail={`${mapping.kind === 'period' ? 'Period / range' : 'Date'} · ${workbookTemporalSubjectDetail(mapping, workbookMapping.relationshipParts || [])}`} />)
+            ? (workbookMapping.temporalAssertionMappings || []).filter((mapping) => temporalMappingSourceSummary(mapping, true)).map((mapping, index) => <ReviewAssignmentLine key={mapping.id || index} label={mapping.role || `Time ${index + 1}`} value={temporalMappingSourceSummary(mapping, true)} detail={`${mapping.kind === 'period' ? 'Period / range' : 'Date'} · ${workbookMappedSubjectDetail(mapping, workbookMapping.relationshipParts || [])}`} />)
             : <ReviewAssignmentLine label="Time" value="Unassigned" />}
         </ReviewAssignmentSection>
 
@@ -1185,7 +1185,7 @@ function WorkbookReviewAssignments({ workbookMapping = {} }) {
                   participantRef: part.placeRef,
                   roleMode: part.roleMode,
                   roleRef: part.roleRef,
-                }), coordinateDetail].filter(Boolean).join(' · ')}
+                }), workbookMappedSubjectDetail(part, workbookMapping.relationshipParts || []), coordinateDetail].filter(Boolean).join(' · ')}
               />
             );
           }) : (
@@ -2283,6 +2283,7 @@ export function PeridotColumnMappingModal({
       placeParts,
       relationshipParts,
       relationshipMetadataMapping,
+      identityMapping,
       coreMapping,
       temporalMapping: stripDisplayDateMapping(temporalMapping),
       temporalNoteMappings,
@@ -2291,7 +2292,7 @@ export function PeridotColumnMappingModal({
       routeCoordinatePairMapping,
       customFieldSelections: effectiveCustomSelections,
     }),
-    [rows, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionsMapping, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
+    [rows, tableOrientation, placeParts, relationshipParts, relationshipMetadataMapping, identityMapping, coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionsMapping, pointMapping, routeCoordinatePairMapping, effectiveCustomSelections]
   );
 
   const validationSummary = useMemo(

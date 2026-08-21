@@ -3,8 +3,8 @@
  *
  * Relations tells Peridot what participates in a row. Identity tells Peridot
  * how to recognize the same record or recurring person/place/thing when it
- * appears again. This UI stores user-declared recognition rules only; runtime
- * authority is a separate bounded pass after the interaction model is accepted.
+ * appears again. These researcher-declared recognition rules are compiled into
+ * stable runtime identities during generalized import.
  */
 
 import React from 'react';

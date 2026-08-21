@@ -61,6 +61,7 @@ import {
   buildPeridotGeneralizedObservation,
   projectGeneralizedObservationToLegacyRow,
 } from './peridotGeneralizedMappingRuntime.js';
+import { convertWorkbookIdentityMappingToRuntime, getWorkbookIdentityRefs } from './peridotIdentityRuntime.js';
 
 export const PERIDOT_WORKBOOK_JOIN_TYPES = Object.freeze({
   letterId: 'letter_id',
@@ -602,6 +603,11 @@ function getWorkbookSemanticRefs(mappingState = {}) {
   const evidenceRefs = (mappingState.customFieldSelections || []).map((selection) =>
     selection?.sourceRef || makeWorkbookColumnRef(selection?.sheetName, selection?.sourceColumn)
   );
+  const identityRefs = getWorkbookIdentityRefs(mappingState.identityMapping || {});
+  const workbookRecordIdentityRef = mappingState?.identityMapping?.record?.strategy === 'workbook-key'
+    && mappingState.primarySheetName && mappingState.primaryLetterIdColumn
+    ? makeWorkbookColumnRef(mappingState.primarySheetName, mappingState.primaryLetterIdColumn)
+    : null;
 
   return [
     ...Object.values(mappingState.coreMappings || {}),
@@ -613,6 +619,8 @@ function getWorkbookSemanticRefs(mappingState = {}) {
     ...placeRefs,
     ...relationshipRefs,
     ...relationshipMetadataRefs,
+    workbookRecordIdentityRef,
+    ...identityRefs,
     ...evidenceRefs,
   ].filter((ref) => isWorkbookColumnRefPresent(ref));
 }
@@ -1121,7 +1129,15 @@ function workbookRefRuntimeKey(ref = {}) {
 }
 
 function buildWorkbookGeneralizedRuntimeMapping(mappingState = {}) {
+  const identityMapping = convertWorkbookIdentityMappingToRuntime(mappingState.identityMapping || {}, workbookRefRuntimeKey);
+  if (identityMapping?.record?.strategy === 'workbook-key' && mappingState.primarySheetName && mappingState.primaryLetterIdColumn) {
+    identityMapping.record = {
+      ...identityMapping.record,
+      columns: [workbookRefRuntimeKey(makeWorkbookColumnRef(mappingState.primarySheetName, mappingState.primaryLetterIdColumn))],
+    };
+  }
   return {
+    identityMapping,
     relationshipParts: (mappingState.relationshipParts || []).map((part) => ({
       participantColumn: workbookRefRuntimeKey(part?.participantRef),
       headingRole: asText(part?.participantRef?.columnName),

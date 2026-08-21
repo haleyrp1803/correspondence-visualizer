@@ -684,7 +684,7 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
   const sourceFileName = asText(options.sourceFileName) || '';
   const sourceSheet = asText(options.sourceSheet) || 'Uploaded table';
 
-  const entitiesByLabel = new Map();
+  const entitiesByIdentity = new Map();
   const placesByIdentity = new Map();
   const records = [];
   const participations = [];
@@ -696,14 +696,17 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
   function ensureGeneralizedEntity(participant, row, rowIndex) {
     const label = asText(participant?.value);
     if (!label) return '';
-    if (!entitiesByLabel.has(label)) {
-      entitiesByLabel.set(label, makePeridotEntity({
-        id: makeEntityId(datasetId, label),
+    const declaredEntityId = asText(participant?.entityId || participant?.canonicalEntityId || participant?.id);
+    const identityKey = declaredEntityId || `label:${label}`;
+    if (!entitiesByIdentity.has(identityKey)) {
+      entitiesByIdentity.set(identityKey, makePeridotEntity({
+        id: declaredEntityId || makeEntityId(datasetId, label),
         entityType: PERIDOT_ENTITY_TYPES.AGENT,
         subtype: 'mapped-participant',
         label,
         attributes: {
-          identityPolicy: 'exact-entered-label',
+          identityPolicy: declaredEntityId ? 'researcher-declared-identity' : 'exact-entered-label-fallback',
+          mappedIdentity: participant?.identity || null,
         },
         provenance: makeRowProvenance({
           row,
@@ -711,12 +714,18 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
           sourceFileId,
           sourceFileName,
           sourceSheet,
-          sourceColumns: unique([participant?.sourceColumn, participant?.roleSourceColumn]),
-          transformation: 'Create exact-label Agent from user-confirmed generalized relationship participant.',
+          sourceColumns: unique([
+            participant?.sourceColumn,
+            participant?.roleSourceColumn,
+            ...(participant?.identity?.components || []).map((component) => component?.sourceColumn),
+          ]),
+          transformation: declaredEntityId
+            ? 'Create Agent using researcher-declared generalized entity identity.'
+            : 'Create exact-label Agent from generalized relationship participant because no runtime identity was declared.',
         }),
       }));
     }
-    return entitiesByLabel.get(label).id;
+    return entitiesByIdentity.get(identityKey).id;
   }
 
   function ensureGeneralizedPlace(place, row, rowIndex) {
@@ -846,6 +855,7 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
           placeId,
           role: asText(place.role),
           sourceColumn: asText(place.sourceColumn),
+          subjectParticipantIndex: Number.isInteger(place.subjectParticipantIndex) ? place.subjectParticipantIndex : null,
         })),
         customFields: Object.fromEntries(evidenceFields.map((field) => [asText(field.label), field.value])),
         ignoredUploadedColumns: Array.isArray(row.ignoredUploadedColumns) ? [...row.ignoredUploadedColumns] : [],
@@ -884,7 +894,7 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
 
     placeEntries.forEach(({ place, placeId }, placeIndex) => {
       const associatedParticipant = Number.isInteger(place.subjectParticipantIndex)
-        ? participantEntries[place.subjectParticipantIndex]
+        ? participantEntries.find((entry) => entry?.participant?.index === place.subjectParticipantIndex)
         : null;
       const placeSubjectId = associatedParticipant?.entityId || recordId;
       assertions.push(makePeridotAssertion({
@@ -933,11 +943,11 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
       version: PERIDOT_CORRESPONDENCE_PROFILE_VERSION,
       label: 'Correspondence / Directed Record',
       primaryRowType: 'generalized-mapped-observation',
-      identityPolicy: 'exact-entered-labels; no automatic reconciliation',
+      identityPolicy: 'researcher-declared generalized identity when mapped; exact-label fallback otherwise',
       semanticAuthority: 'user-confirmed-generalized-mapping',
       userConfirmed: true,
     },
-    entities: Array.from(entitiesByLabel.values()),
+    entities: Array.from(entitiesByIdentity.values()),
     places: Array.from(placesByIdentity.values()),
     records,
     events: [],

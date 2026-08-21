@@ -702,6 +702,16 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
               return <option key={`workbook-place-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
             })}
           </select>
+          <p className={`mt-1.5 text-[11px] leading-relaxed ${subjectParticipantIndex === '' && (relationshipParts || []).length ? 'font-semibold text-[var(--danger-text,var(--panel-card-muted-text))]' : 'text-[var(--panel-card-muted-text)]'}`}>
+            {subjectParticipantIndex === ''
+              ? ((relationshipParts || []).length
+                ? 'Currently attached to the row / record as a whole. It will not appear as an associated place for a participant unless you choose one here.'
+                : 'This place is attached to the row / record as a whole.')
+              : (() => {
+                  const ref = (relationshipParts || [])[subjectParticipantIndex]?.participantRef || {};
+                  return `This place will be attributed to ${ref?.columnName ? `${ref.sheetName} — ${ref.columnName}` : `relationship part ${subjectParticipantIndex + 1}`}.`;
+                })()}
+          </p>
         </div>
       </div>
 
@@ -909,6 +919,13 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
               return <option key={`place-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
             })}
           </select>
+          <p className={`mt-1.5 text-[11px] leading-relaxed ${subjectParticipantIndex === '' && (relationshipParts || []).length ? 'font-semibold text-[var(--danger-text,var(--panel-card-muted-text))]' : 'text-[var(--panel-card-muted-text)]'}`}>
+            {subjectParticipantIndex === ''
+              ? ((relationshipParts || []).length
+                ? 'Currently attached to the row / record as a whole. It will not appear as an associated place for a participant unless you choose one here.'
+                : 'This place is attached to the row / record as a whole.')
+              : `This place will be attributed to ${(relationshipParts || [])[subjectParticipantIndex]?.participantColumn || `relationship part ${subjectParticipantIndex + 1}`}.`}
+          </p>
         </div>
       </div>
 
