@@ -2119,6 +2119,8 @@ export function PeridotColumnMappingModal({
   onClose,
   onSaveMapping,
   onConfirmImport,
+  onResetSampleMapping,
+  readOnly = false,
 }) {
   const mappingState = staging?.mappingState || {};
   const datasetProfile = getPeridotDatasetProfile(
@@ -2971,6 +2973,10 @@ export function PeridotColumnMappingModal({
   };
 
   const handleRequestCancel = () => {
+    if (readOnly) {
+      onClose?.();
+      return;
+    }
     setShowCancelConfirmation(true);
   };
 
@@ -3002,7 +3008,11 @@ export function PeridotColumnMappingModal({
     moveToStep(stepKeys[nextIndex]);
   };
 
-  const footerHelper = staging?.editingActiveData
+  const footerHelper = readOnly
+    ? 'This mapping is read-only.'
+    : staging?.editingSampleMapping
+      ? 'You’re editing Peridot’s interpretation of this sample data. Your changes will affect the active sample, but the original sample mapping is preserved and can be restored at any time.'
+    : staging?.editingActiveData
     ? 'Apply changes recompiles the active dataset from the original uploaded source using these revised mapping choices.'
     : isGenealogyProfile
       ? 'Confirm import activates this validated canonical genealogy dataset. Geographic routes remain unavailable unless the source explicitly records routes.'
@@ -3235,8 +3245,12 @@ export function PeridotColumnMappingModal({
               {staging.fileLabel || 'Uploaded data'}
             </div>
             <h2 className="[font-family:Georgia,'Palatino_Linotype','Book_Antiqua',Palatino,serif] text-2xl font-bold leading-tight text-[var(--heading-text)]">
-              {staging?.editingActiveData
-                ? (isWorkbookMode ? 'Edit workbook data roles' : 'Edit data roles for Peridot')
+              {readOnly
+                ? 'View mapping'
+                : staging?.editingSampleMapping
+                  ? (isWorkbookMode ? 'Edit sample workbook mapping' : 'Edit sample data mapping')
+                : staging?.editingActiveData
+                  ? (isWorkbookMode ? 'Edit workbook data roles' : 'Edit data roles for Peridot')
                 : isGenealogyProfile
                   ? 'Genealogy import profile'
                   : isWorkbookMode
@@ -3248,6 +3262,12 @@ export function PeridotColumnMappingModal({
             Close
           </button>
         </div>
+
+        {staging?.editingSampleMapping ? (
+          <div className="border-b border-[var(--panel-card-border)] bg-[var(--peridot-role-card-bg)] px-6 py-4 text-sm leading-6 text-[var(--panel-card-text)]">
+            <strong>Sample mapping:</strong> You’re editing Peridot’s interpretation of this sample data. Your changes will affect the active sample, but the original sample mapping is preserved and can be restored at any time.
+          </div>
+        ) : null}
 
         <div className="peridot-mapping-progress peridot-mapping-modal-enter-progress border-b border-[var(--panel-card-border)] bg-[var(--section-bg)] px-6 py-3">
           {stepKeys.map((step, index) => (
@@ -3262,18 +3282,31 @@ export function PeridotColumnMappingModal({
         </div>
 
         <div className={`peridot-mapping-modal-body peridot-mapping-modal-enter-body peridot-mapping-step-soft-shell peridot-mapping-step-soft-shell-${stepTransitionPhase} min-h-0 flex-1 overflow-y-auto px-6 py-5`}>
-          <div
-            key={`step-${renderedStep}`}
-            className={`peridot-mapping-step-soft-panel peridot-mapping-step-soft-panel-${stepTransitionPhase}`}
-          >
-            {renderStepContent(renderedStep)}
-          </div>
+          <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
+            <div
+              key={`step-${renderedStep}`}
+              className={`peridot-mapping-step-soft-panel peridot-mapping-step-soft-panel-${stepTransitionPhase}`}
+            >
+              {renderStepContent(renderedStep)}
+            </div>
+          </fieldset>
         </div>
 
         <div className="peridot-mapping-modal-footer peridot-mapping-modal-enter-footer flex flex-wrap items-center justify-between gap-3 border-t border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-6 py-3">
           <p className="max-w-2xl text-sm text-[var(--panel-card-muted-text)]">{footerHelper}</p>
           <div className="flex flex-wrap gap-2">
-            {isGenealogyProfile ? (
+            {staging?.editingSampleMapping && !readOnly ? (
+              <button type="button" onClick={onResetSampleMapping} className={buttonClassName({ variant: 'secondary' })}>Reset to sample mapping</button>
+            ) : null}
+            {readOnly ? (
+              <>
+                <button type="button" onClick={goBack} disabled={activeStepIndex <= 0} className={buttonClassName({ variant: 'secondary' })}>Back</button>
+                {activeStepIndex < stepKeys.length - 1 ? (
+                  <button type="button" onClick={goNext} className={buttonClassName({ variant: 'primary' })}>Next</button>
+                ) : null}
+                <button type="button" onClick={handleRequestCancel} className={buttonClassName({ variant: 'secondary' })}>Close</button>
+              </>
+            ) : isGenealogyProfile ? (
               <>
                 <button type="button" onClick={goBack} disabled={activeStepIndex <= 0} className={buttonClassName({ variant: 'secondary' })}>Back</button>
                 {activeStepIndex < stepKeys.length - 1 ? (

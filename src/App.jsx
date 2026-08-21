@@ -112,15 +112,10 @@ import {
 } from './peridotDatasetProfiles.js';
 import { PERIDOT_APP_THEME_DEFAULTS, PERIDOT_MAP_STYLE_PRESETS } from './peridotTheme.js';
 import {
-  SAMPLE_GEOGRAPHY_CSV,
-  SAMPLE_LETTERS_CSV,
-  SAMPLE_PERSON_METADATA_CSV,
-} from './peridotSampleData.js';
-
-
-// Sample data is now isolated in `peridotSampleData.js` so this orchestration
-// file can focus on application state and workflow wiring rather than carrying
-// megabytes of embedded CSV fixture text.
+  PERIDOT_SAMPLE_DATASETS,
+  getPeridotSampleDataset,
+  getPeridotSampleDatasetUrl,
+} from './peridotSampleDatasets.js';
 
 // Inspector presentation modes are introduced as inert state first.
 // Later passes will wire these values into compact side-panel and full-workspace routing.
@@ -3088,7 +3083,7 @@ export default function EuropeNetworkMapApp() {
   // ------------------------------------------------------------
   // Current data source
   // ------------------------------------------------------------
-  const [peridotFileLabel, setPeridotFileLabel] = useState('Sample Data');
+  const [peridotFileLabel, setPeridotFileLabel] = useState('No data selected');
   const [peridotValidationSummary, setPeridotValidationSummary] = useState(null);
   const [isPeridotValidationModalOpen, setIsPeridotValidationModalOpen] = useState(false);
   const [peridotNormalizedData, setPeridotNormalizedData] = useState(null);
@@ -3099,6 +3094,9 @@ export default function EuropeNetworkMapApp() {
   // an edit abandons only the draft edit, never the currently active dataset.
   const [activeMappedDataSource, setActiveMappedDataSource] = useState(null);
   const [isColumnMappingModalOpen, setIsColumnMappingModalOpen] = useState(false);
+  const [isSampleChooserOpen, setIsSampleChooserOpen] = useState(false);
+  const [sampleLoadingId, setSampleLoadingId] = useState('');
+  const [pendingTutorialSampleSelection, setPendingTutorialSampleSelection] = useState(false);
 
   // ------------------------------------------------------------
   // Workspace routing state
@@ -3348,19 +3346,19 @@ export default function EuropeNetworkMapApp() {
   // ------------------------------------------------------------
   // Parsed and normalized source tables
   // ------------------------------------------------------------
+  // No dataset is preloaded. A new visitor sees an empty application state until
+  // they explicitly choose a built-in sample or upload their own source file.
   const geographyRows = useMemo(
-    () => (peridotNormalizedData ? peridotNormalizedData.normalizedRows : parseCsv(SAMPLE_GEOGRAPHY_CSV)),
+    () => (peridotNormalizedData ? peridotNormalizedData.normalizedRows : []),
     [peridotNormalizedData]
   );
-  const letterRows = useMemo(() => parseCsv(SAMPLE_LETTERS_CSV), []);
-  const personMetadataRows = useMemo(() => parseCsv(SAMPLE_PERSON_METADATA_CSV), []);
   const normalizedLetters = useMemo(
-    () => (peridotNormalizedData ? peridotNormalizedData.normalizedLetters : normalizeLettersRows(letterRows)),
-    [peridotNormalizedData, letterRows]
+    () => (peridotNormalizedData ? peridotNormalizedData.normalizedLetters : []),
+    [peridotNormalizedData]
   );
   const normalizedPersonMetadata = useMemo(
-    () => (peridotNormalizedData ? peridotNormalizedData.normalizedPersonMetadata : normalizePersonMetadataRows(personMetadataRows)),
-    [peridotNormalizedData, personMetadataRows]
+    () => (peridotNormalizedData ? peridotNormalizedData.normalizedPersonMetadata : []),
+    [peridotNormalizedData]
   );
   const personMetadataByName = useMemo(() => {
     const map = new Map();
@@ -4149,6 +4147,176 @@ export default function EuropeNetworkMapApp() {
     }
   };
 
+  const loadPeridotSampleWorkbook = async (sample) => {
+    const sampleUrl = getPeridotSampleDatasetUrl(sample);
+    const response = await fetch(sampleUrl);
+    if (!response.ok) {
+      throw new Error(`Could not load ${sample.title} (${response.status}).`);
+    }
+    const blob = await response.blob();
+    const file = new File([blob], sample.fileName, { type: blob.type || 'application/octet-stream' });
+    return parsePeridotTableFile(file);
+  };
+
+  const buildPeridotSampleStaging = (sample, workbookModel) => {
+    const workbookSummary = summarizePeridotWorkbook(workbookModel);
+    const usableSheets = (workbookModel.sheets || []).filter((sheet) => sheet.headers?.length && sheet.rows?.length);
+    const primarySheetName = sample.mappingMode === 'workbook'
+      ? sample.mappingState.primarySheetName
+      : (usableSheets[0]?.sheetName || 'Uploaded table');
+    const primarySheet = usableSheets.find((sheet) => sheet.sheetName === primarySheetName) || usableSheets[0] || null;
+    const mappingState = JSON.parse(JSON.stringify(sample.mappingState || {}));
+    if (sample.mappingMode !== 'workbook') mappingState.sourceSheet = primarySheet?.sheetName || 'Uploaded table';
+
+    return {
+      status: 'ready',
+      datasetProfileId: DEFAULT_PERIDOT_DATASET_PROFILE_ID,
+      datasetProfile: getPeridotDatasetProfile(DEFAULT_PERIDOT_DATASET_PROFILE_ID),
+      fileLabel: sample.fileName,
+      fileType: workbookModel.fileType === 'excel' ? 'Excel workbook' : workbookModel.fileType === 'tsv' ? 'TSV' : 'CSV',
+      delimiter: workbookModel.fileType === 'tsv' ? '\t' : ',',
+      rowCount: workbookSummary.totalRows,
+      columnCount: workbookSummary.totalColumns,
+      sheetCount: workbookSummary.sheetCount,
+      sheets: workbookSummary.sheets,
+      workbookModel,
+      workbookSummary,
+      activeSheetName: primarySheet?.sheetName || '',
+      headers: primarySheet?.headers || [],
+      rows: sample.mappingMode === 'workbook' ? [] : (primarySheet?.rows || []),
+      previewRows: primarySheet?.previewRows || [],
+      mappingState,
+      canonicalSampleMapping: JSON.parse(JSON.stringify(sample.mappingState || {})),
+      mappingMode: sample.mappingMode,
+      multiSheetWorkbook: sample.mappingMode === 'workbook' && usableSheets.length > 1,
+      workbookMappingRequired: sample.mappingMode === 'workbook',
+      isSampleData: true,
+      sampleDatasetId: sample.id,
+      sampleDatasetTitle: sample.title,
+      stagedAt: new Date().toLocaleTimeString(),
+    };
+  };
+
+  const editPeridotSampleMapping = async (sampleId) => {
+    const sample = getPeridotSampleDataset(sampleId);
+    if (!sample) return;
+    setSampleLoadingId(sampleId);
+    try {
+      const workbookModel = await loadPeridotSampleWorkbook(sample);
+      const baseStaging = buildPeridotSampleStaging(sample, workbookModel);
+      const activeSampleMapping = activeMappedDataSource?.isSampleData
+        && activeMappedDataSource?.sampleDatasetId === sampleId
+        ? JSON.parse(JSON.stringify(activeMappedDataSource.mappingState || sample.mappingState || {}))
+        : JSON.parse(JSON.stringify(sample.mappingState || {}));
+      setColumnMappingStaging({
+        ...baseStaging,
+        mappingState: activeSampleMapping,
+        canonicalSampleMapping: JSON.parse(JSON.stringify(sample.mappingState || {})),
+        editingSampleMapping: true,
+        editingActiveData: Boolean(activeMappedDataSource?.isSampleData && activeMappedDataSource?.sampleDatasetId === sampleId),
+        stagedAt: new Date().toLocaleTimeString(),
+      });
+      setIsColumnMappingModalOpen(true);
+    } catch (error) {
+      setPeridotValidationSummary({
+        popup: {
+          title: 'Sample could not be opened',
+          intro: error instanceof Error ? error.message : 'Unknown sample-loading error.',
+          capabilityLines: [], warningLines: [], closingLines: ['No data was changed.'],
+        },
+        summaryLines: ['Sample loading failed.'], warnings: [], hasWarnings: true, totalRows: 0, acceptedRecordCount: 0, unsupportedRowCount: 0, capabilityCounts: {},
+      });
+      setIsPeridotValidationModalOpen(true);
+    } finally {
+      setSampleLoadingId('');
+    }
+  };
+
+  const resetPeridotSampleMapping = () => {
+    setColumnMappingStaging((current) => {
+      if (!current?.editingSampleMapping || !current?.canonicalSampleMapping) return current;
+      return {
+        ...current,
+        mappingState: JSON.parse(JSON.stringify(current.canonicalSampleMapping)),
+        stagedAt: new Date().toLocaleTimeString(),
+      };
+    });
+  };
+
+  const activatePeridotSampleData = async (sampleId) => {
+    const sample = getPeridotSampleDataset(sampleId);
+    if (!sample) return;
+    setSampleLoadingId(sampleId);
+    try {
+      const workbookModel = await loadPeridotSampleWorkbook(sample);
+      const staging = buildPeridotSampleStaging(sample, workbookModel);
+      let mappedRows = [];
+      let finalValidationSummary = null;
+
+      if (sample.mappingMode === 'workbook') {
+        const workbookValidation = validatePeridotWorkbookMapping(workbookModel, staging.mappingState);
+        if (!workbookValidation.isValid) {
+          const firstError = workbookValidation.issues?.find((issue) => issue.severity === 'error');
+          throw new Error(firstError?.message || `${sample.title} has an invalid saved mapping.`);
+        }
+        mappedRows = buildPeridotRowsFromWorkbookMapping(workbookModel, staging.mappingState);
+        finalValidationSummary = buildPeridotCsvValidationSummary(mappedRows, PERIDOT_TEMPLATE_COLUMNS);
+      } else {
+        mappedRows = applyPeridotGeneralizedColumnMapping(staging.rows || [], staging.mappingState);
+        finalValidationSummary = buildPeridotCsvValidationSummary(mappedRows, PERIDOT_TEMPLATE_COLUMNS);
+      }
+
+      const normalized = buildPeridotCanonicalRuntimeModel(mappedRows, {
+        fileLabel: `${sample.title} (sample)`,
+        sourceKind: sample.mappingMode === 'workbook' ? 'mapped-workbook-sample' : 'mapped-single-table-sample',
+        sourceSheet: staging.mappingState.primarySheetName || staging.activeSheetName || 'Uploaded table',
+      });
+
+      setPeridotNormalizedData(normalized);
+      setPeridotFileLabel(`${sample.title} (sample)`);
+      setPeridotValidationSummary(finalValidationSummary);
+      setIsPeridotValidationModalOpen(false);
+      setActiveMappedDataSource({
+        ...staging,
+        status: 'ready',
+        mappingState: staging.mappingState,
+        isSampleData: true,
+        sampleDatasetId: sample.id,
+        savedMappingAt: new Date().toLocaleTimeString(),
+      });
+      setColumnMappingStaging(null);
+      setIsColumnMappingModalOpen(false);
+      setIsSampleChooserOpen(false);
+      resetActiveDataInteractionState();
+      setViewMode('geographic');
+      setPersonLayoutMode('geographic');
+      setResolvedWorkspaceMode(PERIDOT_WORKSPACE_MODES.VISUALIZATIONS);
+      setIsSidePanelOpen(false);
+
+      if (pendingTutorialSampleSelection) {
+        setPendingTutorialSampleSelection(false);
+        window.requestAnimationFrame(() => {
+          const startStep = getPeridotTutorialStep(PERIDOT_TUTORIAL_START_INDEX);
+          setTutorialStepIndex(PERIDOT_TUTORIAL_START_INDEX);
+          setIsTutorialActive(true);
+          routeTutorialStepToWorkspace(startStep);
+        });
+      }
+    } catch (error) {
+      setPeridotValidationSummary({
+        popup: {
+          title: 'Sample could not be loaded',
+          intro: error instanceof Error ? error.message : 'Unknown sample-loading error.',
+          capabilityLines: [], warningLines: [], closingLines: ['No data was changed.'],
+        },
+        summaryLines: ['Sample loading failed.'], warnings: [], hasWarnings: true, totalRows: 0, acceptedRecordCount: 0, unsupportedRowCount: 0, capabilityCounts: {},
+      });
+      setIsPeridotValidationModalOpen(true);
+    } finally {
+      setSampleLoadingId('');
+    }
+  };
+
   const handleSaveColumnMappingState = ({ datasetProfileId, tableOrientation, placeParts, relationshipParts, identityMapping, relationshipMetadataMapping, coreMapping, temporalMapping, temporalNoteMappings, temporalAssertionMappings, pointMapping, routeCoordinatePairMapping, customFieldSelections, validationSummary, workbookMappingState, workbookValidation, workbookSummary, genealogyMappingState, supplementalResolution } = {}) => {
     setColumnMappingStaging((current) => {
       if (!current || current.status !== 'ready') return current;
@@ -4339,10 +4507,14 @@ export default function EuropeNetworkMapApp() {
 
         const mappedRows = buildPeridotRowsFromWorkbookMapping(columnMappingStaging.workbookModel, nextWorkbookMapping);
         const finalValidationSummary = buildPeridotCsvValidationSummary(mappedRows, PERIDOT_TEMPLATE_COLUMNS);
-        const fileLabel = `${columnMappingStaging.fileLabel || 'Mapped workbook'} (mapped workbook)`;
+        const editingSample = Boolean(columnMappingStaging.editingSampleMapping && columnMappingStaging.sampleDatasetId);
+        const sampleDefinition = editingSample ? getPeridotSampleDataset(columnMappingStaging.sampleDatasetId) : null;
+        const fileLabel = editingSample
+          ? `${sampleDefinition?.title || columnMappingStaging.sampleDatasetTitle || 'Sample'} (sample)`
+          : `${columnMappingStaging.fileLabel || 'Mapped workbook'} (mapped workbook)`;
         const normalized = buildPeridotCanonicalRuntimeModel(mappedRows, {
           fileLabel,
-          sourceKind: 'mapped-workbook',
+          sourceKind: editingSample ? 'mapped-workbook-sample' : 'mapped-workbook',
           sourceSheet: nextWorkbookMapping.primarySheetName || 'Mapped workbook',
         });
 
@@ -4396,10 +4568,14 @@ export default function EuropeNetworkMapApp() {
         customFieldSelections: nextCustomFieldSelections,
       });
       const finalValidationSummary = validationSummary || buildPeridotCsvValidationSummary(mappedRows, PERIDOT_TEMPLATE_COLUMNS);
-      const fileLabel = `${columnMappingStaging.fileLabel || 'Mapped table'} (mapped)`;
+      const editingSample = Boolean(columnMappingStaging.editingSampleMapping && columnMappingStaging.sampleDatasetId);
+      const sampleDefinition = editingSample ? getPeridotSampleDataset(columnMappingStaging.sampleDatasetId) : null;
+      const fileLabel = editingSample
+        ? `${sampleDefinition?.title || columnMappingStaging.sampleDatasetTitle || 'Sample'} (sample)`
+        : `${columnMappingStaging.fileLabel || 'Mapped table'} (mapped)`;
       const normalized = buildPeridotCanonicalRuntimeModel(mappedRows, {
         fileLabel,
-        sourceKind: 'mapped-single-table',
+        sourceKind: editingSample ? 'mapped-single-table-sample' : 'mapped-single-table',
         sourceSheet: columnMappingStaging.mappingState?.sourceSheet || 'Uploaded table',
       });
 
@@ -4853,15 +5029,9 @@ export default function EuropeNetworkMapApp() {
   };
 
   const useSampleData = () => {
-    setPeridotNormalizedData(null);
-    setPeridotFileLabel('Sample Data');
-    setPeridotValidationSummary(null);
-    setIsPeridotValidationModalOpen(false);
-    setActiveMappedDataSource(null);
-    setColumnMappingStaging(null);
-    setIsColumnMappingModalOpen(false);
-    resetActiveDataInteractionState();
-    openVisualizationsWorkspace();
+    setIsSampleChooserOpen(true);
+    setResolvedWorkspaceMode(PERIDOT_WORKSPACE_MODES.DATA);
+    setIsSidePanelOpen(false);
   };
 
   const selectPlaceMapVisualization = () => {
@@ -4922,6 +5092,13 @@ export default function EuropeNetworkMapApp() {
     tutorialReturnFocusRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
+    if (!peridotNormalizedData) {
+      setPendingTutorialSampleSelection(true);
+      setIsSampleChooserOpen(true);
+      setResolvedWorkspaceMode(PERIDOT_WORKSPACE_MODES.DATA);
+      setIsSidePanelOpen(false);
+      return;
+    }
     const startStep = getPeridotTutorialStep(PERIDOT_TUTORIAL_START_INDEX);
     setTutorialStepIndex(PERIDOT_TUTORIAL_START_INDEX);
     setIsTutorialActive(true);
@@ -4972,13 +5149,20 @@ export default function EuropeNetworkMapApp() {
     peridotFileLabel,
     peridotValidationSummary,
     columnMappingStaging,
-    activeMappedDataSource,
+    activeMappedDataSource: activeMappedDataSource?.isSampleData ? null : activeMappedDataSource,
+    activeSampleDataSource: activeMappedDataSource?.isSampleData ? activeMappedDataSource : null,
     handleDownloadPeridotTemplate,
     handleColumnMappingTableUpload,
     openColumnMappingModal: () => setIsColumnMappingModalOpen(true),
     openActiveMappedDataEditor,
     clearColumnMappingStaging,
     onUseSampleData: useSampleData,
+    sampleChooserOpen: isSampleChooserOpen,
+    sampleDatasets: PERIDOT_SAMPLE_DATASETS.map((sample) => ({ ...sample, downloadUrl: getPeridotSampleDatasetUrl(sample) })),
+    onCloseSampleChooser: () => { setIsSampleChooserOpen(false); setPendingTutorialSampleSelection(false); },
+    onExploreSample: activatePeridotSampleData,
+    onEditSampleMapping: editPeridotSampleMapping,
+    sampleLoadingId,
   };
 
   const themeWorkspaceProps = {
@@ -5226,6 +5410,7 @@ export default function EuropeNetworkMapApp() {
           onClose={discardColumnMappingStaging}
           onSaveMapping={handleSaveColumnMappingState}
           onConfirmImport={handleConfirmColumnMappingImport}
+          onResetSampleMapping={resetPeridotSampleMapping}
         />
 
         <AppMainWorkspace

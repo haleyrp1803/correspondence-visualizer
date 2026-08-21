@@ -30,6 +30,13 @@ export function PeridotDataWorkspace({
   openActiveMappedDataEditor,
   clearColumnMappingStaging,
   onUseSampleData,
+  sampleChooserOpen = false,
+  sampleDatasets = [],
+  onCloseSampleChooser,
+  onExploreSample,
+  onEditSampleMapping,
+  sampleLoadingId = '',
+  activeSampleDataSource = null,
 }) {
   return (
     <section className="peridot-workspace-field flex min-h-full items-center text-[var(--peridot-color-hex-fbf7ea)]">
@@ -104,6 +111,60 @@ export function PeridotDataWorkspace({
           </div>
         </div>
 
+        {sampleChooserOpen ? (
+          <div className="mx-auto mt-8 max-w-5xl peridot-cream-card peridot-card-inner">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="peridot-section-label">Sample data</p>
+                <h2 className="mt-2 text-2xl font-bold text-[var(--peridot-color-hex-26352b)]">Choose an ordinary sample file.</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--peridot-color-hex-42533f)]">
+                  Each sample passes through the same generalized mapping system as your own uploads. Explore it with its saved mapping, edit that interpretation to see how different choices change the result, or download the original source file and adapt it for your own project.
+                </p>
+              </div>
+              <button type="button" onClick={onCloseSampleChooser} className="peridot-button-cream">Close samples</button>
+            </div>
+
+            <div className="mt-6 grid gap-4 lg:grid-cols-3">
+              {sampleDatasets.map((sample) => {
+                const isLoading = sampleLoadingId === sample.id;
+                return (
+                  <article key={sample.id} className="rounded-2xl border border-[var(--peridot-role-card-border)] bg-[var(--peridot-role-card-bg)] p-5">
+                    <p className="peridot-section-label">{sample.format}</p>
+                    <h3 className="mt-2 text-xl font-bold text-[var(--peridot-color-hex-26352b)]">{sample.title}</h3>
+                    <p className="mt-3 text-sm leading-6 text-[var(--peridot-color-hex-42533f)]">{sample.description}</p>
+                    <p className="mt-3 text-xs leading-5 text-[var(--peridot-color-hex-42533f)]/80">{sample.teachingNote}</p>
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onExploreSample?.(sample.id)}
+                        disabled={isLoading}
+                        className="peridot-button-primary disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {isLoading ? 'Loading…' : 'Explore sample'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onEditSampleMapping?.(sample.id)}
+                        disabled={isLoading}
+                        className="peridot-button-cream disabled:cursor-wait disabled:opacity-60"
+                      >
+                        Edit mapping
+                      </button>
+                      <a
+                        href={sample.downloadUrl}
+                        download={sample.fileName}
+                        className="peridot-button-cream inline-flex items-center justify-center"
+                      >
+                        Download source
+                      </a>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
         {columnMappingStaging ? (
           <div className="mx-auto mt-8 max-w-3xl peridot-cream-card peridot-card-inner">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -136,7 +197,15 @@ export function PeridotDataWorkspace({
             <span>
               Current source: <strong className="text-[var(--peridot-color-hex-fbf7ea)]">{peridotFileLabel}</strong>
             </span>
-            {activeMappedDataSource ? (
+            {activeSampleDataSource ? (
+              <button
+                type="button"
+                onClick={() => onEditSampleMapping?.(activeSampleDataSource.sampleDatasetId)}
+                className="rounded-full border border-[var(--peridot-role-ornament-line)] px-4 py-2 font-semibold text-[var(--peridot-color-hex-fbf7ea)] transition hover:bg-[var(--peridot-role-button-primary-hover-bg)]"
+              >
+                Edit sample mapping
+              </button>
+            ) : activeMappedDataSource ? (
               <button
                 type="button"
                 onClick={openActiveMappedDataEditor}
