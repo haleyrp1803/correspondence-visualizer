@@ -24,7 +24,7 @@ This Charter owns mandatory process rules, source-of-truth continuity, delivery/
 Current synchronized checkpoint:
 
 ```text
-4076e5b — Checkpoint generalized identity mapping groundwork
+8290696 — Add first-class generalized sample datasets
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
@@ -305,13 +305,19 @@ Future cluster changes should preserve:
 
 ### Data import, canonical normalization, and mapping caution
 
-Data import is a fragile boundary. Keep the public direction intact: unified CSV / TSV / XLSX / XLS upload, user-confirmed/user-owned mapping, active correspondence and genealogy profiles, permissive database-first admission, and no silent standardization. The generalized correspondence/directed-record mapper now includes Preview/orientation, n-part Relations, repeatable Time, repeatable Places, the checkpointed Identity mapping surface, Evidence, and Review; workbook mappings use sheet-qualified versions of the same model. At `4076e5b`, Identity is still interaction/state groundwork rather than authoritative downstream identity. The next small flow correction should place Identity immediately after Relations before later assertions attach to participants. Correspondence still passes through the canonical normalized model and a legacy runtime adapter; genealogy uses a direct canonical runtime projection; broader universal structures may remain canonical-only until a consumer deliberately adopts them.
+Data import is a fragile boundary. Keep the public direction intact: one generalized CSV / TSV / XLSX / XLS mapping system, explicit user-owned semantics, permissive database-first admission, editable post-import mappings, and no silent standardization. The former public Correspondence-versus-Genealogy profile gate and separate experimental universal-mapper surface are superseded; compatibility/profile modules may remain internally only where current runtime behavior still requires them.
 
-Generalized `placeParts`, `relationshipParts`, temporal/evidence assignments, and workbook references are now authoritative through normalization/runtime consumption. Do not let legacy Source/Target, point/route, or single-Date fields silently override a user's accepted mapping merely because older consumers still exist. Compatibility projection is allowed only as an explicit downstream bridge and is now a retirement-audit target rather than a competing architecture.
+Peridot must begin with **no active dataset**. Do not restore an implicit sample fallback. Sample data must be explicitly selected by the user and should remain ordinary files processed by ordinary generalized mappings. Canonical sample mappings may be edited in the active session for learning/QA, but the shipped mapping and source file remain preserved and resettable.
 
-Do not create a new profile for every unusual spreadsheet shape as a substitute for the universal mapping work. Conversely, do not retire or collapse the existing Correspondence / Directed Record or Genealogy / Person-Centered profiles until runtime integration, representative regression testing, and a repository-wide retirement audit prove that removal loses no behavior or scholarly expressiveness and simplifies the architecture rather than relocating complexity. Do not reintroduce the legacy three-file workflow without a specific recovery or compatibility reason.
+Generalized Relations, Identity, Time, Places, and Evidence are authoritative through runtime/canonical consumption. Identity is no longer UI-only groundwork: mapped stable IDs, label/field/composite/row rules, and equivalent conceptual components across roles/sheets must produce stable entity identity. Legacy Source/Target or profile-specific fields may remain only as explicit compatibility projections and must not override accepted mappings.
 
-For the current import/workbook contract and detailed regression checks, see the [Maintainer’s Guide — Data Import and Workbook Contract](MAINTAINERS_GUIDE.md#7-data-import-and-workbook-contract).
+Participant attribution is also semantic authority. A place/date mapped to one participant must not become information about every participant in the row. The same source field may legitimately support different researcher-named roles for different participants. Directed correspondence-style place pairs should exist only where the mapping explicitly supplies directed pairs.
+
+Workbooks continue to use user-configured unique-ID joins rather than row order. Duplicate join IDs that make assembly unsafe must be blocked or surfaced rather than silently multiplying records. Mapping suggestions visible to the user must either be materialized into accepted state or clearly presented as unaccepted suggestions; a visible default must not disappear merely because the user did not touch its control.
+
+Do not create a new profile or parser for each unusual spreadsheet shape. In particular, future multiple-partner/multiple-value support belongs in the generalized cardinality model rather than a genealogy-specific `Ex Partner IDs` workaround. Conversely, do not delete compatibility modules without the no-loss retirement audit.
+
+For the current import/sample/Identity contract and detailed regression checks, see the [Maintainer’s Guide — Data Import and Workbook Contract](MAINTAINERS_GUIDE.md#7-data-import-and-workbook-contract).
 
 ### Advanced Search and applied-scope caution
 
@@ -339,36 +345,37 @@ Detailed historical decision rationale remains preserved in the archived invento
 - Peridot is database-first: accepted research items may be incomplete, and coordinates/dates are capability-enabling rather than admission requirements.
 - Peridot does not silently standardize, merge, infer domain meaning, or enforce controlled vocabularies.
 - The canonical normalized model is the consumer-neutral research representation. It preserves entities, places, records, events, relationships, participations, evidence, assertions, temporal structure, and machine-readable provenance.
-- Correspondence / Directed Record and Genealogy / Person-Centered are active mapping/normalization profiles. They remain first-class until a universal mapping workflow demonstrates complete parity and a simpler architecture; do not retire them merely to make the profile list shorter.
-- Arbitrary tables use explicit user-confirmed mapping; current correspondence workbooks use user-confirmed unique-ID joins rather than row-order matching.
-- The Phase 1 universal mapping foundation is deterministic and user-owned: saved variables, field assignments, sheet-purpose assignments, repeated-heading groups, source-table/field descriptors, transformations, and table connections record what the user has told Peridot. Peridot may suggest broad recognizable forms such as dates or coordinates, but the user is ultimately responsible for the accepted mapping.
-- Broader universal datasets must not be forced into correspondence- or genealogy-shaped runtime rows merely because those are the current active consumer projections. Canonical-only preservation is valid until appropriate downstream consumers are implemented.
-- Phase 2's progressive mapping UI and generalized runtime authority are accepted for relationship/place/temporal/evidence semantics. The `4076e5b` checkpoint adds Identity mapping for records and recurring entities; its current UI position after Places is a known transitional detail, with a planned correction to place Identity immediately after Relations. Major tabs remain visible rather than disappearing because Peridot thinks a capability is unused.
-- Generalized mappings are authoritative through canonical normalization/runtime consumption. Legacy fields may remain only as explicit compatibility projections while the repository-wide retirement audit determines which paths are still required.
-- The repository-wide retirement audit should classify old code as delete now, still-required compatibility layer, legitimate profile-specific specialization, or uncertain/retain. Do not perform broad deletion before the replacement has carried real data end-to-end.
-- Phase 3 should begin only after that Phase 2 boundary is clean. It should build chart controls from saved variables, including a structured autocomplete sentence builder that mirrors scholarly questions without implementing unrestricted natural-language prompting.
+- The public upload model is now one generalized mapping system. Older Correspondence / Directed Record and Genealogy / Person-Centered profile modules are internal compatibility/specialization paths rather than user-facing ontology choices.
+- Arbitrary tables use explicit user-confirmed mappings; workbooks use user-confirmed unique-ID joins rather than row-order matching.
+- Generalized mapping is deterministic and user-owned: relationship parts, Identity rules, temporal assertions, place parts, evidence assignments, workbook references, source descriptors, and transformations record what the researcher has told Peridot.
+- Generalized Identity is authoritative at runtime. Display labels are not universal identity, and equivalent conceptual identity components may be mapped across different participant roles/sheets.
+- Participant subjects are authoritative for mapped dates/places. A value mapped to one participant must not automatically become information about every entity present in the row.
+- Peridot starts with no active dataset. Sample data is explicitly selected and uses ordinary source files plus ordinary generalized mappings.
+- Sample mappings are editable for learning/QA while the shipped mapping and source remain preserved and resettable.
+- Generalized mappings are authoritative through canonical/runtime consumption. Legacy fields may remain only as explicit compatibility projections while the repository-wide retirement audit determines which paths are still required.
+- Phase 3 should build chart controls from saved/generalized variables, including a structured autocomplete sentence builder that mirrors scholarly questions without implementing unrestricted natural-language prompting.
 
 
-#### Phase 2 generalized-mapper authority decision
+#### Generalized-mapper authority decision
 
 ```text
 Decision:
-Treat accepted generalized mapping assignments as the authoritative semantic inputs.
+Treat accepted generalized mapping assignments as the authoritative semantic inputs for ordinary uploads and samples.
 
 Context:
-The Phase 2 UI and runtime now carry repeatable place parts, n-participant relationships, generalized temporal assertions, evidence mappings, and workbook-qualified references through canonical normalization and active runtime consumption.
+The public mapping system now carries repeatable relationship participants, researcher-declared Identity, generalized temporal assertions, participant-attached places, evidence mappings, workbook-qualified references, and editable post-import state through active runtime consumption.
 
 Chosen approach:
-Keep generalized mappings authoritative while retaining only explicit downstream compatibility projections where current consumers still require them. Continue retirement through bounded audits rather than broad deletion.
+Use one generalized mapping model as the public semantic authority. Retain only explicit downstream compatibility projections where current consumers still require them. Continue retirement through bounded audits rather than broad deletion.
 
 Rejected alternative:
-Let legacy Source/Target, point/route, or single-Date fields remain co-equal semantic authorities, or delete all compatibility code at once.
+Keep Correspondence/Genealogy profile selection or legacy Source/Target, point/route, or single-Date fields as co-equal semantic authorities; maintain a separate “universal mapper” test path; or delete all compatibility code at once.
 
 Reason:
 One authoritative mapping architecture prevents accepted user mappings from being silently overridden while preserving rollback-safe compatibility for consumers that have not yet migrated.
 
 Maintenance consequence:
-New consumer work should read canonical/generalized structures first. Compatibility fields must be treated as projections, not sources of truth, and should be removed only after consumer parity is proven.
+New consumer work should read generalized/canonical structures first. Compatibility fields and profile modules are projections/specializations, not competing sources of truth.
 ```
 
 #### Temporal assertions and Timeline semantics decision
@@ -403,7 +410,7 @@ Context:
 Generalized datasets can contain repeated display names, several roles for the same recurring entity, multiple kinds of recurring entities, and source tables without a pre-existing database ID. The same historical person may appear in sender, recipient, parent, partner, or profile columns, while different people may share the same displayed name.
 
 Chosen approach:
-Provide an Identity mapping surface that distinguishes record identity from recurring entity identity. Allow record/entity recognition by displayed label, one identifying field, several fields used together, or intentional row-level uniqueness. Allow multiple independently configured entity groups such as People and Places. When the same kind of identifying information appears in different roles or sheets, the researcher maps equivalent conceptual components—for example Name → Source plus Title → Source Title and Name → Target plus Title → Target Title—so the source column names do not themselves define identity.
+Provide an Identity mapping surface that distinguishes record identity from recurring entity identity. Allow recognition by displayed label, one identifying field, stable source ID, several fields used together, or intentional row-level uniqueness. Allow multiple independently configured entity groups. When the same kind of identifying information appears in different roles or sheets, map equivalent conceptual components—for example Name → Source plus Title → Source Title and Name → Target plus Title → Target Title.
 
 Rejected alternative:
 Assume matching display names always identify one entity; require every user to add a dedicated ID column; infer entity merges automatically; or force one universal identity rule across all recurring things in a dataset.
@@ -412,13 +419,60 @@ Reason:
 Humanistic source structures often encode identity relationally or through combinations of fields rather than modern database keys. The researcher is better positioned than Peridot to state what makes two appearances the same historical entity.
 
 Maintenance consequence:
-Display labels are presentation, not universal identity. Downstream consumers should prefer stable identities produced from the accepted rule and fall back to exact labels only when no stronger identity is available. At `4076e5b`, the UI/state is checkpointed but runtime authority remains unfinished; do not claim full identity resolution until the next integration pass proves it end-to-end.
+Display labels are presentation, not universal identity. Accepted Identity rules now compile into stable runtime IDs. Visible accepted suggestions must be materialized into mapping state even when untouched; explicit clearing must remain explicit. Regression tests must cover both same-label distinct entities and one entity recurring across roles.
+```
+
+#### First-class sample-data decision
+
+```text
+Decision:
+Treat bundled samples as ordinary downloadable source files with ordinary generalized mappings, and never preload one implicitly.
+
+Context:
+Sample data is useful both for first-time exploration and for repeatable QA. An embedded fallback makes the application look as though data exists before the user has chosen it and obscures how the generalized mapper actually interprets the source.
+
+Chosen approach:
+Ship correspondence, family-tree, and cardinals source files under `public/sample_data/`; pair them with preserved generalized mappings; require explicit sample selection; allow source download; and let users edit the active sample mapping while preserving a resettable canonical mapping.
+
+Rejected alternative:
+Keep hidden embedded sample rows as the default app state; hard-code sample-specific parsers; or make the canonical sample mapping read-only.
+
+Reason:
+Samples should demonstrate the same transparent data path that researchers use and should double as stable QA fixtures.
+
+Maintenance consequence:
+No-data is a valid first-launch state. Sample-specific behavior belongs in metadata/mapping definitions, not a second runtime architecture. Editing a sample changes only the active interpretation and must not mutate the shipped source or canonical mapping.
+```
+
+#### Deferred cardinality / delimiter decision
+
+```text
+Decision:
+Model multiple values per cell as a per-mapped-item researcher declaration rather than a file-wide assumption or dataset-specific parser.
+
+Context:
+Humanistic tables may mix single-valued and multi-valued cells. Examples include multiple partner IDs in genealogy and evidence such as `clerical, familial, diplomatic`.
+
+Chosen approach:
+For each mapped item, let the researcher declare one value versus multiple values. If multiple, require the delimiter. Trim leading/trailing whitespace around values for non-space delimiters; if a literal space is explicitly chosen as the delimiter, treat that space as semantic.
+
+Rejected alternative:
+Guess delimiters automatically; apply one delimiter/cardinality rule to the whole upload; or implement a one-off genealogy partner parser.
+
+Reason:
+Cardinality varies by column and by scholarly structure. The researcher knows whether punctuation is data or separation.
+
+Maintenance consequence:
+This behavior is **deferred, not yet implemented**. Its eventual schema/runtime design must be broad enough for relationship, place, temporal, Identity/Evidence, and other suitable mappings.
 ```
 
 ### 7.2 Routing and workspace model
 
 - The active public model is workspace-first: Home, Data, Visualizations, Explore/Advanced Search, and Learn More are the primary public surfaces.
 - The hamburger menu is the primary public navigation surface; Themes and Accessibility remains implemented but hidden; Export and Timeline are Visualizations-integrated.
+- First launch has no active dataset. **Use sample data** must require an explicit sample choice rather than silently activating a fallback.
+- A later visual redesign will merge the strongest parts of the current branded Home and Data/sample-selection surfaces. That redesign is deferred and must not be smuggled into data-model passes.
+- The final tutorial entry should be a static button integrated into that future Home redesign rather than the current pop-up/launch treatment.
 - MapLibre migrated-overlay work is archived. Active `main` continues the D3/SVG path.
 
 ### 7.3 Inspector
@@ -426,9 +480,10 @@ Display labels are presentation, not universal identity. Downstream consumers sh
 - Inspector is dual-mode: compact visualization-click summaries and full dossier navigation share selection state and **central multi-step Back history**.
 - Full Inspector overlays rather than remounts Visualizations. Linked records, legitimate routes, people/entities, places, and clusters participate in shared history.
 - Linked-data curiosity is a hard preservation contract: a researcher must be able to follow a chain such as node → connected person → another connected person → connected place → connected record, use Back several times, and then branch from an earlier dossier.
-- The planned generalized Inspector overhaul must change the **derivation model**, not merely replace Source/Target wording. Compact and expanded views should consume the same generalized relationship/place/temporal/identity semantics at different densities.
-- Correspondence-specific sender/recipient or origin/destination summaries may remain when the mapped data genuinely supports them; non-correspondence datasets must not inherit fake directed routes or omit later n-part participants because of a legacy binary projection.
-- `Unknown` remains a first-class bucket only for genuinely unresolved source evidence; connected-record sorting/filtering/pagination behavior should survive the overhaul.
+- Generalized Inspector derivation is now the accepted model. Compact and expanded views consume generalized relationship, participant-place, temporal, Identity, and evidence semantics at different densities rather than assuming universal Source/Target pairs.
+- Correspondence-specific sender/recipient or origin/destination summaries remain valid when the mapping genuinely supports them; non-correspondence datasets must not inherit fake directed routes or omit later n-part participants because of a compatibility projection.
+- Participant attribution is authoritative: mapped information about one participant must not bleed onto another merely because both occur in the same row.
+- `Unknown` remains a first-class bucket only for genuinely unresolved source evidence; connected-record sorting/filtering/pagination behavior remains a preservation contract.
 
 ### 7.4 Search and data scope
 

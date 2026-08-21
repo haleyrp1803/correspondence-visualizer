@@ -20,29 +20,57 @@ This document owns the detailed checkpoint, milestone chronology, deferred/archi
 ## 1. Current Synchronized Checkpoint
 
 ```text
-4076e5b — Checkpoint generalized identity mapping groundwork
+8290696 — Add first-class generalized sample datasets
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
 
-This checkpoint preserves the latest completed groundwork before the planned generalized Inspector overhaul. Since the previous documentation baseline, Peridot has completed the remaining temporal-authority migration, generalized Search/Network relationship semantics substantially, checkpointed incomplete geographic-network foundations, added a generalized mapped-information reader for Inspector/Search legibility, propagated canonical entity IDs through several existing runtime/selection paths, and introduced the first researcher-facing generalized Identity mapping model.
+This checkpoint closes the Inspector/Identity authority program that began at `4076e5b` and establishes the current generalized Data workflow plus reusable sample-data QA infrastructure. Since the previous documentation baseline, Peridot has replaced legacy Source/Target-era Inspector derivation with generalized participant attribution, made mapped record/entity Identity rules authoritative at runtime, stabilized composite identity across correspondence roles and workbook imports, made participant-attached place semantics authoritative, restored editable post-import mappings, simplified the Data entry surface around one generalized model, and added three ordinary downloadable sample datasets with preserved canonical mappings.
 
 Current architectural significance:
 
-- canonical Temporal Assertions are now the sole active temporal interpretation system; `parsedDate`, `parseHistoricalDate`, duplicate capability parsing, lexical chronology fallback, and related old authority paths are retired from active `src`;
-- Search relationship readiness, participant/entity facets, connected-entity criteria, and related summaries now use generalized relationship semantics rather than only Source/Target pairs;
-- `peridotEntityNetwork.js` is the shared generalized relationship boundary for Search/Network semantics, including multipart relationships and canonical endpoint IDs where available;
-- geographic People Map groundwork now separates Search-filtered structural relationship scope from Timeline/playback-visible event/place scope, but correct relationship/event scoping and transparent geographic anchors remain unfinished;
-- `peridotRecordStructure.js`, `PeridotRecordStructure.jsx`, and fixtures expose mapped dates/periods, participants, places, generalized relationships, and evidence as a direct QA surface;
-- the SI1 legibility work revealed a deeper identity rule: display labels are not sufficient universal identity, especially when multiple historical entities share a name or one recurring entity appears in different roles;
-- `PeridotIdentityMappingControls.jsx` and current `PeridotColumnMappingModal.jsx` state now let researchers describe record identity and multiple recurring entity groups using label, one field, several fields together, or row-level uniqueness, including equivalent identifying information across different roles/sheets;
-- Identity mapping is checkpointed **interaction/state groundwork**, not yet authoritative runtime identity;
-- the current generalized Identity step appears after Places in the UI; the next small mapping-flow correction will move it immediately after Relations;
-- the legacy upper Inspector profile still derives people/places substantially through Source/Target-era compatibility logic. This causes later n-part participants to disappear in some profiles, non-correspondence geography to appear as meaningless directed routes, and mapped places to miss generalized person associations;
-- the next implementation program is therefore a generalized Inspector overhaul across **both compact and expanded views**, preserving linked-data navigation and central multi-step Back history as hard behavior contracts.
+- generalized Identity is now authoritative rather than UI-only groundwork: mapped label, one-field, composite-field, and stable-ID rules compile into machine-facing entity identity and survive across roles;
+- equivalent identity components across different participant roles are unified correctly—for example `Source + Source Title` and `Target + Target Title` can resolve one historical person across both roles without conflating same-label people who have different mapped identities;
+- visible Identity suggestions are materialized into the accepted mapping even when the user does not manually touch the suggested dropdown, while explicitly cleared mappings remain cleared;
+- Inspector person/entity and place dossiers now derive connected people, mapped places, temporal assertions, semantic relationships, and participant-attributed information from generalized mapping semantics rather than assuming every dataset is correspondence-shaped;
+- mapped temporal/place information respects its declared participant subject, so a child’s birthplace and a mother’s childbirth location can use the same underlying source column without being assigned to both people;
+- user-named place roles remain distinct even when they point to the same value, and directed-place summaries appear only when the mapped data genuinely supplies directed place pairs;
+- workbook join validation blocks unsafe duplicate join IDs rather than silently multiplying assembled records;
+- uploaded mapped data can be reopened and edited from the Data workspace; applying revisions recompiles the active dataset from the original source through the generalized mapping path;
+- the public Data entry surface no longer asks users to choose Correspondence versus Genealogy or exposes a separate “universal mapper” test surface. The generalized model is the ordinary upload model;
+- Peridot now starts with **no active dataset**. A user must explicitly select a sample or upload data before a dataset becomes active;
+- `public/sample_data/` now contains ordinary correspondence, family-tree, and cardinals source files. `src/peridotSampleDatasets.js` supplies their preserved generalized mappings, chooser metadata, source-download behavior, and reset baseline;
+- sample mappings are intentionally editable for pedagogy/QA. Changes affect only the active sample interpretation; **Reset to sample mapping** restores the shipped mapping without modifying the underlying source file or canonical sample definition;
+- the former embedded `src/peridotSampleData.js` path is retired;
+- live correspondence QA confirmed one entity across repeated Source/Target appearances, aggregated Inspector records/relationships, ordinary network edges, and usable map/network visualization switching on the tested sample after the prior freeze/occurrence-identity failures.
 
-The active Correspondence / Directed Record and Genealogy / Person-Centered profiles remain compatibility/specialization paths and should not be retired without a no-loss repository-wide audit.
+The current implementation sequence after documentation is no longer “generalize Inspector, then make Identity authoritative”; those tasks are complete at this checkpoint. The next data-model questions are cardinality/multi-valued cells and richer record-versus-participant attribution, followed by the remaining generalized Network/Search/Chart work and later UI/tutorial polish.
+
 ## 2. Recent Milestones, Newest First
+
+### Generalized Inspector/Identity authority, editable mappings, and first-class sample datasets — 2026-08-21
+
+- **`959d874` — `Synchronize documentation for identity and inspector groundwork`** preserved the `4076e5b` handoff baseline before the runtime/Inspector migration continued.
+- **`287ca50` — `Generalize Inspector semantics and participant attribution`** replaced the old correspondence-shaped Inspector derivation with generalized participant, relationship, temporal, place, and evidence semantics while preserving compact/full presentation, linked-record navigation, and central multi-step Back history.
+- Inspector QA against genealogy data exposed and then resolved several attribution failures: later relationship participants no longer disappear merely because they are Part C/D; participant-attached dates/places no longer bleed onto every entity represented by a row; and non-correspondence data no longer has to masquerade as directed Source/Target routes.
+- The place-mapping contract now preserves researcher-named semantic roles and participant subjects independently. The same source column can therefore support `place of birth` for a child and `birthed child here` / childbirth location for the mother without treating those as the same assertion.
+- **`bc37b08` — `Make mapped identity and place subjects authoritative`** completed runtime authority for mapped entity identity and participant-place subjects. Stable mapped IDs distinguish same-label people such as different historical Anne von Habsburg entries, while repeated appearances of one person remain connected.
+- Identity authority supports role-equivalent composite identity components. A correspondence person represented by `Source + Source Title` in some records and `Target + Target Title` in others can resolve as one entity when the researcher maps both pairs to the same conceptual Name + Title identity structure.
+- Workbook and Inspector regression work also added/strengthened safeguards for null relationship references, duplicate workbook join IDs, generalized relationship counterparts, place subjects, and mapped-information rendering.
+- The Data workspace was simplified around the generalized model: the old Correspondence-versus-Genealogy public profile chooser and the separate experimental universal-mapper surface are no longer part of the ordinary user flow.
+- Uploaded mapped data can now be reopened through **Edit mapped data** and recompiled from the original uploaded source after mapping changes.
+- **`e944e60` — `Stabilize generalized correspondence mapping`** fixed the correspondence cross-role identity-continuity failure. Visible suggested Identity mappings are now materialized into authoritative mapping state even when the user accepts them without touching the dropdown; explicit clearing remains respected. The 500-record correspondence sample verified one Cristina identity across Source and Target appearances and aggregated Inspector scope instead of one entity per occurrence.
+- The same stabilization work addressed the severe visualization-switch behavior encountered after importing the larger Maria Maddalena workbook; subsequent QA could move among force/network and map views without reproducing the prior application-freeze sequence.
+- **`8290696` — `Add first-class generalized sample datasets`** made sample data ordinary project files rather than hidden built-in records:
+  - `public/sample_data/correspondence_network_sample.xlsx`
+  - `public/sample_data/family_tree_sample.csv`
+  - `public/sample_data/cardinals_1600_1640_sample.xlsx`
+- `src/peridotSampleDatasets.js` now defines sample metadata and preserved generalized mappings. Samples use the same parsing/mapping/runtime path as researcher uploads, may be downloaded as source files, and can be inspected as mapping examples.
+- Peridot no longer preloads any sample under a first-time user. A dataset becomes active only after the user explicitly chooses a sample or uploads their own data.
+- Sample mappings are editable in the active session with the warning: **“You’re editing Peridot’s interpretation of this sample data. Your changes will affect the active sample, but the original sample mapping is preserved and can be restored at any time.”** **Reset to sample mapping** restores the shipped interpretation without modifying the canonical sample definition or source file.
+- The former embedded `src/peridotSampleData.js` module is retired.
+- Prepared this bounded core-documentation synchronization against `8290696` after rereading the Governance Protocol, current README, Maintainer’s Guide, Project Workflow Charter, Changelog, and retained restructuring plan; the Governance Protocol itself remains unchanged because its ownership/process model did not change.
+- Deferred from this milestone: per-field multi-value/cardinality declarations and delimiter handling; richer record-versus-participant attribution; generalized Network place/event scoping and anchor rules; Search place/facet generalization; Phase 3 Chart Builder; the Search and Timeline × Analytics scope audits; and a later homepage/tutorial redesign that merges the current Home/Data entry strengths and replaces the current tutorial pop-up/launch treatment with a static tutorial button.
 
 
 ### Temporal retirement, generalized relationship semantics, identity groundwork, and Inspector legibility checkpoint — 2026-08-19
@@ -477,15 +505,18 @@ The following milestone narratives are retained as historical records. They rema
 ---
 ## 3. Deferred, Archived, and Rolled-Back Work
 
-### Current deferred identity, Inspector, Search-place, and Network work after `4076e5b`
+### Current deferred data-model, Network, Search, Chart, and UI work after `8290696`
 
-- **Inspector overhaul is next.** Replace Source/Target-era person/place profile derivation in both compact and expanded Inspector with generalized relationships, participant-place associations, temporal assertions, entity identity, and evidence. Preserve linked-data navigation and central multi-step Back history.
-- **Identity runtime authority remains incomplete.** Move Identity directly after Relations, then compile accepted label/field/composite/row identity rules into stable identities used by Inspector, Search, Network, and related consumers.
-- **Search places remain less generalized than Search relationships.** Migrate place Browse/facets/criteria/results to all mapped place associations.
-- **Geographic Network semantics remain checkpointed, not complete.** Correct relationship/event scoping, use transparent/user-selected geographic anchors, migrate playback highlighting to all generalized relationships, then address Force-Directed viewport fitting and arrowhead termination.
-- **Named place associations remain planned.** The same underlying place can support distinct participant-specific meanings such as place of birth, place of childbirth, residence, court, office, origin, or destination; exact user labels should be preserved.
-- Optional Timeline structure filters for approximate/partial/open values remain deferred, but there is no longer a legacy temporal-parser retirement task: that cleanup was completed at `9cc9d93`.
-- Preserve the distinction between a temporarily empty Co-current playback moment and genuine visualization unavailability.
+- **Cardinality / multi-valued cells is the next major mapping-model question.** Cardinality should be declared per mapped item rather than once for a file. The agreed direction is an explicit one-value versus multiple-values choice plus a researcher-declared delimiter. For non-space delimiters, Peridot should trim leading/trailing whitespace around split values; if the researcher explicitly chooses a space as the delimiter, the space itself is semantic. This must be designed broadly enough for relationships, places, time, identity/evidence, and similar fields rather than as a genealogy-only partner parser.
+- **Record-versus-participant attribution needs a richer user model.** The current language around “describes this row / record” can imply that a value describes every participant in that record. Future mapping should allow a field/assertion to belong to the record, one or more mapped participants, or both, using a clear multiple-choice/multi-select interaction.
+- **Generalized Network follow-up remains active.** Correct geographic relationship/event scoping, transparent/user-selected participant-place anchors, generalized playback highlighting, Force-Directed viewport fitting, and arrowhead termination remain separate bounded work.
+- **Search places/facets remain less generalized than relationship semantics.** Migrate Browse/facet/criteria/result paths to all mapped place associations.
+- **Phase 3 Chart Builder remains deferred** until the remaining generalized data-model boundary is stable. The wide/transposed stock-price case remains a key regression target.
+- **Search coverage/scope** and **Timeline playback × Analytics** remain dedicated audits. Do not claim identical loaded/filtered/timeline-visible/charted/exported scope behavior until those audits are complete.
+- **Homepage/tutorial redesign is deferred.** The future Home direction should merge the strongest parts of the current branded landing page and Data/sample-selection surface. The final tutorial entry should be a static button rather than the current pop-up/launch treatment.
+- Optional Timeline structure filters for approximate/partial/open values remain deferred if they can be made analytically useful and human-readable.
+- A repository-wide legacy/compatibility audit remains appropriate after the universal runtime has carried the remaining consumers end-to-end. Retire only code proven unnecessary; preserve legitimate compatibility/profile-specific specializations until no-loss parity is established.
+
 ### Tutorial attention-animation experiments rolled back before `619bab0`
 
 The following tutorial experiments were intentionally removed and are not current functionality:
@@ -532,6 +563,11 @@ This is the single authoritative place in the documentation for the cumulative c
 
 | Date | Commit | Message | Branch/tag decoration |
 |---|---|---|---|
+| 2026-08-21 | `8290696` | Add first-class generalized sample datasets | (HEAD -> main, origin/main, origin/HEAD) |
+| 2026-08-21 | `e944e60` | Stabilize generalized correspondence mapping |  |
+| 2026-08-21 | `bc37b08` | Make mapped identity and place subjects authoritative |  |
+| 2026-08-21 | `287ca50` | Generalize Inspector semantics and participant attribution |  |
+| 2026-08-19 | `959d874` | Synchronize documentation for identity and inspector groundwork |  |
 | 2026-08-19 | `4076e5b` | Checkpoint generalized identity mapping groundwork | (HEAD -> main, origin/main, origin/HEAD) |
 | 2026-08-19 | `a24034f` | Checkpoint generalized geographic network groundwork |  |
 | 2026-08-19 | `ccc2482` | Complete generalized relationship search helpers |  |
