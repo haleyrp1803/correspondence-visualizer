@@ -14,6 +14,7 @@
 
 import { pointToQuadraticDistance } from './mapLayoutHelpers';
 import { getRowPrimaryTemporalDisplay, getRowTemporalSortBounds, getRowTemporalSortKey } from './timelinePlaybackHelpers.js';
+import { collectPeridotInspectorEntityRows } from './peridotInspectorSemantics.js';
 
 export function buildNearbyCandidates(point, screenNodes, screenEdges, clusterSingularLabel, clusterPluralLabel) {
   const nodeCandidates = screenNodes
@@ -549,6 +550,25 @@ export function buildPlaceDetailSelection(placeLabel, graph, personMetadataByNam
   };
 }
 
+
+function enrichSelectionWithInspectorRows(selection, options = {}, entityOptions = {}) {
+  if (!selection) return selection;
+  const primaryRows = Array.isArray(options.inspectorRows) ? options.inspectorRows : [];
+  const structuralRows = Array.isArray(options.inspectorRelationshipRows) ? options.inspectorRelationshipRows : [];
+  if (!primaryRows.length && !structuralRows.length) return selection;
+
+  const linkedLetters = collectPeridotInspectorEntityRows(primaryRows, structuralRows, entityOptions);
+  if (!linkedLetters.length) return selection;
+  const { earliestDate, latestDate } = buildDateBoundsFromLetters(linkedLetters);
+  return {
+    ...selection,
+    linkedLetters,
+    linkedLetterCount: linkedLetters.length,
+    earliestDate,
+    latestDate,
+  };
+}
+
 export function resolveSelection(selectedSelection, graph, personMetadataByName, options = {}) {
   if (!selectedSelection) return null;
 
@@ -566,7 +586,14 @@ export function resolveSelection(selectedSelection, graph, personMetadataByName,
 
   if (selectedSelection.kind === 'node') {
     const node = graph.nodes.find((item) => item.id === selectedSelection.id && !item.isCluster);
-    return node ? buildNodeSelection(node, graph, personMetadataByName, options.personMetadataById) : null;
+    if (!node) return null;
+    const selection = buildNodeSelection(node, graph, personMetadataByName, options.personMetadataById);
+    const entityType = node.entityType === 'place' || options.viewMode === 'geographic' ? 'place' : 'person';
+    return enrichSelectionWithInspectorRows(selection, options, {
+      entityType,
+      entityLabel: node.label,
+      entityId: entityType === 'person' ? (node.entityId || '') : '',
+    });
   }
 
   if (selectedSelection.kind === 'person-detail') {
@@ -574,21 +601,85 @@ export function resolveSelection(selectedSelection, graph, personMetadataByName,
       entityId: selectedSelection.entityId,
       personMetadataById: options.personMetadataById,
     });
-    if (currentGraphSelection) return currentGraphSelection;
-
-    const fallbackGraph = options.personGraphFallback;
-    if (fallbackGraph && fallbackGraph !== graph) {
-      return buildPersonDetailSelection(selectedSelection.name, fallbackGraph, personMetadataByName, {
+    if (currentGraphSelection) {
+      return enrichSelectionWithInspectorRows(currentGraphSelection, options, {
+        entityType: 'person',
+        entityLabel: selectedSelection.name,
         entityId: selectedSelection.entityId,
-        personMetadataById: options.personMetadataById,
       });
     }
 
-    return null;
+    const fallbackGraph = options.personGraphFallback;
+    if (fallbackGraph && fallbackGraph !== graph) {
+      const fallbackSelection = buildPersonDetailSelection(selectedSelection.name, fallbackGraph, personMetadataByName, {
+        entityId: selectedSelection.entityId,
+        personMetadataById: options.personMetadataById,
+      });
+      if (fallbackSelection) {
+        return enrichSelectionWithInspectorRows(fallbackSelection, options, {
+          entityType: 'person',
+          entityLabel: selectedSelection.name,
+          entityId: selectedSelection.entityId,
+        });
+      }
+    }
+
+    const linkedLetters = collectPeridotInspectorEntityRows(
+      options.inspectorRows || [],
+      options.inspectorRelationshipRows || [],
+      { entityType: 'person', entityLabel: selectedSelection.name, entityId: selectedSelection.entityId },
+    );
+    if (!linkedLetters.length) return null;
+    return enrichSelectionWithInspectorRows({
+      id: `person-detail:${selectedSelection.entityId || selectedSelection.name}`,
+      entityId: String(selectedSelection.entityId || '').trim(),
+      label: selectedSelection.name,
+      detailLabel: selectedSelection.name,
+      degree: linkedLetters.length,
+      radius: 6,
+      __kind: 'person-detail',
+      incidentEdgeCount: 0,
+      linkedLetterCount: linkedLetters.length,
+      linkedLetters,
+      counterpartLabels: [],
+      counterpartDetails: [],
+      anchorLabel: '',
+      personMetadata: getPersonMetadata(personMetadataByName, options.personMetadataById, selectedSelection.entityId, selectedSelection.name),
+    }, options, { entityType: 'person', entityLabel: selectedSelection.name, entityId: selectedSelection.entityId });
   }
 
   if (selectedSelection.kind === 'place-detail') {
-    return buildPlaceDetailSelection(selectedSelection.label, graph, personMetadataByName);
+    const currentSelection = buildPlaceDetailSelection(selectedSelection.label, graph, personMetadataByName);
+    if (currentSelection) {
+      return enrichSelectionWithInspectorRows(currentSelection, options, {
+        entityType: 'place',
+        entityLabel: selectedSelection.label,
+      });
+    }
+
+    const linkedLetters = collectPeridotInspectorEntityRows(
+      options.inspectorRows || [],
+      options.inspectorRelationshipRows || [],
+      { entityType: 'place', entityLabel: selectedSelection.label },
+    );
+    if (!linkedLetters.length) return null;
+    return enrichSelectionWithInspectorRows({
+      id: `place-detail:${selectedSelection.label}`,
+      label: selectedSelection.label,
+      detailLabel: selectedSelection.label,
+      entityType: 'place',
+      degree: linkedLetters.length,
+      radius: 6,
+      __kind: 'place-detail',
+      incidentEdgeCount: 0,
+      linkedLetterCount: linkedLetters.length,
+      linkedLetters,
+      counterpartLabels: [],
+      counterpartDetails: [],
+      anchorLabel: '',
+      personMetadata: null,
+      topPeople: [],
+    }, options, { entityType: 'place', entityLabel: selectedSelection.label });
   }
 
   return null;

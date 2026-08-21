@@ -1131,6 +1131,7 @@ function buildWorkbookGeneralizedRuntimeMapping(mappingState = {}) {
     placeParts: (mappingState.placeParts || []).map((part) => ({
       placeColumn: workbookRefRuntimeKey(part?.placeRef),
       headingRole: asText(part?.placeRef?.columnName),
+      roleLabel: asText(part?.roleLabel),
       roleMode: part?.roleMode === 'column' ? 'column' : 'heading',
       roleColumn: workbookRefRuntimeKey(part?.roleRef),
       subjectParticipantIndex: Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : null,

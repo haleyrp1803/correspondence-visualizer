@@ -994,7 +994,7 @@ function SingleTableReviewAssignments({
                 key={`review-place-${index}`}
                 label={`Place ${letter}`}
                 value={part.placeColumn}
-                detail={[formatSingleRole({
+                detail={[part?.roleLabel ? `Named role: ${part.roleLabel}` : '', formatSingleRole({
                   participantColumn: part.placeColumn,
                   roleMode: part.roleMode,
                   roleColumn: part.roleColumn,
@@ -1181,7 +1181,7 @@ function WorkbookReviewAssignments({ workbookMapping = {} }) {
                 key={`workbook-review-place-${index}`}
                 label={`Place ${letter}`}
                 value={workbookRefLabel(part.placeRef)}
-                detail={[formatWorkbookRole({
+                detail={[part?.roleLabel ? `Named role: ${part.roleLabel}` : '', formatWorkbookRole({
                   participantRef: part.placeRef,
                   roleMode: part.roleMode,
                   roleRef: part.roleRef,
@@ -1927,6 +1927,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
   if (hasRef(point.Point_Place) || hasRef(point.Point_Coordinates) || hasRef(point.Point_Latitude) || hasRef(point.Point_Longitude)) {
     parts.push({
       placeRef: point.Point_Place || emptyRef(),
+      roleLabel: '',
       roleMode: 'heading',
       roleRef: emptyRef(),
       subjectParticipantIndex: '',
@@ -1939,6 +1940,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
   if (hasRef(core.Source_Location) || hasRef(routePairs.Source_Coordinates) || hasRef(core.Source_Latitude) || hasRef(core.Source_Longitude)) {
     parts.push({
       placeRef: core.Source_Location || emptyRef(),
+      roleLabel: '',
       roleMode: 'heading',
       roleRef: emptyRef(),
       subjectParticipantIndex: 0,
@@ -1951,6 +1953,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
   if (hasRef(core.Target_Location) || hasRef(routePairs.Target_Coordinates) || hasRef(core.Target_Latitude) || hasRef(core.Target_Longitude)) {
     parts.push({
       placeRef: core.Target_Location || emptyRef(),
+      roleLabel: '',
       roleMode: 'heading',
       roleRef: emptyRef(),
       subjectParticipantIndex: 1,
@@ -1962,6 +1965,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
 
   return parts.length ? parts : [{
     placeRef: emptyRef(),
+    roleLabel: '',
     roleMode: 'heading',
     roleRef: emptyRef(),
     subjectParticipantIndex: '',
@@ -1983,6 +1987,7 @@ function buildInitialPlaceParts(mappingState = {}) {
   if (point.Point_Place || point.Point_Coordinates || point.Point_Latitude || point.Point_Longitude) {
     parts.push({
       placeColumn: point.Point_Place || '',
+      roleLabel: '',
       roleMode: 'heading',
       roleColumn: '',
       subjectParticipantIndex: '',
@@ -1995,6 +2000,7 @@ function buildInitialPlaceParts(mappingState = {}) {
   if (route.Source_Location || routePairs.Source_Coordinates || route.Source_Latitude || route.Source_Longitude) {
     parts.push({
       placeColumn: route.Source_Location || '',
+      roleLabel: '',
       roleMode: 'heading',
       roleColumn: '',
       subjectParticipantIndex: 0,
@@ -2007,6 +2013,7 @@ function buildInitialPlaceParts(mappingState = {}) {
   if (route.Target_Location || routePairs.Target_Coordinates || route.Target_Latitude || route.Target_Longitude) {
     parts.push({
       placeColumn: route.Target_Location || '',
+      roleLabel: '',
       roleMode: 'heading',
       roleColumn: '',
       subjectParticipantIndex: 1,
@@ -2018,6 +2025,7 @@ function buildInitialPlaceParts(mappingState = {}) {
 
   return parts.length ? parts : [{
     placeColumn: '',
+    roleLabel: '',
     roleMode: 'heading',
     roleColumn: '',
     subjectParticipantIndex: '',

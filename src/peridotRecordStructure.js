@@ -25,9 +25,17 @@ function uniqueEntries(entries = [], keyBuilder = (entry) => JSON.stringify(entr
   });
 }
 
+function participantForMappedIndex(participants, index) {
+  if (!Number.isInteger(index)) return null;
+  return (participants || []).find((participant) => participant?.participantIndex === index) || null;
+}
+
 function participantLabel(participants, index) {
-  if (!Number.isInteger(index)) return '';
-  return asText(participants[index]?.value);
+  return asText(participantForMappedIndex(participants, index)?.value);
+}
+
+function participantEntityId(participants, index) {
+  return asText(participantForMappedIndex(participants, index)?.entityId);
 }
 
 function buildParticipants(row, observation) {
@@ -77,6 +85,7 @@ function buildTemporalEntries(row, participants, observation) {
       label: asText(assertion?.role) || `Date or period ${index + 1}`,
       value: asText(assertion?.display || assertion?.sourceText),
       subject: participantLabel(participants, assertion?.subjectParticipantIndex),
+      subjectId: participantEntityId(participants, assertion?.subjectParticipantIndex),
       notes: Array.isArray(assertion?.temporalNotes)
         ? assertion.temporalNotes.map((note) => ({
           label: asText(note?.label || note?.sourceColumn) || 'Note',
@@ -93,6 +102,7 @@ function buildTemporalEntries(row, participants, observation) {
     label: asText(assertion?.role) || `Date or period ${index + 1}`,
     value: asText(assertion?.sourceText || [assertion?.startValue, assertion?.endValue].filter(Boolean).join('–')),
     subject: participantLabel(participants, assertion?.subjectParticipantIndex),
+    subjectId: participantEntityId(participants, assertion?.subjectParticipantIndex),
     notes: Array.isArray(assertion?.notes)
       ? assertion.notes.map((note) => ({ label: asText(note?.label || note?.sourceColumn) || 'Note', value: asText(note?.value) })).filter((note) => note.value)
       : [],
@@ -105,6 +115,7 @@ function buildPlaces(row, participants, observation) {
       label: asText(place?.role) || `Place ${index + 1}`,
       value: asText(place?.label),
       subject: participantLabel(participants, place?.subjectParticipantIndex),
+      subjectId: participantEntityId(participants, place?.subjectParticipantIndex),
     })).filter((entry) => entry.value)
     : [];
   if (generalized.length) return generalized;
@@ -455,7 +466,18 @@ export function buildPeridotEntityAttributedStructure(rows = [], options = {}) {
     } else {
       structure.places
         .filter((entry) => comparable(entry?.value) === entityIdentity)
-        .forEach((entry) => places.push(entry));
+        .forEach((entry) => {
+          places.push(entry);
+          const subject = asText(entry?.subject);
+          const subjectId = asText(entry?.subjectId);
+          if (subject || subjectId) {
+            participants.push({
+              label: asText(entry?.label) || 'Associated with',
+              value: subject || subjectId,
+              entityId: subjectId,
+            });
+          }
+        });
     }
   });
 
@@ -467,7 +489,7 @@ export function buildPeridotEntityAttributedStructure(rows = [], options = {}) {
 
   return freezeEntityStructure({
     temporal: uniqueEntries(temporal, (entry) => `${entry.label}::${entry.value}::${entry.subject || ''}`),
-    participants: uniqueEntries(participants, (entry) => `${entry.label}::${entry.value}`),
+    participants: uniqueEntries(participants, (entry) => `${entry.label}::${entry.entityId || entry.value}`),
     places: uniqueEntries(places, (entry) => `${entry.label}::${entry.value}::${entry.subject || ''}`),
     relationships: mergeResolvedRelationships(relationships),
     evidence: uniqueEntries(evidence, (entry) => `${entry.label.toLowerCase()}::${entry.value}`),

@@ -20,9 +20,7 @@
  */
 
 import React, { useState } from 'react';
-import { getRowPrimaryTemporalDisplay, getRowTemporalSortBounds } from './timelinePlaybackHelpers.js';
-import { getPeridotRowEntityParticipantEntries } from './peridotEntityNetwork.js';
-import { buildPeridotEntityAttributedStructure, buildPeridotRecordStructure } from './peridotRecordStructure.js';
+import { buildPeridotInspectorEntityProfile } from './peridotInspectorSemantics.js';
 import { PeridotRecordStructure } from './PeridotRecordStructure.jsx';
 
 function detailLabelClassName() {
@@ -68,28 +66,6 @@ function getSelectedEntityType(selectedProps, viewMode) {
   if (selectedProps?.entityType === 'place') return 'place';
   if (selectedProps?.entityType === 'person') return 'person';
   return viewMode === 'geographic' ? 'place' : 'person';
-}
-
-function letterMatchesSelectedEntity(letter, selectedProps, viewMode) {
-  const label = getSelectedEntityLabel(selectedProps);
-  if (!label) return false;
-
-  const normalizedLabel = normalizeComparable(label);
-  const entityType = getSelectedEntityType(selectedProps, viewMode);
-
-  if (entityType === 'person') {
-    const selectedEntityId = getSelectedEntityId(selectedProps);
-    const participants = getPeridotRowEntityParticipantEntries(letter);
-    const rowHasCanonicalIdentity = participants.some((participant) => normalizeEntityText(participant?.id));
-    if (selectedEntityId && rowHasCanonicalIdentity) {
-      return participants.some((participant) => normalizeEntityText(participant?.id) === selectedEntityId);
-    }
-    return participants.some((participant) => normalizeComparable(participant?.label) === normalizedLabel);
-  }
-
-  const mappedPlaces = buildPeridotRecordStructure(letter || {}).places || [];
-  if (mappedPlaces.some((entry) => normalizeComparable(normalizePlaceLabel(entry?.value)) === normalizedLabel)) return true;
-  return [letter?.sourceLoc, letter?.targetLoc].some((value) => normalizeComparable(normalizePlaceLabel(value)) === normalizedLabel);
 }
 
 function normalizeLetterCustomFields(letter) {
@@ -148,137 +124,23 @@ function sortCountMap(map) {
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
 
-function getDateSpan(records = []) {
-  let earliest = null;
-  let latest = null;
-
-  records.forEach((record) => {
-    const bounds = getRowTemporalSortBounds(record);
-    const label = getRowPrimaryTemporalDisplay(record);
-    if (Number.isFinite(bounds.start) && (!earliest || bounds.start < earliest.key)) {
-      earliest = { key: bounds.start, label };
-    }
-    const latestKey = Number.isFinite(bounds.end) ? bounds.end : bounds.start;
-    if (Number.isFinite(latestKey) && (!latest || latestKey > latest.key)) {
-      latest = { key: latestKey, label };
-    }
-  });
-
-  if (!earliest && !latest) return '';
-  const firstLabel = earliest?.label || latest?.label || '';
-  const lastLabel = latest?.label || earliest?.label || '';
-  return firstLabel === lastLabel ? firstLabel : `${firstLabel}–${lastLabel}`;
-}
-
-function getUniqueTemporalDisplays(records = []) {
-  return Array.from(
-    new Set(
-      records
-        .map((record) => normalizeEntityText(getRowPrimaryTemporalDisplay(record)))
-        .filter(Boolean),
-    ),
-  );
-}
-
-function makeRoleSections(sourceTitle, sourceItems, targetTitle, targetItems) {
-  return [
-    { title: sourceTitle, items: sortCountMap(sourceItems) },
-    { title: targetTitle, items: sortCountMap(targetItems) },
-  ];
-}
-
-function sectionItemCount(sections = []) {
-  return sections.reduce((sum, section) => sum + (section.items?.length || 0), 0);
-}
-
 function buildEntityProfile(selectedProps, selectedLetterMetadata = [], viewMode) {
   const entityType = getSelectedEntityType(selectedProps, viewMode);
   const entityLabel = getSelectedEntityLabel(selectedProps);
   const entityId = getSelectedEntityId(selectedProps);
-  const normalizedEntityLabel = normalizeComparable(entityLabel);
-  const matchingLetters = selectedLetterMetadata.filter((letter) => letterMatchesSelectedEntity(letter, selectedProps, viewMode));
-  const routesWhenSource = new Map();
-  const routesWhenTarget = new Map();
-
-  const peopleWhenSource = new Map();
-  const peopleWhenTarget = new Map();
-  const placesWhenSource = new Map();
-  const placesWhenTarget = new Map();
-
-  matchingLetters.forEach((letter) => {
-    const sourcePerson = normalizeEntityText(letter.source || letter.sourcePerson);
-    const targetPerson = normalizeEntityText(letter.target || letter.targetPerson);
-    const sourcePlace = normalizePlaceLabel(letter.sourceLoc);
-    const targetPlace = normalizePlaceLabel(letter.targetLoc);
-    const sourceEntityId = normalizeEntityText(letter.sourceEntityId);
-    const targetEntityId = normalizeEntityText(letter.targetEntityId);
-    const rowHasCanonicalIdentity = Boolean(sourceEntityId || targetEntityId);
-    const isSelectedSourcePerson = entityId && rowHasCanonicalIdentity
-      ? sourceEntityId === entityId
-      : normalizeComparable(sourcePerson) === normalizedEntityLabel;
-    const isSelectedTargetPerson = entityId && rowHasCanonicalIdentity
-      ? targetEntityId === entityId
-      : normalizeComparable(targetPerson) === normalizedEntityLabel;
-    const isSelectedSourcePlace = normalizeComparable(sourcePlace) === normalizedEntityLabel;
-    const isSelectedTargetPlace = normalizeComparable(targetPlace) === normalizedEntityLabel;
-
-    if (entityType === 'person') {
-      if (isSelectedSourcePerson) {
-        countMapIncrement(peopleWhenSource, targetPerson);
-        countMapIncrement(placesWhenSource, sourcePlace);
-      }
-
-      if (isSelectedTargetPerson) {
-        countMapIncrement(peopleWhenTarget, sourcePerson);
-        countMapIncrement(placesWhenTarget, targetPlace);
-      }
-    } else {
-      if (isSelectedSourcePlace) {
-        countMapIncrement(peopleWhenSource, sourcePerson);
-        if (targetPlace && normalizeComparable(targetPlace) !== normalizedEntityLabel) countMapIncrement(placesWhenSource, targetPlace);
-      }
-
-      if (isSelectedTargetPlace) {
-        countMapIncrement(peopleWhenTarget, targetPerson);
-        if (sourcePlace && normalizeComparable(sourcePlace) !== normalizedEntityLabel) countMapIncrement(placesWhenTarget, sourcePlace);
-      }
-    }
-
-    if (sourcePlace || targetPlace) {
-      const routeLabel = `${sourcePlace || 'Unknown'} → ${targetPlace || 'Unknown'}`;
-
-      if (entityType === 'person') {
-        if (isSelectedSourcePerson) countMapIncrement(routesWhenSource, routeLabel);
-        if (isSelectedTargetPerson) countMapIncrement(routesWhenTarget, routeLabel);
-      } else {
-        if (isSelectedSourcePlace) countMapIncrement(routesWhenSource, routeLabel);
-        if (isSelectedTargetPlace) countMapIncrement(routesWhenTarget, routeLabel);
-      }
-    }
-  });
-
-  const relatedPeopleSections = entityType === 'person'
-    ? makeRoleSections('As source entity', peopleWhenSource, 'As target entity', peopleWhenTarget)
-    : makeRoleSections('Records starting here', peopleWhenSource, 'Records ending here', peopleWhenTarget);
-  const relatedPlacesSections = entityType === 'person'
-    ? makeRoleSections('As source entity', placesWhenSource, 'As target entity', placesWhenTarget)
-    : makeRoleSections('As source entity', placesWhenSource, 'As target entity', placesWhenTarget);
-  const routeSections = entityType === 'person'
-    ? makeRoleSections('Directed place pairs when source entity', routesWhenSource, 'Directed place pairs when target entity', routesWhenTarget)
-    : makeRoleSections('Outgoing directed pairs', routesWhenSource, 'Incoming directed pairs', routesWhenTarget);
-
-  return {
+  const entityEvidence = entityType === 'person'
+    ? normalizeLetterCustomFields(selectedProps?.personMetadata || {})
+    : [];
+  const semanticProfile = buildPeridotInspectorEntityProfile(selectedLetterMetadata, {
     entityType,
     entityLabel,
-    matchingLetters,
-    dateSpan: getDateSpan(matchingLetters),
-    relatedPeopleSections,
-    relatedPlacesSections,
-    routeSections,
-    relatedPeopleCount: sectionItemCount(relatedPeopleSections),
-    relatedPlacesCount: sectionItemCount(relatedPlacesSections),
-    routeCount: sectionItemCount(routeSections),
-    dateCount: getUniqueTemporalDisplays(matchingLetters).length,
+    entityId,
+    entityEvidence,
+  });
+
+  return {
+    ...semanticProfile,
+    matchingLetters: semanticProfile.matchingRows,
   };
 }
 
@@ -346,7 +208,7 @@ function CountSectionCard({ title, sections, emptyMessage, onOpenItem }) {
                         <button
                           type="button"
                           key={`${section.title}:${item.label}`}
-                          onClick={() => onOpenItem(item.label)}
+                          onClick={() => onOpenItem(item.label, item.entityId || '')}
                           className="group block w-full text-left transition focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/35"
                         >
                           {content}
@@ -619,15 +481,7 @@ export function InspectorNodeView({
   const entityType = getSelectedEntityType(selectedProps, viewMode);
   const profile = buildEntityProfile(selectedProps, selectedLetterMetadata, viewMode);
   const selectedLabel = getSelectedEntityLabel(selectedProps);
-  const entityEvidence = getSelectedEntityType(selectedProps, viewMode) === 'person'
-    ? normalizeLetterCustomFields(selectedProps?.personMetadata || {})
-    : [];
-  const entityMappedStructure = buildPeridotEntityAttributedStructure(profile.matchingLetters, {
-    entityLabel: selectedLabel,
-    entityId: getSelectedEntityId(selectedProps),
-    entityType,
-    entityEvidence,
-  });
+  const entityMappedStructure = profile.structure;
 
   if (isCompact) {
     return (
@@ -678,9 +532,9 @@ export function InspectorNodeView({
       <ReferenceDivider />
 
       <CountSectionCard
-        title="Directed connections"
+        title="Directed place connections"
         sections={profile.routeSections}
-        emptyMessage="No directed source-target pairs were found in related records for this profile."
+        emptyMessage="No explicit directed place pairs were found in related records for this profile."
         onOpenItem={onOpenRouteDetail}
       />
 

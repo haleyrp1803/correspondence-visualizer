@@ -517,6 +517,7 @@ function handleSpatialMappingChange(field, value, { onPointChange, onRouteChange
 
 const EMPTY_PLACE_PART = Object.freeze({
   placeColumn: '',
+  roleLabel: '',
   roleMode: 'heading',
   roleColumn: '',
   subjectParticipantIndex: '',
@@ -546,6 +547,7 @@ function PlaceExamples({ rows = [], sourceColumn = '' }) {
 
 const EMPTY_WORKBOOK_PLACE_PART = Object.freeze({
   placeRef: makeWorkbookColumnRef('', ''),
+  roleLabel: '',
   roleMode: 'heading',
   roleRef: makeWorkbookColumnRef('', ''),
   subjectParticipantIndex: '',
@@ -607,6 +609,26 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
             onChange={(ref) => onChange({ placeRef: ref })}
           />
           <WorkbookPlaceExamples workbookModel={workbookModel} sourceRef={placeRef} />
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Name this place role <span className="font-normal text-[var(--panel-card-muted-text)]">(optional)</span></div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            Use a fixed researcher-defined name when the source heading does not describe how this place relates to the selected participant, such as “Place of childbirth.”
+          </p>
+        </div>
+        <div>
+          <input
+            value={part?.roleLabel || ''}
+            onChange={(event) => onChange({ roleLabel: event.target.value })}
+            placeholder="e.g. Place of childbirth, Residence, Court"
+            className={SOURCE_SELECT_CLASS}
+          />
+          <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--panel-card-muted-text)]">If supplied, this name takes precedence over the source-derived role below. The original workbook field is still preserved.</p>
         </div>
       </div>
 
@@ -794,6 +816,26 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
             {headers.map((header) => <option key={header} value={header}>{header}</option>)}
           </select>
           <PlaceExamples rows={rows} sourceColumn={selectedPlaceColumn} />
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Name this place role <span className="font-normal text-[var(--panel-card-muted-text)]">(optional)</span></div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            Use a fixed researcher-defined name when the source heading does not describe how this place relates to the selected participant, such as “Place of childbirth.”
+          </p>
+        </div>
+        <div>
+          <input
+            value={part?.roleLabel || ''}
+            onChange={(event) => onChange({ roleLabel: event.target.value })}
+            placeholder="e.g. Place of childbirth, Residence, Court"
+            className={SOURCE_SELECT_CLASS}
+          />
+          <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--panel-card-muted-text)]">If supplied, this name takes precedence over the source-derived role below. The original source column is still preserved.</p>
         </div>
       </div>
 

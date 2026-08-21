@@ -39,6 +39,8 @@ function valueFrom(row = {}, column = '') {
 }
 
 function roleFromPart(row = {}, part = {}, valueColumnKey = '') {
+  const explicitRole = asText(part?.roleLabel);
+  if (explicitRole) return explicitRole;
   const valueColumn = asText(part?.[valueColumnKey]);
   if (part?.roleMode === 'column') return asText(valueFrom(row, part?.roleColumn));
   return asText(part?.headingRole) || valueColumn;

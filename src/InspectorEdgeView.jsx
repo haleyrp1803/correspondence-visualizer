@@ -112,14 +112,20 @@ export function InspectorEdgeView({
 
       <div className="grid gap-3 md:grid-cols-2">
         <InspectorSummaryCardComponent>
-          <DetailRow label="Source entities" value={(selectedProps.sources || []).join('; ')} />
-          <DetailRow label="Target entities" value={(selectedProps.targets || []).join('; ')} />
+          <DetailRow
+            label={selectedProps.direction === 'directed' ? 'Source endpoint' : (selectedProps.sourceRole || 'Endpoint A')}
+            value={selectedProps.sourceLabel}
+          />
+          <DetailRow
+            label={selectedProps.direction === 'directed' ? 'Target endpoint' : (selectedProps.targetRole || 'Endpoint B')}
+            value={selectedProps.targetLabel}
+          />
           <DetailRow label="Sample pairs" value={(selectedProps.samplePairs || []).join('; ')} />
         </InspectorSummaryCardComponent>
 
         <InspectorSummaryCardComponent>
-          <DetailRow label="Source place" value={selectedProps.sourceLabel} />
-          <DetailRow label="Target place" value={selectedProps.targetLabel} />
+          <DetailRow label="Relationship" value={selectedProps.relationshipType || selectedProps.relationshipLabel} />
+          <DetailRow label="Direction" value={selectedProps.direction || 'undirected'} />
           <DetailRow label="Related records" value={linkedRecordCount} />
         </InspectorSummaryCardComponent>
       </div>

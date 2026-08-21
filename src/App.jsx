@@ -60,12 +60,13 @@ import {
   revokeObjectUrl,
 } from './exportHelpers';
 import { buildForcePersonPositions } from './personForceLayoutHelpers';
-import { derivePeridotEntityNetworkSemantics, derivePeridotGeographicEntityNetworkSemantics, getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels } from './peridotEntityNetwork.js';
+import { derivePeridotEntityNetworkSemantics, derivePeridotGeographicEntityNetworkSemantics, getPeridotRowEntityParticipants, getPeridotRowEntityRelationshipLabels, getPeridotRowEntityRelationships } from './peridotEntityNetwork.js';
 import { InspectorConnectedCorrespondents } from './InspectorConnectedCorrespondents';
 import { InspectorPersonPlaces } from './InspectorPersonPlaces';
 import { InspectorBackButton } from './InspectorBackButton';
 import { InspectorContent } from './InspectorPanel.jsx';
 import { PeridotRecordStructure } from './PeridotRecordStructure.jsx';
+import { buildPeridotRecordStructure } from './peridotRecordStructure.js';
 import { LeftControlPanel } from './LeftControlPanel';
 import { PeridotHamburgerMenu } from './PeridotHamburgerMenu';
 import { PeridotHomeWorkspace } from './PeridotHomeWorkspace';
@@ -1273,90 +1274,63 @@ function sortLinkedRecordsChronologically(records = []) {
     .map((letter, index) => ({ letter, index, sortKey: getLinkedRecordSortKey(letter, index) }))
     .sort((a, b) => {
       if (a.sortKey !== b.sortKey) return a.sortKey - b.sortKey;
-      const aLabel = [a.letter?.source || a.letter?.sourcePerson, a.letter?.target || a.letter?.targetPerson].filter(Boolean).join(' → ');
-      const bLabel = [b.letter?.source || b.letter?.sourcePerson, b.letter?.target || b.letter?.targetPerson].filter(Boolean).join(' → ');
+      const aLabel = getLinkedRecordEntityLabel(a.letter);
+      const bLabel = getLinkedRecordEntityLabel(b.letter);
       return aLabel.localeCompare(bLabel) || a.index - b.index;
     })
     .map((item) => item.letter);
 }
 
-function getLinkedRecordSourceEntityLabel(letter) {
-  return letter?.source || letter?.sourcePerson || '';
-}
-
-function getLinkedRecordTargetEntityLabel(letter) {
-  return letter?.target || letter?.targetPerson || '';
-}
-
 function getLinkedRecordEntityLabel(letter) {
-  return [getLinkedRecordSourceEntityLabel(letter), getLinkedRecordTargetEntityLabel(letter)]
-    .filter(Boolean)
-    .join(' → ') || getLinkedRecordSingleEntityLabel(letter) || 'No entity recorded';
-}
-
-function getLinkedRecordSingleEntityLabel(letter) {
-  return letter?.entity || letter?.person || letter?.personName || letter?.name || letter?.label || '';
-}
-
-function normalizeLinkedRecordPlaceLabel(value, { preserveBlank = false } = {}) {
-  const label = String(value || '').trim();
-  if (label) return label;
-  return preserveBlank ? '' : 'Unknown';
-}
-
-function getLinkedRecordSourceLocationLabel(letter, { preserveBlank = false } = {}) {
-  return normalizeLinkedRecordPlaceLabel(letter?.sourceLoc || letter?.sourceLocation, { preserveBlank });
-}
-
-function getLinkedRecordTargetLocationLabel(letter, { preserveBlank = false } = {}) {
-  return normalizeLinkedRecordPlaceLabel(letter?.targetLoc || letter?.targetLocation, { preserveBlank });
+  const structure = buildPeridotRecordStructure(letter || {});
+  const values = structure.participants
+    .map((entry) => entry.label ? `${entry.label}: ${entry.value}` : entry.value)
+    .filter(Boolean);
+  return values.join(' · ') || letter?.entity || letter?.person || letter?.personName || letter?.name || letter?.label || 'No entity recorded';
 }
 
 function getLinkedRecordLocationLabel(letter) {
-  const explicitLocation = letter?.location || letter?.place || letter?.loc || letter?.site;
-  if (explicitLocation) return explicitLocation;
-
-  return [
-    getLinkedRecordSourceLocationLabel(letter, { preserveBlank: true }),
-    getLinkedRecordTargetLocationLabel(letter, { preserveBlank: true }),
-  ].filter(Boolean).join(' → ') || 'Unknown';
+  const structure = buildPeridotRecordStructure(letter || {});
+  const values = structure.places
+    .map((entry) => entry.label ? `${entry.label}: ${entry.value}` : entry.value)
+    .filter(Boolean);
+  return values.join(' · ') || 'No place recorded';
 }
 
-function isMeaningfulRecordTableValue(value) {
-  const label = String(value || '').trim();
-  if (!label) return false;
-  return label.toLowerCase() !== 'unknown';
+function getLinkedRecordRelationshipLabel(letter) {
+  const structure = buildPeridotRecordStructure(letter || {});
+  return structure.relationships
+    .map((entry) => `${entry.label}: ${entry.value}`)
+    .filter(Boolean)
+    .join(' · ');
 }
 
-function recordHasRelationalEntityFields(letter) {
-  const sourceEntity = getLinkedRecordSourceEntityLabel(letter);
-  const targetEntity = getLinkedRecordTargetEntityLabel(letter);
+function normalizeLinkedRecordTableEvidenceFields(letter) {
+  const generalized = Array.isArray(letter?.generalizedObservation?.evidenceFields)
+    ? letter.generalizedObservation.evidenceFields
+    : [];
+  const combined = [
+    ...generalized.map((field) => ({
+      label: String(field?.label || field?.sourceColumn || '').trim(),
+      value: String(field?.value ?? '').trim(),
+    })),
+    ...normalizeLinkedLetterCustomInspectorFields(letter),
+  ].filter((field) => field.label && field.value);
 
-  // Record-table-only capability detection: a point-only dataset may place its
-  // mapped feature/entity in a source-like field and leave target blank/Unknown.
-  // Keep that table in single-point mode unless both entity endpoints are real.
-  return isMeaningfulRecordTableValue(sourceEntity) && isMeaningfulRecordTableValue(targetEntity);
-}
-
-function recordHasRelationalLocationFields(letter) {
-  const sourceLocation = getLinkedRecordSourceLocationLabel(letter, { preserveBlank: true });
-  const targetLocation = getLinkedRecordTargetLocationLabel(letter, { preserveBlank: true });
-
-  // Split source/target locations only when the record has a real two-sided
-  // location structure. A single mapped point belongs in the compact Location
-  // column even if internal fields happen to use source-like names.
-  return isMeaningfulRecordTableValue(sourceLocation) && isMeaningfulRecordTableValue(targetLocation);
-}
-
-function recordsUseRelationalColumns(records = []) {
-  return records.some((letter) => recordHasRelationalEntityFields(letter) || recordHasRelationalLocationFields(letter));
+  const seen = new Set();
+  return combined.filter((field) => {
+    const key = field.label.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function getLinkedRecordCustomFieldValue(letter, label) {
   const normalizedLabel = String(label || '').trim().toLowerCase();
   if (!normalizedLabel) return '';
 
-  return normalizeLinkedLetterCustomInspectorFields(letter)
+  return normalizeLinkedRecordTableEvidenceFields(letter)
     .find((field) => String(field.label || '').trim().toLowerCase() === normalizedLabel)
     ?.value || '';
 }
@@ -1364,12 +1338,8 @@ function getLinkedRecordCustomFieldValue(letter, label) {
 function getLinkedRecordColumnValue(letter, columnKey, fallbackIndex = 0) {
   if (columnKey === 'date') return getLinkedRecordDateLabel(letter);
   if (columnKey === 'entities') return getLinkedRecordEntityLabel(letter);
-  if (columnKey === 'sourceEntity') return getLinkedRecordSourceEntityLabel(letter) || 'Unknown';
-  if (columnKey === 'targetEntity') return getLinkedRecordTargetEntityLabel(letter) || 'Unknown';
-  if (columnKey === 'entity') return getLinkedRecordSingleEntityLabel(letter) || getLinkedRecordEntityLabel(letter);
-  if (columnKey === 'sourceLocation') return getLinkedRecordSourceLocationLabel(letter);
-  if (columnKey === 'targetLocation') return getLinkedRecordTargetLocationLabel(letter);
-  if (columnKey === 'location') return getLinkedRecordLocationLabel(letter);
+  if (columnKey === 'places') return getLinkedRecordLocationLabel(letter);
+  if (columnKey === 'relationships') return getLinkedRecordRelationshipLabel(letter);
   if (columnKey.startsWith('custom:')) return getLinkedRecordCustomFieldValue(letter, columnKey.slice('custom:'.length));
   if (columnKey === 'record') return getLinkedLetterUniqueId(letter, fallbackIndex);
   return '';
@@ -1378,10 +1348,9 @@ function getLinkedRecordColumnValue(letter, columnKey, fallbackIndex = 0) {
 function buildConnectedRecordColumns(records = []) {
   const customLabels = [];
   const seen = new Set();
-  const useRelationalColumns = recordsUseRelationalColumns(records);
 
   records.forEach((letter) => {
-    normalizeLinkedLetterCustomInspectorFields(letter).forEach((field) => {
+    normalizeLinkedRecordTableEvidenceFields(letter).forEach((field) => {
       const label = String(field.label || '').trim();
       const key = label.toLowerCase();
       if (!label || seen.has(key)) return;
@@ -1390,22 +1359,11 @@ function buildConnectedRecordColumns(records = []) {
     });
   });
 
-  const baseColumns = useRelationalColumns
-    ? [
-      { key: 'date', label: 'Date', className: 'min-w-[7.5rem] w-[8rem]' },
-      { key: 'sourceEntity', label: 'Source entity', className: 'min-w-[13rem]' },
-      { key: 'targetEntity', label: 'Target entity', className: 'min-w-[13rem]' },
-      { key: 'sourceLocation', label: 'Source location', className: 'min-w-[11rem]' },
-      { key: 'targetLocation', label: 'Target location', className: 'min-w-[11rem]' },
-    ]
-    : [
-      { key: 'date', label: 'Date', className: 'min-w-[7.5rem] w-[8rem]' },
-      { key: 'entity', label: 'Entity', className: 'min-w-[16rem]' },
-      { key: 'location', label: 'Location', className: 'min-w-[13rem]' },
-    ];
-
   return [
-    ...baseColumns,
+    { key: 'date', label: 'Date / period', className: 'min-w-[8rem] w-[9rem]' },
+    { key: 'entities', label: 'People / entities', className: 'min-w-[18rem]' },
+    { key: 'places', label: 'Places', className: 'min-w-[14rem]' },
+    { key: 'relationships', label: 'Relationships', className: 'min-w-[18rem]' },
     ...customLabels.map((label) => ({
       key: `custom:${label}`,
       label,
@@ -3513,6 +3471,13 @@ export default function EuropeNetworkMapApp() {
     });
   }, [searchRecords, search, personFilter, placeFilter, routePlaceFilter, routePeopleFilter, capabilityFilters, structuredCriteria]);
 
+  const inspectorStructuralRelationshipRows = useMemo(() => (
+    entityRelationshipStructureRows.filter((row) => (
+      getPeridotRowEntityRelationships(row).length > 0
+      && !getRowPrimaryTemporalDisplay(row)
+    ))
+  ), [entityRelationshipStructureRows]);
+
   const timelineWindowRows = useMemo(() => {
     return filterRowsByTimelineWindow(searchRecords, timelineMode, timelineMonths, rangeStart, rangeEnd, {
       enabledRoles: enabledTemporalRoleSet,
@@ -3754,8 +3719,11 @@ export default function EuropeNetworkMapApp() {
     return resolveSelection(selectedSelection, graph, personMetadataByName, {
       personGraphFallback: personGraph,
       personMetadataById,
+      viewMode,
+      inspectorRows: filteredRowsByTime,
+      inspectorRelationshipRows: inspectorStructuralRelationshipRows,
     });
-  }, [selectedSelection, graph, personMetadataByName, personMetadataById, personGraph]);
+  }, [selectedSelection, graph, personMetadataByName, personMetadataById, personGraph, viewMode, filteredRowsByTime, inspectorStructuralRelationshipRows]);
 
   const selectedLetterMetadata = useMemo(() => {
     if (selectedProps?.__kind === 'letter-detail') return [];
