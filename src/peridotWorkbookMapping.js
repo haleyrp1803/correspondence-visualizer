@@ -1135,6 +1135,7 @@ function normalizeWorkbookCustomInspectorSelections(mappingState = {}) {
         selection.sourceColumn || selection.key || selection.label
       ),
       analyticsEligible: Boolean(selection.analyticsEligible),
+      valueHandling: selection.valueHandling,
     }))
     .filter((selection) => selection.sourceColumn || selection.sourceRef?.columnName);
 }
@@ -1170,6 +1171,7 @@ function buildWorkbookGeneralizedRuntimeMapping(mappingState = {}, workbookModel
       headingRole: asText(part?.participantRef?.columnName),
       roleMode: part?.roleMode === 'column' ? 'column' : 'heading',
       roleColumn: workbookRefRuntimeKey(part?.roleRef),
+      valueHandling: part?.valueHandling,
     })),
     placeParts: (mappingState.placeParts || []).map((part) => ({
       placeColumn: workbookRefRuntimeKey(part?.placeRef),
@@ -1181,6 +1183,7 @@ function buildWorkbookGeneralizedRuntimeMapping(mappingState = {}, workbookModel
       coordinatePairColumn: workbookRefRuntimeKey(part?.coordinatePairRef),
       latitudeColumn: workbookRefRuntimeKey(part?.latitudeRef),
       longitudeColumn: workbookRefRuntimeKey(part?.longitudeRef),
+      valueHandling: part?.valueHandling,
     })),
     temporalMapping: Object.fromEntries(
       Object.entries(mappingState.temporalMappings || {}).map(([field, ref]) => [field, workbookRefRuntimeKey(ref)])

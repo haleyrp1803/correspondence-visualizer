@@ -857,7 +857,18 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
           sourceColumn: asText(place.sourceColumn),
           subjectParticipantIndex: Number.isInteger(place.subjectParticipantIndex) ? place.subjectParticipantIndex : null,
         })),
-        customFields: Object.fromEntries(evidenceFields.map((field) => [asText(field.label), field.value])),
+        customFields: evidenceFields.reduce((fields, field) => {
+          const label = asText(field.label);
+          if (!label) return fields;
+          if (!(label in fields)) {
+            fields[label] = field.value;
+          } else if (Array.isArray(fields[label])) {
+            fields[label].push(field.value);
+          } else {
+            fields[label] = [fields[label], field.value];
+          }
+          return fields;
+        }, {}),
         ignoredUploadedColumns: Array.isArray(row.ignoredUploadedColumns) ? [...row.ignoredUploadedColumns] : [],
         originalMappedRow: { ...row },
       }),

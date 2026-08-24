@@ -74,8 +74,10 @@ import {
   WorkbookTemporalMappingTable,
 } from './PeridotMappingFieldControls.jsx';
 import {
-  IdentityMappingPanel,
-  WorkbookIdentityMappingPanel,
+  RelationshipIdentityControls,
+  PlaceIdentityControls,
+  WorkbookRelationshipIdentityControls,
+  WorkbookPlaceIdentityControls,
 } from './PeridotIdentityMappingControls.jsx';
 import {
   GenealogyAttributesStep,
@@ -452,28 +454,44 @@ function TimeMappingStep({ headers, rows, temporalAssertions, relationshipParts,
   return <TemporalMappingTable headers={headers} rows={rows} temporalAssertions={temporalAssertions} relationshipParts={relationshipParts} onAssertionsChange={onTemporalAssertionsChange} />;
 }
 
-function PlacesMappingStep({ headers, rows, placeParts, relationshipParts, onPlacePartsChange }) {
+function PlacesMappingStep({ headers, rows, placeParts, relationshipParts, identityMapping, onPlacePartsChange, onIdentityChange }) {
   return (
-    <SpatialMappingPanel
-      headers={headers}
-      rows={rows}
-      placeParts={placeParts}
-      relationshipParts={relationshipParts}
-      onPlacePartsChange={onPlacePartsChange}
-    />
+    <div className="space-y-4">
+      <SpatialMappingPanel
+        headers={headers}
+        rows={rows}
+        placeParts={placeParts}
+        relationshipParts={relationshipParts}
+        onPlacePartsChange={onPlacePartsChange}
+      />
+      <PlaceIdentityControls
+        headers={headers}
+        placeParts={placeParts}
+        identityMapping={identityMapping}
+        onChange={onIdentityChange}
+      />
+    </div>
   );
 }
 
-function RelationshipsMappingStep({ headers, rows, relationshipParts, relationshipMetadataMapping, onRelationshipPartsChange, onMetadataChange }) {
+function RelationshipsMappingStep({ headers, rows, relationshipParts, relationshipMetadataMapping, identityMapping, onRelationshipPartsChange, onMetadataChange, onIdentityChange }) {
   return (
-    <RelationshipMappingPanel
-      headers={headers}
-      rows={rows}
-      relationshipParts={relationshipParts}
-      relationshipMetadataMapping={relationshipMetadataMapping}
-      onRelationshipPartsChange={onRelationshipPartsChange}
-      onMetadataChange={onMetadataChange}
-    />
+    <div className="space-y-4">
+      <RelationshipMappingPanel
+        headers={headers}
+        rows={rows}
+        relationshipParts={relationshipParts}
+        relationshipMetadataMapping={relationshipMetadataMapping}
+        onRelationshipPartsChange={onRelationshipPartsChange}
+        onMetadataChange={onMetadataChange}
+      />
+      <RelationshipIdentityControls
+        headers={headers}
+        relationshipParts={relationshipParts}
+        identityMapping={identityMapping}
+        onChange={onIdentityChange}
+      />
+    </div>
   );
 }
 
@@ -512,6 +530,7 @@ function refreshWorkbookCustomSelections({ workbookModel, workbookMapping, previ
             action: previous.action,
             label: previous.label || selection.label,
             analyticsEligible: selection.analyticsEligible,
+            valueHandling: previous.valueHandling,
           }
         : {
             ...selection,
@@ -1695,25 +1714,41 @@ function WorkbookTimeMappingStep({ workbookModel, workbookMapping, onTemporalAss
   return <WorkbookTemporalMappingTable workbookModel={workbookModel} workbookMapping={workbookMapping} onAssertionsChange={onTemporalAssertionsChange} />;
 }
 
-function WorkbookPlacesMappingStep({ workbookModel, placeParts, relationshipParts, onPlacePartsChange }) {
+function WorkbookPlacesMappingStep({ workbookModel, placeParts, relationshipParts, identityMapping, onPlacePartsChange, onIdentityChange }) {
   return (
-    <WorkbookSpatialMappingPanel
-      workbookModel={workbookModel}
-      placeParts={placeParts}
-      relationshipParts={relationshipParts}
-      onPlacePartsChange={onPlacePartsChange}
-    />
+    <div className="space-y-4">
+      <WorkbookSpatialMappingPanel
+        workbookModel={workbookModel}
+        placeParts={placeParts}
+        relationshipParts={relationshipParts}
+        onPlacePartsChange={onPlacePartsChange}
+      />
+      <WorkbookPlaceIdentityControls
+        workbookModel={workbookModel}
+        placeParts={placeParts}
+        identityMapping={identityMapping}
+        onChange={onIdentityChange}
+      />
+    </div>
   );
 }
 
-function WorkbookRelationshipsMappingStep({ workbookModel, workbookMapping, onRelationshipPartsChange, onMetadataChange }) {
+function WorkbookRelationshipsMappingStep({ workbookModel, workbookMapping, onRelationshipPartsChange, onMetadataChange, onIdentityChange }) {
   return (
-    <WorkbookRelationshipMappingPanel
-      workbookModel={workbookModel}
-      workbookMapping={workbookMapping}
-      onRelationshipPartsChange={onRelationshipPartsChange}
-      onMetadataChange={onMetadataChange}
-    />
+    <div className="space-y-4">
+      <WorkbookRelationshipMappingPanel
+        workbookModel={workbookModel}
+        workbookMapping={workbookMapping}
+        onRelationshipPartsChange={onRelationshipPartsChange}
+        onMetadataChange={onMetadataChange}
+      />
+      <WorkbookRelationshipIdentityControls
+        workbookModel={workbookModel}
+        relationshipParts={workbookMapping.relationshipParts || []}
+        identityMapping={workbookMapping.identityMapping || { record: {}, entityGroups: [] }}
+        onChange={onIdentityChange}
+      />
+    </div>
   );
 }
 function WorkbookReviewStep({ workbookModel, workbookMapping, validation, summary, previewRows, capabilityAudit, temporalReviewSummary }) {
@@ -2077,6 +2112,8 @@ function buildInitialWorkbookRelationshipParts(mappingState = {}) {
   if (saved.length >= 2) {
     return saved.map((part) => ({
       participantRef: part?.participantRef || makeWorkbookColumnRef('', ''),
+      participantValueMode: part?.participantValueMode === 'identity-reference' ? 'identity-reference' : 'label',
+      valueHandling: part?.valueHandling,
       roleMode: part?.roleMode === 'column' ? 'column' : 'heading',
       roleRef: part?.roleRef || makeWorkbookColumnRef('', ''),
     }));
@@ -2088,6 +2125,7 @@ function buildInitialWorkbookRelationshipParts(mappingState = {}) {
   if (coreMappings.Source_Name?.sheetName && coreMappings.Source_Name?.columnName) {
     parts.push({
       participantRef: coreMappings.Source_Name,
+      participantValueMode: 'label',
       roleMode: 'heading',
       roleRef: makeWorkbookColumnRef('', ''),
     });
@@ -2096,6 +2134,7 @@ function buildInitialWorkbookRelationshipParts(mappingState = {}) {
   if (coreMappings.Target_Name?.sheetName && coreMappings.Target_Name?.columnName) {
     parts.push({
       participantRef: coreMappings.Target_Name,
+      participantValueMode: 'label',
       roleMode: 'heading',
       roleRef: makeWorkbookColumnRef('', ''),
     });
@@ -2104,6 +2143,7 @@ function buildInitialWorkbookRelationshipParts(mappingState = {}) {
   while (parts.length < 2) {
     parts.push({
       participantRef: makeWorkbookColumnRef('', ''),
+      participantValueMode: 'label',
       roleMode: 'heading',
       roleRef: makeWorkbookColumnRef('', ''),
     });
@@ -2395,7 +2435,6 @@ export function PeridotColumnMappingModal({
   const singleStepLabels = {
     preview: 'Preview',
     relationships: 'Relations',
-    identity: 'Identity',
     time: 'Time',
     places: 'Places',
     evidence: 'Evidence',
@@ -2406,7 +2445,6 @@ export function PeridotColumnMappingModal({
     'workbook-preview': 'Preview',
     'workbook-setup': 'Sheets',
     'workbook-relationships': 'Relations',
-    'workbook-identity': 'Identity',
     'workbook-time': 'Time',
     'workbook-places': 'Places',
     'workbook-evidence': 'Evidence',
@@ -2556,6 +2594,12 @@ export function PeridotColumnMappingModal({
         relationshipMetadataMappings: normalizeWorkbookRelationshipMetadataMappings({}),
         letterLevelJoins: suggestedJoins,
         letterLevelJoinSuggestions: suggestedJoins,
+        identityMapping: {
+          ...(current.identityMapping || {}),
+          record: suggestedPrimaryId
+            ? { strategy: 'workbook-key', refs: [makeWorkbookColumnRef(primarySheetName, suggestedPrimaryId)] }
+            : { strategy: 'row', refs: [] },
+        },
       };
       return {
         ...nextMapping,
@@ -2572,6 +2616,12 @@ export function PeridotColumnMappingModal({
     setWorkbookMapping((current) => ({
       ...current,
       primaryLetterIdColumn,
+      identityMapping: {
+        ...(current.identityMapping || {}),
+        record: primaryLetterIdColumn
+          ? { strategy: 'workbook-key', refs: [makeWorkbookColumnRef(current.primarySheetName, primaryLetterIdColumn)] }
+          : { strategy: 'row', refs: [] },
+      },
       letterLevelJoins: (current.letterLevelJoins || []).map((join) => makeLetterIdJoin({
         fromSheetName: current.primarySheetName,
         fromColumnName: primaryLetterIdColumn,
@@ -2871,6 +2921,15 @@ export function PeridotColumnMappingModal({
     }));
   };
 
+  const handleWorkbookCustomValueHandlingChange = (index, valueHandling) => {
+    setWorkbookMapping((current) => ({
+      ...current,
+      customFieldSelections: (current.customFieldSelections || []).map((selection, currentIndex) => (
+        currentIndex === index ? { ...selection, valueHandling } : selection
+      )),
+    }));
+  };
+
   const handleCustomActionChange = (index, action) => {
     setCustomFieldSelections((current) => current.map((selection, currentIndex) => (
       currentIndex === index
@@ -2884,6 +2943,12 @@ export function PeridotColumnMappingModal({
       currentIndex === index
         ? { ...selection, label }
         : selection
+    )));
+  };
+
+  const handleCustomValueHandlingChange = (index, valueHandling) => {
+    setCustomFieldSelections((current) => current.map((selection, currentIndex) => (
+      currentIndex === index ? { ...selection, valueHandling } : selection
     )));
   };
 
@@ -3102,7 +3167,9 @@ export function PeridotColumnMappingModal({
               rows={rows}
               placeParts={placeParts}
               relationshipParts={relationshipParts}
+              identityMapping={identityMapping}
               onPlacePartsChange={setPlaceParts}
+              onIdentityChange={setIdentityMapping}
             />
           ) : null}
 
@@ -3112,18 +3179,10 @@ export function PeridotColumnMappingModal({
               rows={rows}
               relationshipParts={relationshipParts}
               relationshipMetadataMapping={relationshipMetadataMapping}
+              identityMapping={identityMapping}
               onRelationshipPartsChange={setRelationshipParts}
               onMetadataChange={handleRelationshipMetadataMappingChange}
-            />
-          ) : null}
-
-          {!isWorkbookMode && stepForRender === 'identity' ? (
-            <IdentityMappingPanel
-              headers={headers}
-              relationshipParts={relationshipParts}
-              placeParts={placeParts}
-              identityMapping={identityMapping}
-              onChange={setIdentityMapping}
+              onIdentityChange={setIdentityMapping}
             />
           ) : null}
 
@@ -3136,6 +3195,7 @@ export function PeridotColumnMappingModal({
               relationshipParts={relationshipParts}
               onActionChange={handleCustomActionChange}
               onLabelChange={handleCustomLabelChange}
+              onValueHandlingChange={handleCustomValueHandlingChange}
             />
           ) : null}
 
@@ -3189,7 +3249,9 @@ export function PeridotColumnMappingModal({
               workbookModel={workbookModel}
               placeParts={workbookMapping.placeParts || []}
               relationshipParts={workbookMapping.relationshipParts || []}
+              identityMapping={workbookMapping.identityMapping || { record: {}, entityGroups: [] }}
               onPlacePartsChange={handleWorkbookPlacePartsChange}
+              onIdentityChange={(nextIdentityMapping) => setWorkbookMapping((current) => ({ ...current, identityMapping: nextIdentityMapping }))}
             />
           ) : null}
 
@@ -3199,15 +3261,7 @@ export function PeridotColumnMappingModal({
               workbookMapping={workbookMapping}
               onRelationshipPartsChange={handleWorkbookRelationshipPartsChange}
               onMetadataChange={handleWorkbookRelationshipMetadataMappingChange}
-            />
-          ) : null}
-
-          {isWorkbookMode && stepForRender === 'workbook-identity' ? (
-            <WorkbookIdentityMappingPanel
-              workbookModel={workbookModel}
-              workbookMapping={workbookMapping}
-              identityMapping={workbookMapping.identityMapping || { record: {}, participants: [] }}
-              onChange={(nextIdentityMapping) => setWorkbookMapping((current) => ({ ...current, identityMapping: nextIdentityMapping }))}
+              onIdentityChange={(nextIdentityMapping) => setWorkbookMapping((current) => ({ ...current, identityMapping: nextIdentityMapping }))}
             />
           ) : null}
 
@@ -3218,6 +3272,7 @@ export function PeridotColumnMappingModal({
               selections={workbookMapping.customFieldSelections || []}
               onActionChange={handleWorkbookCustomActionChange}
               onLabelChange={handleWorkbookCustomLabelChange}
+              onValueHandlingChange={handleWorkbookCustomValueHandlingChange}
             />
           ) : null}
 

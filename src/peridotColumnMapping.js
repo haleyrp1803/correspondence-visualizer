@@ -54,6 +54,8 @@
  * when they are categorical/usable.
  */
 
+import { splitPeridotMappedValue } from './peridotMappedValueHandling.js';
+
 import { PERIDOT_TEMPLATE_COLUMNS } from './peridotCsvSchema.js';
 import { buildInitialPeridotGenealogyMappingState } from './peridotGenealogyMapping.js';
 import { buildTemporalAssertionMappingsFromLegacy, getTemporalAssertionSourceColumns } from './peridotTemporalMapping.js';
@@ -1037,17 +1039,20 @@ export function applyCoreMappingToRow(uploadedRow = {}, coreMapping = {}, tempor
 export function buildCustomInspectorFieldsForRow(uploadedRow = {}, customFieldSelections = []) {
   return customFieldSelections
     .filter((selection) => selection?.action === CUSTOM_INSPECTOR_FIELD_DEFAULTS.include)
-    .map((selection) => {
+    .flatMap((selection) => {
       const sourceColumn = asText(selection.sourceColumn);
-      return {
+      if (!sourceColumn) return [];
+      const rawValue = getMappedValue(uploadedRow, sourceColumn);
+      return splitPeridotMappedValue(rawValue, selection?.valueHandling).map((value, occurrenceIndex) => ({
         key: sourceColumn,
         sourceColumn,
         label: asText(selection.label) || titleCaseFromColumnName(sourceColumn) || sourceColumn,
-        value: getMappedValue(uploadedRow, sourceColumn),
+        value,
+        rawValue,
+        occurrenceIndex,
         analyticsEligible: Boolean(selection.analyticsEligible),
-      };
-    })
-    .filter((field) => field.sourceColumn);
+      }));
+    });
 }
 
 /**

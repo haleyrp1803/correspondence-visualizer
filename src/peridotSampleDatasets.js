@@ -15,20 +15,22 @@
 
 const ref = (sheetName, columnName) => ({ sheetName, columnName });
 
-const included = (sourceColumn, label = sourceColumn, analyticsEligible = true) => ({
+const included = (sourceColumn, label = sourceColumn, analyticsEligible = true, valueHandling = undefined) => ({
   sourceColumn,
   label,
   action: 'include',
   analyticsEligible,
+  ...(valueHandling ? { valueHandling } : {}),
 });
 
-const workbookIncluded = (sheetName, sourceColumn, label = sourceColumn, analyticsEligible = true) => ({
+const workbookIncluded = (sheetName, sourceColumn, label = sourceColumn, analyticsEligible = true, valueHandling = undefined) => ({
   sourceColumn,
   label,
   action: 'include',
   analyticsEligible,
   sheetName,
   sourceRef: ref(sheetName, sourceColumn),
+  ...(valueHandling ? { valueHandling } : {}),
 });
 
 const correspondenceMapping = {
@@ -126,6 +128,7 @@ const familyTreeMapping = {
     { participantColumn: 'Mother name', roleLabel: 'mother', roleMode: 'heading' },
     { participantColumn: 'Father name', roleLabel: 'father', roleMode: 'heading' },
     { participantColumn: 'Partner name', roleLabel: 'partner / spouse', roleMode: 'heading' },
+    { participantColumn: 'Ex-partner IDs', participantValueMode: 'identity-reference', roleLabel: 'former partner', roleMode: 'heading', valueHandling: { cardinality: 'multiple', delimiter: ' ' } },
   ],
   identityMapping: {
     record: { strategy: 'row', columns: [] },
@@ -133,7 +136,7 @@ const familyTreeMapping = {
     entityGroups: [{
       id: 'people',
       label: 'People',
-      appearanceIds: ['relationship:0', 'relationship:1', 'relationship:2', 'relationship:3'],
+      appearanceIds: ['relationship:0', 'relationship:1', 'relationship:2', 'relationship:3', 'relationship:4'],
       strategy: 'field',
       keys: ['Person ID'],
       mappings: {
@@ -141,6 +144,7 @@ const familyTreeMapping = {
         'relationship:1': [{ key: 'Person ID', column: 'Mother ID' }],
         'relationship:2': [{ key: 'Person ID', column: 'Father ID' }],
         'relationship:3': [{ key: 'Person ID', column: 'Partner ID' }],
+        'relationship:4': [{ key: 'Person ID', column: 'Ex-partner IDs' }],
       },
     }],
   },
@@ -195,6 +199,15 @@ const familyTreeMapping = {
       longitudeColumn: '',
     },
     {
+      placeColumn: 'place of birth',
+      roleLabel: 'Place of childbirth',
+      roleMode: 'heading',
+      subjectParticipantIndex: 1,
+      coordinatePairColumn: 'coordinate location birth',
+      latitudeColumn: '',
+      longitudeColumn: '',
+    },
+    {
       placeColumn: 'place of death',
       roleLabel: 'Place of death',
       roleMode: 'heading',
@@ -211,7 +224,6 @@ const familyTreeMapping = {
     included('Partnership type', 'Partnership type'),
     included('Partnership date type', 'Partnership date type'),
     included('Partnership year', 'Partnership year'),
-    included('Ex-partner IDs', 'Ex-partner IDs', false),
     included('Profession', 'Profession'),
   ],
   coreMapping: {},
@@ -270,7 +282,7 @@ const cardinalsMapping = {
   temporalNoteMappings: {},
   relationshipMetadataMappings: {},
   customFieldSelections: [
-    workbookIncluded('Cardinal Index', 'Conclaves present', 'Conclaves present'),
+    workbookIncluded('Cardinal Index', 'Conclaves present', 'Conclaves present', true, { cardinality: 'multiple', delimiter: ';' }),
     workbookIncluded('Cardinal Index', 'Nationality / political origin', 'Nationality / political origin'),
   ],
   coreMappings: {},
@@ -297,7 +309,7 @@ export const PERIDOT_SAMPLE_DATASETS = Object.freeze([
     filePath: 'sample_data/family_tree_sample.csv',
     format: 'CSV',
     description: 'A family-tree table with stable IDs, parents, partners, life dates, places, coordinates, and professions.',
-    teachingNote: 'Demonstrates recurring people, relationship roles, participant-attached dates and places, and identity by source ID.',
+    teachingNote: 'Demonstrates recurring people, relationship roles, participant-attached dates and places, identity by source ID, and multi-valued former-partner ID references resolved to canonical person labels.',
     mappingMode: 'single-table',
     mappingState: familyTreeMapping,
   }),

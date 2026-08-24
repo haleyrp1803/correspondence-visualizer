@@ -27,6 +27,7 @@ export function makeTemporalAssertionMapping(overrides = {}) {
     endDayColumn: overrides.endDayColumn || '',
     noteColumns: Array.isArray(overrides.noteColumns) ? [...overrides.noteColumns] : [],
     subjectParticipantIndex: Number.isInteger(overrides.subjectParticipantIndex) ? overrides.subjectParticipantIndex : null,
+    valueHandling: overrides.valueHandling ? { ...overrides.valueHandling } : undefined,
   };
 }
 

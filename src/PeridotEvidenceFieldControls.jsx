@@ -8,6 +8,7 @@
  */
 
 import React from 'react';
+import PeridotValueHandlingControl from './PeridotValueHandlingControl.jsx';
 import { CUSTOM_INSPECTOR_FIELD_DEFAULTS } from './peridotColumnMapping.js';
 import { getWorkbookSheet, makeWorkbookColumnRef } from './peridotWorkbookMapping.js';
 
@@ -176,6 +177,7 @@ export function InspectorFieldsStep({
   relationshipParts = [],
   onActionChange,
   onLabelChange,
+  onValueHandlingChange,
 }) {
   const mappedCoreColumns = singleTableStructuralColumns(coreMapping, placeParts, relationshipParts);
 
@@ -190,6 +192,7 @@ export function InspectorFieldsStep({
               <th className="px-4 py-3">Uploaded column</th>
               <th className="px-4 py-3">Use as evidence?</th>
               <th className="px-4 py-3">Display label</th>
+              <th className="px-4 py-3">Values in one cell</th>
               <th className="px-4 py-3">Chart/filter readiness</th>
             </tr>
           </thead>
@@ -223,6 +226,13 @@ export function InspectorFieldsStep({
                       className="peridot-mapping-input w-full min-w-[12rem] rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-[var(--input-text)]"
                     />
                   </td>
+                  <td className="px-4 py-4 min-w-[22rem]">
+                    <PeridotValueHandlingControl
+                      valueHandling={selection.valueHandling}
+                      onChange={(valueHandling) => onValueHandlingChange?.(index, valueHandling)}
+                      disabled={isMappedCore || action !== CUSTOM_INSPECTOR_FIELD_DEFAULTS.include}
+                    />
+                  </td>
                   <td className="px-4 py-4">
                     <span className={selection.analyticsEligible ? 'peridot-mapping-readiness-badge peridot-mapping-readiness-badge-chart' : 'peridot-mapping-readiness-badge'}>
                       {selection.analyticsEligible ? 'Likely chart/filter field' : 'Evidence only'}
@@ -250,6 +260,7 @@ export function WorkbookInspectorFieldsStep({
   selections,
   onActionChange,
   onLabelChange,
+  onValueHandlingChange,
 }) {
   const mappedCoreRefs = workbookStructuralRefs(workbookMapping);
 
@@ -284,6 +295,7 @@ export function WorkbookInspectorFieldsStep({
                   <th className="px-4 py-3">Workbook column</th>
                   <th className="px-4 py-3">Use as evidence?</th>
                   <th className="px-4 py-3">Display label</th>
+                  <th className="px-4 py-3">Values in one cell</th>
                   <th className="px-4 py-3">Chart/filter readiness</th>
                 </tr>
               </thead>
@@ -318,6 +330,13 @@ export function WorkbookInspectorFieldsStep({
                           value={selection.label || buildWorkbookSelectionLabel(selection, workbookMapping.primarySheetName)}
                           onChange={(event) => onLabelChange(index, event.target.value)}
                           className="peridot-mapping-input w-full min-w-[12rem] rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-[var(--input-text)]"
+                        />
+                      </td>
+                      <td className="px-4 py-4 min-w-[22rem]">
+                        <PeridotValueHandlingControl
+                          valueHandling={selection.valueHandling}
+                          onChange={(valueHandling) => onValueHandlingChange?.(index, valueHandling)}
+                          disabled={isMappedCore || action !== CUSTOM_INSPECTOR_FIELD_DEFAULTS.include}
                         />
                       </td>
                       <td className="px-4 py-4">

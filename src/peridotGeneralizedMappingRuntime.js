@@ -11,6 +11,7 @@
 import { parsePeridotCoordinatePair } from './peridotDataCapabilityAudit.js';
 import { composeTemporalPartsValue, getTemporalAssertionSourceColumns, normalizeTemporalAssertionMappings } from './peridotTemporalMapping.js';
 import { getPeridotIdentityRuntimeSourceColumns, materializePeridotSingleTableIdentityMappingSuggestions, resolvePeridotMappedEntityIdentity, resolvePeridotMappedRecordIdentity } from './peridotIdentityRuntime.js';
+import { splitPeridotMappedValue } from './peridotMappedValueHandling.js';
 
 function asText(value) {
   return String(value ?? '').trim();
@@ -69,42 +70,50 @@ function coordinatesFromPlacePart(row = {}, part = {}) {
 }
 
 function buildGeneralizedParticipants(row = {}, relationshipParts = [], identityMapping = {}, rowIndex = 0) {
-  return (relationshipParts || [])
-    .map((part, index) => {
-      const sourceColumn = asText(part?.participantColumn);
-      const value = asText(valueFrom(row, sourceColumn));
-      if (!sourceColumn || !value) return null;
+  return (relationshipParts || []).flatMap((part, index) => {
+    const sourceColumn = asText(part?.participantColumn);
+    if (!sourceColumn) return [];
+    const rawValue = valueFrom(row, sourceColumn);
+    return splitPeridotMappedValue(rawValue, part?.valueHandling).map((value, occurrenceIndex) => {
+      const identityRow = { ...row, [sourceColumn]: value };
       const identity = resolvePeridotMappedEntityIdentity({
-        row, rowIndex, identityMapping, appearanceKind: 'relationship', appearanceIndex: index, label: value,
+        row: identityRow, rowIndex, identityMapping, appearanceKind: 'relationship', appearanceIndex: index, label: value,
       });
       return {
         index,
+        occurrenceIndex,
         value,
+        rawValue,
         entityId: identity.entityId,
         identity,
         role: roleFromPart(row, part, 'participantColumn') || `participant-${index + 1}`,
         sourceColumn,
         roleSourceColumn: part?.roleMode === 'column' ? asText(part?.roleColumn) : '',
       };
-    })
-    .filter(Boolean);
+    });
+  });
 }
 
 function buildGeneralizedPlaces(row = {}, placeParts = [], identityMapping = {}, rowIndex = 0) {
-  return (placeParts || [])
-    .map((part, index) => {
-      const sourceColumn = asText(part?.placeColumn);
-      const label = asText(valueFrom(row, sourceColumn));
-      const coordinates = coordinatesFromPlacePart(row, part);
-      const hasCoordinates = Number.isFinite(coordinates.latitude) && Number.isFinite(coordinates.longitude);
-      if (!sourceColumn && !hasCoordinates) return null;
-      if (!label && !hasCoordinates) return null;
+  return (placeParts || []).flatMap((part, index) => {
+    const sourceColumn = asText(part?.placeColumn);
+    const rawValue = valueFrom(row, sourceColumn);
+    const labels = splitPeridotMappedValue(rawValue, part?.valueHandling);
+    const coordinates = coordinatesFromPlacePart(row, part);
+    const hasCoordinates = Number.isFinite(coordinates.latitude) && Number.isFinite(coordinates.longitude);
+    if (!sourceColumn && !hasCoordinates) return [];
+    if (!labels.length && !hasCoordinates) return [];
+    const resolvedLabels = labels.length ? labels : [''];
+    return resolvedLabels.map((label, occurrenceIndex) => {
+      const identityRow = sourceColumn ? { ...row, [sourceColumn]: label } : row;
       const identity = resolvePeridotMappedEntityIdentity({
-        row, rowIndex, identityMapping, appearanceKind: 'place', appearanceIndex: index, label,
+        row: identityRow, rowIndex, identityMapping, appearanceKind: 'place', appearanceIndex: index, label,
       });
       return {
         index,
+        occurrenceIndex,
         label,
+        rawValue,
         entityId: identity.entityId,
         identity,
         role: roleFromPart(row, part, 'placeColumn') || `place-${index + 1}`,
@@ -115,8 +124,8 @@ function buildGeneralizedPlaces(row = {}, placeParts = [], identityMapping = {},
         longitude: coordinates.longitude,
         coordinateSourceColumns: coordinates.sourceColumns,
       };
-    })
-    .filter(Boolean);
+    });
+  });
 }
 
 function buildTemporalNotes(row = {}, noteColumns = []) {
@@ -138,27 +147,35 @@ function buildTemporalAssertionDescriptors(row = {}, temporalAssertionMappings =
     day: value(mapping[prefix ? `${prefix}DayColumn` : 'dayColumn']),
   });
 
-  return normalizeTemporalAssertionMappings(temporalAssertionMappings).map((mapping, index) => {
+  return normalizeTemporalAssertionMappings(temporalAssertionMappings).flatMap((mapping, index) => {
     const role = asText(mapping.role) || `Time ${index + 1}`;
     const notes = notesFor(mapping);
+    const subjectParticipantIndex = Number.isInteger(mapping.subjectParticipantIndex) ? mapping.subjectParticipantIndex : null;
     if (mapping.kind === 'period') {
       if (mapping.sourceMode === 'single') {
-        const sourceText = value(mapping.column);
-        if (!asText(sourceText)) return null;
-        return { fieldKey: mapping.id, role, sourceText, kind: 'span', notes, subjectParticipantIndex: Number.isInteger(mapping.subjectParticipantIndex) ? mapping.subjectParticipantIndex : null };
+        const rawValue = value(mapping.column);
+        return splitPeridotMappedValue(rawValue, mapping?.valueHandling).map((sourceText, occurrenceIndex) => ({
+          fieldKey: mapping.id, role, sourceText, rawValue, occurrenceIndex, kind: 'span', notes, subjectParticipantIndex,
+        }));
       }
       const startValue = mapping.startMode === 'parts' ? partValue(mapping, 'start') : value(mapping.startColumn);
       const endValue = mapping.endMode === 'parts' ? partValue(mapping, 'end') : value(mapping.endColumn);
-      if (!asText(startValue) && !asText(endValue)) return null;
-      return {
+      if (!asText(startValue) && !asText(endValue)) return [];
+      return [{
         fieldKey: mapping.id, role, startValue, endValue,
-        sourceText: composeDisplayDateValue('', '', startValue, endValue), kind: 'range', notes, subjectParticipantIndex: Number.isInteger(mapping.subjectParticipantIndex) ? mapping.subjectParticipantIndex : null,
-      };
+        sourceText: composeDisplayDateValue('', '', startValue, endValue), kind: 'range', notes, subjectParticipantIndex,
+      }];
     }
-    const sourceText = mapping.sourceMode === 'parts' ? partValue(mapping) : value(mapping.column);
-    if (!asText(sourceText)) return null;
-    return { fieldKey: mapping.id, role, sourceText, kind: 'point', notes, subjectParticipantIndex: Number.isInteger(mapping.subjectParticipantIndex) ? mapping.subjectParticipantIndex : null };
-  }).filter(Boolean);
+    if (mapping.sourceMode === 'parts') {
+      const sourceText = partValue(mapping);
+      if (!asText(sourceText)) return [];
+      return [{ fieldKey: mapping.id, role, sourceText, kind: 'point', notes, subjectParticipantIndex }];
+    }
+    const rawValue = value(mapping.column);
+    return splitPeridotMappedValue(rawValue, mapping?.valueHandling).map((sourceText, occurrenceIndex) => ({
+      fieldKey: mapping.id, role, sourceText, rawValue, occurrenceIndex, kind: 'point', notes, subjectParticipantIndex,
+    }));
+  });
 }
 
 function buildGeneralizedTemporal(row = {}, temporalMapping = {}, temporalNoteMappings = {}, temporalAssertionMappings = []) {
@@ -210,13 +227,19 @@ function buildGeneralizedRelationshipMetadata(row = {}, mapping = {}) {
 function buildEvidenceFields(row = {}, selections = []) {
   return (selections || [])
     .filter((selection) => selection?.action === 'include')
-    .map((selection) => ({
-      sourceColumn: asText(selection?.sourceColumn),
-      label: asText(selection?.label || selection?.sourceColumn),
-      value: valueFrom(row, selection?.sourceColumn),
-      analyticsEligible: Boolean(selection?.analyticsEligible),
-    }))
-    .filter((field) => field.sourceColumn);
+    .flatMap((selection) => {
+      const sourceColumn = asText(selection?.sourceColumn);
+      if (!sourceColumn) return [];
+      const rawValue = valueFrom(row, sourceColumn);
+      return splitPeridotMappedValue(rawValue, selection?.valueHandling).map((value, occurrenceIndex) => ({
+        sourceColumn,
+        label: asText(selection?.label || selection?.sourceColumn),
+        value,
+        rawValue,
+        occurrenceIndex,
+        analyticsEligible: Boolean(selection?.analyticsEligible),
+      }));
+    });
 }
 
 export function buildPeridotGeneralizedObservation(row = {}, mapping = {}, rowIndex = 0) {

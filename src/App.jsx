@@ -791,10 +791,18 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
       : (relationship.targetId || relationship.target)
   );
 
+  const canonicalPersonLabel = (entityId, fallbackLabel) => {
+    const id = String(entityId || '').trim();
+    const canonicalLabel = id && semanticOptions?.entityLabelById?.get
+      ? semanticOptions.entityLabelById.get(id)
+      : '';
+    return String(canonicalLabel || fallbackLabel || id).trim();
+  };
+
   relationships.forEach((relationship) => {
     [
-      { key: relationshipPersonKey(relationship, 'source'), label: relationship.source, entityId: relationship.sourceId || '' },
-      { key: relationshipPersonKey(relationship, 'target'), label: relationship.target, entityId: relationship.targetId || '' },
+      { key: relationshipPersonKey(relationship, 'source'), label: canonicalPersonLabel(relationship.sourceId, relationship.source), entityId: relationship.sourceId || '' },
+      { key: relationshipPersonKey(relationship, 'target'), label: canonicalPersonLabel(relationship.targetId, relationship.target), entityId: relationship.targetId || '' },
     ].forEach((person) => {
       if (!person.key) return;
       if (!personMap.has(person.key)) {
@@ -817,7 +825,7 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
       personMap.set(personKey, {
         id: personKey,
         entityId: location.personId || '',
-        label: location.person || personKey,
+        label: canonicalPersonLabel(location.personId, location.person || personKey),
         appearances: 0,
         locationCounts: new Map(),
       });
@@ -3383,6 +3391,19 @@ export default function EuropeNetworkMapApp() {
     [peridotNormalizedData, geographyRows]
   );
 
+  const entityDisplayLabelById = useMemo(() => {
+    const labels = new Map();
+    normalizedRows.forEach((row) => {
+      (row?.generalizedObservation?.participants || []).forEach((participant) => {
+        const entityId = String(participant?.entityId || '').trim();
+        const label = String(participant?.value || '').trim();
+        if (!entityId || !label || participant?.participantValueMode === 'identity-reference') return;
+        if (!labels.has(entityId)) labels.set(entityId, label);
+      });
+    });
+    return labels;
+  }, [normalizedRows]);
+
   /*
    * Search records preserve every geographic field required by maps and graphs,
    * while attaching metadata only when Peridot can establish an exact source-row
@@ -3549,7 +3570,10 @@ export default function EuropeNetworkMapApp() {
     return ids;
   }, [filteredAggregatedEdges]);
 
-  const filteredPlaces = useMemo(() => places.filter((place) => placeIdsInUse.has(place.id)), [places, placeIdsInUse]);
+  const filteredPlaces = useMemo(
+    () => (placeIdsInUse.size ? places.filter((place) => placeIdsInUse.has(place.id)) : places),
+    [places, placeIdsInUse]
+  );
   const geographicGraph = useMemo(
     () => buildGraph(filteredPlaces, filteredAggregatedEdges, mapViewportSize.width, mapViewportSize.height),
     [filteredPlaces, filteredAggregatedEdges, mapViewportSize.width, mapViewportSize.height]
@@ -3577,10 +3601,10 @@ export default function EuropeNetworkMapApp() {
       minCount,
       '',
       personGraphLayoutMode === 'geographic'
-        ? { relationshipRows: entityRelationshipStructureRows, locationRows: filteredRowsByTime }
-        : null
+        ? { relationshipRows: entityRelationshipStructureRows, locationRows: filteredRowsByTime, entityLabelById: entityDisplayLabelById }
+        : { entityLabelById: entityDisplayLabelById }
     ),
-    [entityRelationshipStructureRows, filteredRowsByTime, mapViewportSize.width, mapViewportSize.height, personGraphLayoutMode, minCount]
+    [entityRelationshipStructureRows, filteredRowsByTime, mapViewportSize.width, mapViewportSize.height, personGraphLayoutMode, minCount, entityDisplayLabelById]
   );
   const graph = viewMode === 'geographic' ? geographicGraph : personGraph;
 

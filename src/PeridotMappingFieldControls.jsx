@@ -17,6 +17,7 @@
  */
 
 import React from 'react';
+import PeridotValueHandlingControl from './PeridotValueHandlingControl.jsx';
 import {
   PERIDOT_CORE_FIELD_DEFINITIONS_BY_KEY,
   PERIDOT_POINT_FIELD_DEFINITIONS_BY_KEY,
@@ -259,6 +260,15 @@ export function TemporalMappingTable({ headers, rows = [], temporalAssertions = 
                     </div>
                   )}
                 </div>
+                {(kind === 'date' ? mapping.sourceMode !== 'parts' : mapping.sourceMode !== 'endpoints') ? (
+                  <div className="mt-4 border-t border-[var(--panel-card-border)] pt-4">
+                    <PeridotValueHandlingControl
+                      valueHandling={mapping.valueHandling}
+                      onChange={(valueHandling) => update(index, { valueHandling })}
+                      disabled={!mapping.column}
+                    />
+                  </div>
+                ) : null}
                 <div className="mt-4 border-t border-[var(--panel-card-border)] pt-3">
                   <div className="text-xs font-semibold text-[var(--muted-text)]">Related temporal notes (optional)</div>
                   {(mapping.noteColumns || []).map((column, noteIndex) => <div key={noteIndex} className="mt-2 flex max-w-xl gap-2"><select value={column || ''} onChange={(event) => { const notes=[...(mapping.noteColumns||[])]; notes[noteIndex]=event.target.value; update(index,{noteColumns:notes}); }} className={`${SOURCE_SELECT_CLASS} max-w-md`}><option value="">Unassigned</option>{headers.map((header)=><option key={header} value={header}>{header}</option>)}</select><button type="button" onClick={()=>update(index,{noteColumns:(mapping.noteColumns||[]).filter((_,i)=>i!==noteIndex)})} className="rounded-lg border border-[var(--input-border)] px-2 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div>)}
@@ -613,6 +623,13 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
       </div>
 
       <div className="my-4"><SectionDivider /></div>
+      <PeridotValueHandlingControl
+        valueHandling={part?.valueHandling}
+        onChange={(valueHandling) => onChange({ valueHandling })}
+        disabled={!placeRef?.columnName}
+      />
+
+      <div className="my-4"><SectionDivider /></div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
         <div>
@@ -828,6 +845,13 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
           <PlaceExamples rows={rows} sourceColumn={selectedPlaceColumn} />
         </div>
       </div>
+
+      <div className="my-4"><SectionDivider /></div>
+      <PeridotValueHandlingControl
+        valueHandling={part?.valueHandling}
+        onChange={(valueHandling) => onChange({ valueHandling })}
+        disabled={!selectedPlaceColumn}
+      />
 
       <div className="my-4"><SectionDivider /></div>
 
@@ -1084,6 +1108,7 @@ export function WorkbookSpatialMappingPanel({ workbookModel, placeParts = [], re
 
 const EMPTY_RELATIONSHIP_PART = Object.freeze({
   participantColumn: '',
+  participantValueMode: 'label',
   roleMode: 'heading',
   roleColumn: '',
 });
@@ -1192,6 +1217,34 @@ function RelationshipPartCard({ part, index, headers, rows, onChange, onRemove, 
             {headers.map((header) => <option key={header} value={header}>{header}</option>)}
           </select>
           <RelationshipExamples rows={rows} sourceColumn={participantColumn} />
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+      <PeridotValueHandlingControl
+        valueHandling={part?.valueHandling}
+        onChange={(valueHandling) => onChange({ valueHandling })}
+        disabled={!participantColumn}
+      />
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">What does this column contain?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            Most relationship fields contain the participant&apos;s name or label. Choose ID references when the values instead point to IDs for people or entities recorded elsewhere in your mapped data.
+          </p>
+        </div>
+        <div className="space-y-3">
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input type="radio" name={`relationship-value-mode-${index}`} checked={part?.participantValueMode !== 'identity-reference'} onChange={() => onChange({ participantValueMode: 'label' })} className="mt-0.5" />
+            <span><span className="font-semibold">Names or labels</span><span className="mt-0.5 block text-xs text-[var(--panel-card-muted-text)]">Show the values in this column as the participant names or labels.</span></span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input type="radio" name={`relationship-value-mode-${index}`} checked={part?.participantValueMode === 'identity-reference'} onChange={() => onChange({ participantValueMode: 'identity-reference' })} className="mt-0.5" />
+            <span><span className="font-semibold">IDs that identify records elsewhere in the data</span><span className="mt-0.5 block text-xs text-[var(--panel-card-muted-text)]">Use the Identity controls below to connect this part to the same ID system used by those records. Peridot will keep the source IDs but show the mapped entity labels when they can be resolved.</span></span>
+          </label>
         </div>
       </div>
 
@@ -1369,6 +1422,7 @@ function WorkbookRelationshipExamples({ workbookModel, sourceRef = {} }) {
 
 const EMPTY_WORKBOOK_RELATIONSHIP_PART = Object.freeze({
   participantRef: makeWorkbookColumnRef('', ''),
+  participantValueMode: 'label',
   roleMode: 'heading',
   roleRef: makeWorkbookColumnRef('', ''),
 });
@@ -1420,6 +1474,34 @@ function WorkbookRelationshipPartCard({ part, index, workbookModel, onChange, on
             onChange={(ref) => onChange({ participantRef: ref })}
           />
           <WorkbookRelationshipExamples workbookModel={workbookModel} sourceRef={participantRef} />
+        </div>
+      </div>
+
+      <div className="my-4"><SectionDivider /></div>
+      <PeridotValueHandlingControl
+        valueHandling={part?.valueHandling}
+        onChange={(valueHandling) => onChange({ valueHandling })}
+        disabled={!participantRef?.columnName}
+      />
+
+      <div className="my-4"><SectionDivider /></div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+        <div>
+          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">What does this column contain?</div>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+            Most relationship fields contain the participant&apos;s name or label. Choose ID references when the values instead point to IDs for people or entities recorded elsewhere in your mapped data.
+          </p>
+        </div>
+        <div className="space-y-3">
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input type="radio" name={`workbook-relationship-value-mode-${index}`} checked={part?.participantValueMode !== 'identity-reference'} onChange={() => onChange({ participantValueMode: 'label' })} className="mt-0.5" />
+            <span><span className="font-semibold">Names or labels</span><span className="mt-0.5 block text-xs text-[var(--panel-card-muted-text)]">Show the values in this column as the participant names or labels.</span></span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2.5 text-sm text-[var(--panel-card-text)]">
+            <input type="radio" name={`workbook-relationship-value-mode-${index}`} checked={part?.participantValueMode === 'identity-reference'} onChange={() => onChange({ participantValueMode: 'identity-reference' })} className="mt-0.5" />
+            <span><span className="font-semibold">IDs that identify records elsewhere in the data</span><span className="mt-0.5 block text-xs text-[var(--panel-card-muted-text)]">Use the Identity controls below to connect this part to the same ID system used by those records. Peridot will keep the source IDs but show the mapped entity labels when they can be resolved.</span></span>
+          </label>
         </div>
       </div>
 
@@ -1530,7 +1612,7 @@ export function WorkbookRelationshipMappingPanel({ workbookModel, workbookMappin
   const addPart = () => {
     onRelationshipPartsChange?.([
       ...effectiveParts,
-      { participantRef: makeWorkbookColumnRef('', ''), roleMode: 'heading', roleRef: makeWorkbookColumnRef('', '') },
+      { participantRef: makeWorkbookColumnRef('', ''), participantValueMode: 'label', roleMode: 'heading', roleRef: makeWorkbookColumnRef('', '') },
     ]);
   };
 
@@ -1616,7 +1698,7 @@ function WorkbookEndpointControls({ workbookModel, mapping, prefix = '', onPatch
 export function WorkbookTemporalMappingTable({ workbookModel, workbookMapping, onAssertionsChange }) {
   const temporalAssertions = workbookMapping.temporalAssertionMappings || [];
   const update=(index,patch)=>onAssertionsChange?.((currentMappings)=>(currentMappings||[]).map((m,i)=>i===index?{...m,...patch}:m)); const remove=(index)=>onAssertionsChange?.((currentMappings)=>(currentMappings||[]).filter((_,i)=>i!==index)); const add=()=>onAssertionsChange?.((currentMappings)=>[...(currentMappings||[]),{id:`time-${Date.now()}`,role:'',kind:'date',sourceMode:'single',column:makeWorkbookColumnRef('',''),noteColumns:[],subjectParticipantIndex:null}]);
-  return <div className="space-y-3"><TemporalIntro/><div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5"><div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]"><div className="space-y-4 min-w-0">{temporalAssertions.map((mapping,index)=>{const kind=mapping.kind==='period'?'period':'date'; return <div key={mapping.id||index} className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-4"><div className="flex items-start justify-between gap-3"><div className="text-[15px] font-bold text-[var(--panel-card-text)]">Time {index+1}</div><button type="button" onClick={()=>remove(index)} className="rounded-lg border border-[var(--input-border)] px-2 py-1 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-[var(--muted-text)]">Name this date or period<input value={mapping.role||''} onChange={(e)=>update(index,{role:e.target.value})} placeholder="e.g. Birth, Creation date, Lifespan, Reign" className={`${SOURCE_SELECT_CLASS} mt-1`}/><span className="mt-1 block text-[11px] font-normal leading-relaxed text-[var(--panel-card-muted-text)]">Peridot will use this name to identify the time later in Timeline, Search, Inspector, and Export.</span></label><label className="text-xs font-semibold text-[var(--muted-text)]">What kind of time is it?<select value={kind} onChange={(e)=>update(index,{kind:e.target.value,sourceMode:'single'})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="date">Date</option><option value="period">Period / range</option></select></label></div><div className="mt-4"><WorkbookTemporalSubjectSelect relationshipParts={workbookMapping.relationshipParts || []} value={mapping.subjectParticipantIndex} onChange={(subjectParticipantIndex)=>update(index,{subjectParticipantIndex})}/></div><div className="mt-4">{kind==='date'?<WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} onPatch={(patch)=>update(index,patch)}/>:<div className="space-y-3"><label className="block text-xs font-semibold text-[var(--muted-text)]">How is this period stored?<select value={mapping.sourceMode==='endpoints'?'endpoints':'single'} onChange={(e)=>update(index,{sourceMode:e.target.value})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="single">In one column</option><option value="endpoints">In separate beginning and ending fields</option></select></label>{mapping.sourceMode==='endpoints'?<div className="grid gap-4 xl:grid-cols-2"><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Beginning</div><WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} prefix="start" onPatch={(patch)=>update(index,patch)}/></div><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Ending</div><WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} prefix="end" onPatch={(patch)=>update(index,patch)}/></div></div>:<WorkbookTemporalRefControl workbookModel={workbookModel} label="Period column" currentRef={mapping.column} onChange={(ref)=>update(index,{column:ref})}/>}</div>}</div><div className="mt-4 border-t border-[var(--panel-card-border)] pt-3"><div className="text-xs font-semibold text-[var(--muted-text)]">Related temporal notes (optional)</div>{(mapping.noteColumns||[]).map((ref,noteIndex)=><div key={noteIndex} className="mt-2 flex max-w-xl gap-2"><div className="min-w-0 max-w-md flex-1"><WorkbookFieldSelect workbookModel={workbookModel} currentRef={ref||{}} onChange={(nextRef)=>{const notes=[...(mapping.noteColumns||[])];notes[noteIndex]=nextRef;update(index,{noteColumns:notes});}}/></div><button type="button" onClick={()=>update(index,{noteColumns:(mapping.noteColumns||[]).filter((_,i)=>i!==noteIndex)})} className="rounded-lg border border-[var(--input-border)] px-2 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div>)}<button type="button" onClick={()=>update(index,{noteColumns:[...(mapping.noteColumns||[]),makeWorkbookColumnRef('','')]})} className="mt-3 rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add related note column</button></div></div>})}<button type="button" onClick={add} className="rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-3 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add date or period</button></div><TemporalUsagePanel/></div></div></div>;
+  return <div className="space-y-3"><TemporalIntro/><div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5"><div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]"><div className="space-y-4 min-w-0">{temporalAssertions.map((mapping,index)=>{const kind=mapping.kind==='period'?'period':'date'; return <div key={mapping.id||index} className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-4"><div className="flex items-start justify-between gap-3"><div className="text-[15px] font-bold text-[var(--panel-card-text)]">Time {index+1}</div><button type="button" onClick={()=>remove(index)} className="rounded-lg border border-[var(--input-border)] px-2 py-1 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-[var(--muted-text)]">Name this date or period<input value={mapping.role||''} onChange={(e)=>update(index,{role:e.target.value})} placeholder="e.g. Birth, Creation date, Lifespan, Reign" className={`${SOURCE_SELECT_CLASS} mt-1`}/><span className="mt-1 block text-[11px] font-normal leading-relaxed text-[var(--panel-card-muted-text)]">Peridot will use this name to identify the time later in Timeline, Search, Inspector, and Export.</span></label><label className="text-xs font-semibold text-[var(--muted-text)]">What kind of time is it?<select value={kind} onChange={(e)=>update(index,{kind:e.target.value,sourceMode:'single'})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="date">Date</option><option value="period">Period / range</option></select></label></div><div className="mt-4"><WorkbookTemporalSubjectSelect relationshipParts={workbookMapping.relationshipParts || []} value={mapping.subjectParticipantIndex} onChange={(subjectParticipantIndex)=>update(index,{subjectParticipantIndex})}/></div><div className="mt-4">{kind==='date'?<WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} onPatch={(patch)=>update(index,patch)}/>:<div className="space-y-3"><label className="block text-xs font-semibold text-[var(--muted-text)]">How is this period stored?<select value={mapping.sourceMode==='endpoints'?'endpoints':'single'} onChange={(e)=>update(index,{sourceMode:e.target.value})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="single">In one column</option><option value="endpoints">In separate beginning and ending fields</option></select></label>{mapping.sourceMode==='endpoints'?<div className="grid gap-4 xl:grid-cols-2"><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Beginning</div><WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} prefix="start" onPatch={(patch)=>update(index,patch)}/></div><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Ending</div><WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} prefix="end" onPatch={(patch)=>update(index,patch)}/></div></div>:<WorkbookTemporalRefControl workbookModel={workbookModel} label="Period column" currentRef={mapping.column} onChange={(ref)=>update(index,{column:ref})}/>}</div>}</div>{(kind==='date'?mapping.sourceMode!=='parts':mapping.sourceMode!=='endpoints')?<div className="mt-4 border-t border-[var(--panel-card-border)] pt-4"><PeridotValueHandlingControl valueHandling={mapping.valueHandling} onChange={(valueHandling)=>update(index,{valueHandling})} disabled={!mapping.column?.columnName}/></div>:null}<div className="mt-4 border-t border-[var(--panel-card-border)] pt-3"><div className="text-xs font-semibold text-[var(--muted-text)]">Related temporal notes (optional)</div>{(mapping.noteColumns||[]).map((ref,noteIndex)=><div key={noteIndex} className="mt-2 flex max-w-xl gap-2"><div className="min-w-0 max-w-md flex-1"><WorkbookFieldSelect workbookModel={workbookModel} currentRef={ref||{}} onChange={(nextRef)=>{const notes=[...(mapping.noteColumns||[])];notes[noteIndex]=nextRef;update(index,{noteColumns:notes});}}/></div><button type="button" onClick={()=>update(index,{noteColumns:(mapping.noteColumns||[]).filter((_,i)=>i!==noteIndex)})} className="rounded-lg border border-[var(--input-border)] px-2 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div>)}<button type="button" onClick={()=>update(index,{noteColumns:[...(mapping.noteColumns||[]),makeWorkbookColumnRef('','')]})} className="mt-3 rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add related note column</button></div></div>})}<button type="button" onClick={add} className="rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-3 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add date or period</button></div><TemporalUsagePanel/></div></div></div>;
 }
 /*
  * Renders workbook role mappings for caller-supplied role definitions. This is

@@ -763,6 +763,294 @@ function EntitySection({
     </section>
   );
 }
+
+function integratedScopeGroup({ identityMapping = {}, appearances = [], scope = 'relationship' } = {}) {
+  const ids = new Set(appearances.map((appearance) => appearance.id));
+  const groups = Array.isArray(identityMapping?.entityGroups) ? identityMapping.entityGroups : [];
+  const existing = groups.find((group) => (group?.appearanceIds || []).some((id) => ids.has(id)));
+  if (existing) return normalizeEntityGroup(existing);
+  return normalizeEntityGroup({
+    id: scope === 'place' ? 'identity-group-places' : 'identity-group-relationships',
+    label: scope === 'place' ? 'Places' : 'Relationship participants',
+    appearanceIds: appearances.map((appearance) => appearance.id),
+    strategy: 'label',
+    keys: ['Name'],
+    mappings: {},
+  });
+}
+
+function saveIntegratedScopeGroup({ identityMapping = {}, group, appearances = [], onChange } = {}) {
+  const groups = Array.isArray(identityMapping?.entityGroups) ? [...identityMapping.entityGroups] : [];
+  const existingIndex = groups.findIndex((item) => item?.id === group?.id);
+  const normalized = normalizeEntityGroup(group, existingIndex >= 0 ? existingIndex : groups.length);
+  if (existingIndex >= 0) groups[existingIndex] = normalized;
+  else groups.push(normalized);
+  onChange?.({
+    ...identityMapping,
+    entityGroupsInitialized: true,
+    entityGroups: groups,
+  });
+}
+
+function IdentityOrDivider() {
+  const explanation = 'OR separates alternate complete ways the same person, place, or entity may be identified. Peridot uses the complete group available for that appearance; matching one field alone does not merge two entities.';
+  const [open, setOpen] = React.useState(false);
+  const wrapperRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const handlePointerDown = (event) => {
+      if (!wrapperRef.current?.contains(event.target)) setOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative flex items-center gap-2 py-1" aria-label="Alternate identity rule" ref={wrapperRef}>
+      <div className="h-px flex-1 bg-[var(--panel-card-border)]" />
+      <span className="text-xs font-black tracking-[0.12em] text-[var(--panel-card-text)]">OR</span>
+      <button
+        type="button"
+        aria-label="What OR means in this identity rule"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] text-[11px] font-bold text-[var(--panel-card-muted-text)] hover:border-[var(--button-primary-border)] hover:text-[var(--panel-card-text)] focus:outline-none focus:ring-2 focus:ring-[var(--button-primary-bg)]"
+      >
+        i
+      </button>
+      <div className="h-px flex-1 bg-[var(--panel-card-border)]" />
+      {open ? (
+        <div
+          role="note"
+          className="absolute left-1/2 top-full z-30 mt-2 w-[min(30rem,calc(100vw-5rem))] -translate-x-1/2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] p-3 text-xs leading-relaxed text-[var(--panel-card-text)] shadow-xl"
+        >
+          {explanation}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function IntegratedIdentityControls({
+  workbook = false,
+  workbookModel,
+  headers = [],
+  appearances = [],
+  relationshipParts = [],
+  identityMapping = {},
+  onChange,
+  scope = 'relationship',
+}) {
+  const group = integratedScopeGroup({ identityMapping, appearances, scope });
+  const appearanceById = new Map(appearances.map((appearance) => [appearance.id, appearance]));
+  const selectedAppearances = (group.appearanceIds || []).map((id) => appearanceById.get(id)).filter(Boolean);
+  const effectiveAppearances = selectedAppearances.length ? selectedAppearances : appearances;
+  const strategy = ['label', 'field', 'composite', 'row'].includes(group.strategy) ? group.strategy : 'label';
+  const hasIdentityReference = scope === 'relationship' && relationshipParts.some((part) => part?.participantValueMode === 'identity-reference');
+  if (!appearances.length) return null;
+  const thingLabel = scope === 'place' ? 'place' : 'person or entity';
+  const pluralLabel = scope === 'place' ? 'places' : 'relationship participants';
+
+  const save = (patch) => saveIntegratedScopeGroup({
+    identityMapping,
+    appearances,
+    group: { ...group, ...patch },
+    onChange,
+  });
+
+  const setStrategy = (nextStrategy) => {
+    if (nextStrategy === 'label') {
+      save({ strategy: 'label', keys: ['Name'] });
+      return;
+    }
+    if (nextStrategy === 'row') {
+      save({ strategy: 'row', keys: [] });
+      return;
+    }
+    if (nextStrategy === 'field') {
+      const key = group.keys?.[0] || (scope === 'place' ? 'Place ID' : 'Person ID');
+      const mappings = { ...(group.mappings || {}) };
+      effectiveAppearances.forEach((appearance) => {
+        if (Array.isArray(mappings[appearance.id]) && mappings[appearance.id][0] !== undefined) return;
+        const partIndex = appearance.index;
+        const isReference = scope === 'relationship' && relationshipParts?.[partIndex]?.participantValueMode === 'identity-reference';
+        if (!isReference) return;
+        mappings[appearance.id] = workbook
+          ? [{ key, ref: appearance.source || makeWorkbookColumnRef('', '') }]
+          : [{ key, column: appearance.source || '' }];
+      });
+      save({ strategy: 'field', keys: [key], mappings });
+      return;
+    }
+    const keys = (group.keys || []).length >= 2
+      ? [...group.keys]
+      : ['Identity field 1', 'Identity field 2'];
+    save({ strategy: 'composite', keys });
+  };
+
+  const componentFor = (appearance, componentIndex) => {
+    const saved = group?.mappings?.[appearance.id]?.[componentIndex];
+    if (saved) return saved;
+    return workbook
+      ? { key: group.keys?.[componentIndex] || '', ref: makeWorkbookColumnRef('', '') }
+      : { key: group.keys?.[componentIndex] || '', column: '' };
+  };
+
+  const setComponent = (appearance, componentIndex, source) => {
+    const mappings = { ...(group.mappings || {}) };
+    const current = Array.isArray(mappings[appearance.id]) ? [...mappings[appearance.id]] : [];
+    const key = group.keys?.[componentIndex] || `Identity field ${componentIndex + 1}`;
+    current[componentIndex] = workbook ? { key, ref: source } : { key, column: source };
+    mappings[appearance.id] = current;
+    save({ mappings });
+  };
+
+
+  const addCompositeField = () => {
+    const nextIndex = (group.keys || []).length;
+    save({ keys: [...(group.keys || []), `Identity field ${nextIndex + 1}`] });
+  };
+
+  const removeCompositeField = (componentIndex) => {
+    if ((group.keys || []).length <= 2) return;
+    const keys = (group.keys || []).filter((_, index) => index !== componentIndex);
+    const mappings = Object.fromEntries(Object.entries(group.mappings || {}).map(([id, components]) => [
+      id,
+      (Array.isArray(components) ? components : []).filter((_, index) => index !== componentIndex),
+    ]));
+    save({ keys, mappings });
+  };
+
+  const renderFieldSelect = (appearance, componentIndex) => {
+    const component = componentFor(appearance, componentIndex);
+    return workbook
+      ? <WorkbookFieldSelect workbookModel={workbookModel} currentRef={component.ref} onChange={(next) => setComponent(appearance, componentIndex, next)} />
+      : <SingleFieldSelect headers={headers} value={component.column} onChange={(next) => setComponent(appearance, componentIndex, next)} />;
+  };
+
+  const strategySummary = strategy === 'field'
+    ? 'using an identifying column'
+    : strategy === 'composite'
+      ? 'using a structured identity rule'
+      : strategy === 'row'
+        ? 'keeping each row separate'
+        : 'using the displayed names or labels';
+
+  return (
+    <section className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted-text)]">Identity</div>
+          <div className="mt-1 text-lg font-bold text-[var(--panel-card-text)]">How should Peridot recognize the same {pluralLabel} when they appear again?</div>
+          <p className="mt-1 text-sm text-[var(--panel-card-muted-text)]">Currently {strategySummary}. Simple datasets can leave this unchanged.</p>
+        </div>
+      </div>
+
+      <div className="mt-4 border-t border-[var(--panel-card-border)] pt-4">
+        {hasIdentityReference && strategy === 'label' ? (
+          <div className="mb-4 rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)]/35 p-3 text-sm leading-relaxed text-[var(--panel-card-text)]">
+            One or more relationship parts contain IDs that refer to entities elsewhere in the data. Choose an identifying column below so Peridot knows which IDs those references use.
+          </div>
+        ) : null}
+
+        <label className="block text-sm font-bold text-[var(--panel-card-text)]">
+          How should Peridot identify this {thingLabel}?
+          <select value={strategy} onChange={(event) => setStrategy(event.target.value)} className={`${INPUT_CLASS} mt-2`}>
+            <option value="label">Use the same column as the displayed name or label</option>
+            <option value="field">Use another identifying column, such as an ID</option>
+            <option value="composite">Build a more complex identity rule</option>
+            <option value="row">Treat each row as a different {thingLabel}</option>
+          </select>
+        </label>
+
+        {strategy === 'field' ? (
+          <div className="mt-4 space-y-3">
+            <p className="text-xs leading-relaxed text-[var(--panel-card-muted-text)]">
+              Choose the column that identifies the same {thingLabel} in each role or appearance. ID-reference fields can point directly to the same ID system.
+            </p>
+            {effectiveAppearances.map((appearance) => (
+              <div key={appearance.id} className="grid gap-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-3 md:grid-cols-[minmax(11rem,0.7fr)_minmax(16rem,1.3fr)] md:items-center">
+                <div>
+                  <div className="text-sm font-bold text-[var(--panel-card-text)]">{appearance.title}</div>
+                  <div className="text-xs text-[var(--panel-card-muted-text)]">
+                    {scope === 'relationship' && relationshipParts?.[appearance.index]?.participantValueMode === 'identity-reference' ? 'Referenced by' : 'Displayed from'} {appearance.sourceLabel}
+                  </div>
+                </div>
+                {renderFieldSelect(appearance, 0)}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {strategy === 'composite' ? (
+          <div className="mt-4">
+            <div className="space-y-2">
+              {effectiveAppearances.map((appearance, appearanceIndex) => (
+                <React.Fragment key={appearance.id}>
+                  {appearanceIndex > 0 ? <IdentityOrDivider /> : null}
+                  <div className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-3">
+                    <div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">{appearance.title} <span className="font-normal text-[var(--panel-card-muted-text)]">— {appearance.sourceLabel}</span></div>
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                      {(group.keys || []).map((_, componentIndex) => (
+                        <React.Fragment key={`${appearance.id}-${componentIndex}`}>
+                          {componentIndex > 0 ? <span className="self-center text-xs font-black tracking-[0.12em] text-[var(--panel-card-text)]">+</span> : null}
+                          <div className="min-w-0 flex-1">{renderFieldSelect(appearance, componentIndex)}</div>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button type="button" onClick={addCompositeField} className="rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)]">+ Add another shared identity field</button>
+              {(group.keys || []).length > 2 ? (
+                <button type="button" onClick={() => removeCompositeField((group.keys || []).length - 1)} className="rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2 text-sm font-semibold text-[var(--panel-card-muted-text)]">Remove last shared identity field</button>
+              ) : null}
+              <span className="text-xs leading-relaxed text-[var(--panel-card-muted-text)]">All OR recipes currently compare the same kinds of identity information in different columns or roles.</span>
+            </div>
+          </div>
+        ) : null}
+
+        {strategy === 'label' ? (
+          <p className="mt-3 text-xs leading-relaxed text-[var(--panel-card-muted-text)]">Peridot will use the mapped display value itself. No additional identity mapping is required.</p>
+        ) : null}
+        {strategy === 'row' ? (
+          <p className="mt-3 text-xs leading-relaxed text-[var(--panel-card-muted-text)]">Repeated names or labels will remain separate across rows.</p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+export function RelationshipIdentityControls({ headers = [], relationshipParts = [], identityMapping = {}, onChange }) {
+  const appearances = relationshipParts.map((part, index) => relationshipAppearance(part, index, false)).filter(Boolean);
+  return <IntegratedIdentityControls headers={headers} appearances={appearances} relationshipParts={relationshipParts} identityMapping={identityMapping} onChange={onChange} scope="relationship" />;
+}
+
+export function WorkbookRelationshipIdentityControls({ workbookModel, relationshipParts = [], identityMapping = {}, onChange }) {
+  const appearances = relationshipParts.map((part, index) => relationshipAppearance(part, index, true)).filter(Boolean);
+  return <IntegratedIdentityControls workbook workbookModel={workbookModel} appearances={appearances} relationshipParts={relationshipParts} identityMapping={identityMapping} onChange={onChange} scope="relationship" />;
+}
+
+export function PlaceIdentityControls({ headers = [], placeParts = [], identityMapping = {}, onChange }) {
+  const appearances = placeParts.map((part, index) => placeAppearance(part, index, false)).filter(Boolean);
+  return <IntegratedIdentityControls headers={headers} appearances={appearances} identityMapping={identityMapping} onChange={onChange} scope="place" />;
+}
+
+export function WorkbookPlaceIdentityControls({ workbookModel, placeParts = [], identityMapping = {}, onChange }) {
+  const appearances = placeParts.map((part, index) => placeAppearance(part, index, true)).filter(Boolean);
+  return <IntegratedIdentityControls workbook workbookModel={workbookModel} appearances={appearances} identityMapping={identityMapping} onChange={onChange} scope="place" />;
+}
+
 export function IdentityMappingPanel({ headers = [], relationshipParts = [], placeParts = [], identityMapping = {}, onChange }) {
   const record = identityMapping?.record || { strategy: 'row', columns: [] };
   const updateRecord = (next) => onChange?.({
