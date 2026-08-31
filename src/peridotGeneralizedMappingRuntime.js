@@ -242,14 +242,19 @@ function buildEvidenceFields(row = {}, selections = []) {
       const sourceColumn = asText(selection?.sourceColumn);
       if (!sourceColumn) return [];
       const rawValue = valueFrom(row, sourceColumn);
-      return splitPeridotMappedValue(rawValue, selection?.valueHandling).map((value, occurrenceIndex) => ({
-        sourceColumn,
-        label: asText(selection?.label || selection?.sourceColumn),
-        value,
-        rawValue,
-        occurrenceIndex,
-        analyticsEligible: Boolean(selection?.analyticsEligible),
-      }));
+      const subjects = expandPeridotSubjectSelection(selection);
+      return splitPeridotMappedValue(rawValue, selection?.valueHandling).flatMap((value, occurrenceIndex) =>
+        subjects.map((subjectParticipantIndex, subjectOccurrenceIndex) => ({
+          sourceColumn,
+          label: asText(selection?.label || selection?.sourceColumn),
+          value,
+          rawValue,
+          occurrenceIndex,
+          subjectOccurrenceIndex,
+          subjectParticipantIndex,
+          analyticsEligible: Boolean(selection?.analyticsEligible),
+        }))
+      );
     });
 }
 
@@ -337,7 +342,16 @@ export function projectGeneralizedObservationToLegacyRow(observation = {}, mappi
   const relationship = observation.relationship || {};
   legacyRow.Relationship = relationship.type || relationship.label || legacyRow.Relationship || '';
 
-  const customInspectorFields = (observation.evidenceFields || []).map((field) => ({ ...field }));
+  const customInspectorFieldKeys = new Set();
+  const customInspectorFields = (observation.evidenceFields || []).flatMap((field) => {
+    // Compatibility consumers historically receive one field per interpreted
+    // source value, not one copy per subject attribution. Subject-aware fan-out
+    // remains authoritative on generalizedObservation.evidenceFields.
+    const key = [field?.sourceColumn || '', field?.occurrenceIndex ?? '', field?.value ?? ''].join('::');
+    if (customInspectorFieldKeys.has(key)) return [];
+    customInspectorFieldKeys.add(key);
+    return [{ ...field, subjectParticipantIndex: null, subjectOccurrenceIndex: 0 }];
+  });
   const usedColumns = new Set([
     ...(observation.participants || []).flatMap((part) => [part.sourceColumn, part.roleSourceColumn]),
     ...(observation.places || []).flatMap((place) => [place.sourceColumn, place.roleSourceColumn, ...(place.coordinateSourceColumns || [])]),

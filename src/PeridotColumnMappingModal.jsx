@@ -532,6 +532,7 @@ function refreshWorkbookCustomSelections({ workbookModel, workbookMapping, previ
             label: previous.label || selection.label,
             analyticsEligible: selection.analyticsEligible,
             valueHandling: previous.valueHandling,
+            subjectSelection: normalizePeridotSubjectSelectionFromMapping(previous),
           }
         : {
             ...selection,
@@ -2941,6 +2942,15 @@ export function PeridotColumnMappingModal({
     }));
   };
 
+  const handleWorkbookCustomSubjectSelectionChange = (index, subjectSelection) => {
+    setWorkbookMapping((current) => ({
+      ...current,
+      customFieldSelections: (current.customFieldSelections || []).map((selection, currentIndex) => (
+        currentIndex === index ? { ...selection, subjectSelection, subjectParticipantIndex: null } : selection
+      )),
+    }));
+  };
+
   const handleCustomActionChange = (index, action) => {
     setCustomFieldSelections((current) => current.map((selection, currentIndex) => (
       currentIndex === index
@@ -2960,6 +2970,12 @@ export function PeridotColumnMappingModal({
   const handleCustomValueHandlingChange = (index, valueHandling) => {
     setCustomFieldSelections((current) => current.map((selection, currentIndex) => (
       currentIndex === index ? { ...selection, valueHandling } : selection
+    )));
+  };
+
+  const handleCustomSubjectSelectionChange = (index, subjectSelection) => {
+    setCustomFieldSelections((current) => current.map((selection, currentIndex) => (
+      currentIndex === index ? { ...selection, subjectSelection, subjectParticipantIndex: null } : selection
     )));
   };
 
@@ -3207,6 +3223,7 @@ export function PeridotColumnMappingModal({
               onActionChange={handleCustomActionChange}
               onLabelChange={handleCustomLabelChange}
               onValueHandlingChange={handleCustomValueHandlingChange}
+              onSubjectSelectionChange={handleCustomSubjectSelectionChange}
             />
           ) : null}
 
@@ -3284,6 +3301,7 @@ export function PeridotColumnMappingModal({
               onActionChange={handleWorkbookCustomActionChange}
               onLabelChange={handleWorkbookCustomLabelChange}
               onValueHandlingChange={handleWorkbookCustomValueHandlingChange}
+              onSubjectSelectionChange={handleWorkbookCustomSubjectSelectionChange}
             />
           ) : null}
 

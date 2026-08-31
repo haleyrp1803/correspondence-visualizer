@@ -9,6 +9,7 @@
 
 import React from 'react';
 import PeridotValueHandlingControl from './PeridotValueHandlingControl.jsx';
+import PeridotSubjectSelectionControl from './PeridotSubjectSelectionControl.jsx';
 import { CUSTOM_INSPECTOR_FIELD_DEFAULTS } from './peridotColumnMapping.js';
 import { getWorkbookSheet, makeWorkbookColumnRef } from './peridotWorkbookMapping.js';
 
@@ -178,6 +179,7 @@ export function InspectorFieldsStep({
   onActionChange,
   onLabelChange,
   onValueHandlingChange,
+  onSubjectSelectionChange,
 }) {
   const mappedCoreColumns = singleTableStructuralColumns(coreMapping, placeParts, relationshipParts);
 
@@ -192,6 +194,7 @@ export function InspectorFieldsStep({
               <th className="px-4 py-3">Uploaded column</th>
               <th className="px-4 py-3">Use as evidence?</th>
               <th className="px-4 py-3">Display label</th>
+              <th className="px-4 py-3">Who or what does this describe?</th>
               <th className="px-4 py-3">Values in one cell</th>
               <th className="px-4 py-3">Chart/filter readiness</th>
             </tr>
@@ -226,6 +229,20 @@ export function InspectorFieldsStep({
                       className="peridot-mapping-input w-full min-w-[12rem] rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-[var(--input-text)]"
                     />
                   </td>
+                  {(relationshipParts || []).length && !isMappedCore && action === CUSTOM_INSPECTOR_FIELD_DEFAULTS.include ? (
+                    <td className="px-4 py-4 min-w-[22rem]">
+                      <PeridotSubjectSelectionControl
+                        value={selection.subjectSelection}
+                        legacySubjectParticipantIndex={selection.subjectParticipantIndex}
+                        participants={(relationshipParts || []).map((part, participantIndex) => ({
+                          index: participantIndex,
+                          label: `Part ${String.fromCharCode(65 + participantIndex)} — ${part?.participantColumn || `Relationship part ${participantIndex + 1}`}`,
+                        }))}
+                        noun="evidence field"
+                        onChange={(subjectSelection) => onSubjectSelectionChange?.(index, subjectSelection)}
+                      />
+                    </td>
+                  ) : <td className="px-4 py-4 text-sm text-[var(--panel-card-muted-text)]">{(relationshipParts || []).length ? 'Include this field to assign its subject.' : 'This field describes the row / record.'}</td>}
                   <td className="px-4 py-4 min-w-[22rem]">
                     <PeridotValueHandlingControl
                       valueHandling={selection.valueHandling}
@@ -261,6 +278,7 @@ export function WorkbookInspectorFieldsStep({
   onActionChange,
   onLabelChange,
   onValueHandlingChange,
+  onSubjectSelectionChange,
 }) {
   const mappedCoreRefs = workbookStructuralRefs(workbookMapping);
 
@@ -295,6 +313,7 @@ export function WorkbookInspectorFieldsStep({
                   <th className="px-4 py-3">Workbook column</th>
                   <th className="px-4 py-3">Use as evidence?</th>
                   <th className="px-4 py-3">Display label</th>
+                  <th className="px-4 py-3">Who or what does this describe?</th>
                   <th className="px-4 py-3">Values in one cell</th>
                   <th className="px-4 py-3">Chart/filter readiness</th>
                 </tr>
@@ -332,6 +351,23 @@ export function WorkbookInspectorFieldsStep({
                           className="peridot-mapping-input w-full min-w-[12rem] rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3 py-2 text-[var(--input-text)]"
                         />
                       </td>
+                      {(workbookMapping.relationshipParts || []).length && !isMappedCore && action === CUSTOM_INSPECTOR_FIELD_DEFAULTS.include ? (
+                        <td className="px-4 py-4 min-w-[22rem]">
+                          <PeridotSubjectSelectionControl
+                            value={selection.subjectSelection}
+                            legacySubjectParticipantIndex={selection.subjectParticipantIndex}
+                            participants={(workbookMapping.relationshipParts || []).map((part, participantIndex) => {
+                              const participantRef = part?.participantRef || makeWorkbookColumnRef('', '');
+                              return {
+                                index: participantIndex,
+                                label: `Part ${String.fromCharCode(65 + participantIndex)} — ${participantRef?.columnName ? `${participantRef.sheetName} — ${participantRef.columnName}` : `Relationship part ${participantIndex + 1}`}`,
+                              };
+                            })}
+                            noun="evidence field"
+                            onChange={(subjectSelection) => onSubjectSelectionChange?.(index, subjectSelection)}
+                          />
+                        </td>
+                      ) : <td className="px-4 py-4 text-sm text-[var(--panel-card-muted-text)]">{(workbookMapping.relationshipParts || []).length ? 'Include this field to assign its subject.' : 'This field describes the row / record.'}</td>}
                       <td className="px-4 py-4 min-w-[22rem]">
                         <PeridotValueHandlingControl
                           valueHandling={selection.valueHandling}

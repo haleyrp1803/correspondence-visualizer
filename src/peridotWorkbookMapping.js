@@ -1138,6 +1138,7 @@ function normalizeWorkbookCustomInspectorSelections(mappingState = {}) {
       ),
       analyticsEligible: Boolean(selection.analyticsEligible),
       valueHandling: selection.valueHandling,
+      subjectSelection: normalizePeridotSubjectSelectionFromMapping(selection),
     }))
     .filter((selection) => selection.sourceColumn || selection.sourceRef?.columnName);
 }
@@ -1199,6 +1200,7 @@ function buildWorkbookGeneralizedRuntimeMapping(mappingState = {}, workbookModel
     ),
     customFieldSelections: (mappingState.customFieldSelections || []).map((selection) => ({
       ...selection,
+      subjectSelection: normalizePeridotSubjectSelectionFromMapping(selection),
       sourceColumn: workbookRefRuntimeKey(
         selection?.sourceRef || makeWorkbookColumnRef(selection?.sheetName, selection?.sourceColumn)
       ),
