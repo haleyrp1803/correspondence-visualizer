@@ -24,7 +24,7 @@ This Charter owns mandatory process rules, source-of-truth continuity, delivery/
 Current synchronized checkpoint:
 
 ```text
-8290696 — Add first-class generalized sample datasets
+b7482cb — Add homepage tutorial placeholder
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
@@ -309,13 +309,13 @@ Data import is a fragile boundary. Keep the public direction intact: one general
 
 Peridot must begin with **no active dataset**. Do not restore an implicit sample fallback. Sample data must be explicitly selected by the user and should remain ordinary files processed by ordinary generalized mappings. Canonical sample mappings may be edited in the active session for learning/QA, but the shipped mapping and source file remain preserved and resettable.
 
-Generalized Relations, Identity, Time, Places, and Evidence are authoritative through runtime/canonical consumption. Identity is no longer UI-only groundwork: mapped stable IDs, label/field/composite/row rules, and equivalent conceptual components across roles/sheets must produce stable entity identity. Legacy Source/Target or profile-specific fields may remain only as explicit compatibility projections and must not override accepted mappings.
+Generalized Relations, integrated Identity, Time, Places, Evidence, per-field cardinality, and subject attribution are authoritative through runtime/canonical consumption. Stable IDs and alternate compound Identity recipes must produce stable entity identity independently of display labels; canonical display labels remain presentation. Legacy Source/Target or profile-specific fields may remain only as explicit compatibility projections and must not override accepted mappings.
 
-Participant attribution is also semantic authority. A place/date mapped to one participant must not become information about every participant in the row. The same source field may legitimately support different researcher-named roles for different participants. Directed correspondence-style place pairs should exist only where the mapping explicitly supplies directed pairs.
+Subject attribution is semantic authority. Time, Place, and Evidence mappings may describe the record, one or more participants, or both; normalized assertions remain atomic. A value mapped to one participant must not become information about every participant in the row. The same source field may legitimately support different researcher-named roles for different participants. Directed correspondence-style place pairs should exist only where the mapping explicitly supplies directed pairs.
 
 Workbooks continue to use user-configured unique-ID joins rather than row order. Duplicate join IDs that make assembly unsafe must be blocked or surfaced rather than silently multiplying records. Mapping suggestions visible to the user must either be materialized into accepted state or clearly presented as unaccepted suggestions; a visible default must not disappear merely because the user did not touch its control.
 
-Do not create a new profile or parser for each unusual spreadsheet shape. In particular, future multiple-partner/multiple-value support belongs in the generalized cardinality model rather than a genealogy-specific `Ex Partner IDs` workaround. Conversely, do not delete compatibility modules without the no-loss retirement audit.
+Do not create a new profile or parser for each unusual spreadsheet shape. Multiple-partner/multiple-value support now belongs to the shared per-mapped-item cardinality model rather than genealogy-specific parsing. Do not extend that model into positional zipping of parallel list-valued columns. Conversely, do not delete compatibility modules without the no-loss retirement audit.
 
 For the current import/sample/Identity contract and detailed regression checks, see the [Maintainer’s Guide — Data Import and Workbook Contract](MAINTAINERS_GUIDE.md#7-data-import-and-workbook-contract).
 
@@ -349,7 +349,7 @@ Detailed historical decision rationale remains preserved in the archived invento
 - Arbitrary tables use explicit user-confirmed mappings; workbooks use user-confirmed unique-ID joins rather than row-order matching.
 - Generalized mapping is deterministic and user-owned: relationship parts, Identity rules, temporal assertions, place parts, evidence assignments, workbook references, source descriptors, and transformations record what the researcher has told Peridot.
 - Generalized Identity is authoritative at runtime. Display labels are not universal identity, and equivalent conceptual identity components may be mapped across different participant roles/sheets.
-- Participant subjects are authoritative for mapped dates/places. A value mapped to one participant must not automatically become information about every entity present in the row.
+- Record/participant subjects are authoritative for mapped Time, Places, and Evidence. One mapping may select the record, one or more participants, or both; downstream assertions remain atomic.
 - Peridot starts with no active dataset. Sample data is explicitly selected and uses ordinary source files plus ordinary generalized mappings.
 - Sample mappings are editable for learning/QA while the shipped mapping and source remain preserved and resettable.
 - Generalized mappings are authoritative through canonical/runtime consumption. Legacy fields may remain only as explicit compatibility projections while the repository-wide retirement audit determines which paths are still required.
@@ -410,7 +410,7 @@ Context:
 Generalized datasets can contain repeated display names, several roles for the same recurring entity, multiple kinds of recurring entities, and source tables without a pre-existing database ID. The same historical person may appear in sender, recipient, parent, partner, or profile columns, while different people may share the same displayed name.
 
 Chosen approach:
-Provide an Identity mapping surface that distinguishes record identity from recurring entity identity. Allow recognition by displayed label, one identifying field, stable source ID, several fields used together, or intentional row-level uniqueness. Allow multiple independently configured entity groups. When the same kind of identifying information appears in different roles or sheets, map equivalent conceptual components—for example Name → Source plus Title → Source Title and Name → Target plus Title → Target Title.
+Treat record identity and recurring-entity identity separately, but keep recurring Identity controls integrated into the relationship/place mappings where the entity is declared. Simple entities default to the displayed name/label. Stronger recognition may use a stable source ID or alternate complete compound recipes across roles/sheets—for example `(Source + Source Title) OR (Target + Target Title)` when both pairs describe the same Name + Title identity.
 
 Rejected alternative:
 Assume matching display names always identify one entity; require every user to add a dedicated ID column; infer entity merges automatically; or force one universal identity rule across all recurring things in a dataset.
@@ -419,7 +419,7 @@ Reason:
 Humanistic source structures often encode identity relationally or through combinations of fields rather than modern database keys. The researcher is better positioned than Peridot to state what makes two appearances the same historical entity.
 
 Maintenance consequence:
-Display labels are presentation, not universal identity. Accepted Identity rules now compile into stable runtime IDs. Visible accepted suggestions must be materialized into mapping state even when untouched; explicit clearing must remain explicit. Regression tests must cover both same-label distinct entities and one entity recurring across roles.
+Display labels are presentation, not universal identity. Accepted Identity rules compile into stable runtime IDs; canonical entity labels are resolved separately for downstream presentation. Simple displayed-name defaults must remain low-friction, while stronger ID/compound rules stay researcher-controlled. Regression tests must cover same-label distinct entities, one entity recurring across roles, known ID→label resolution, and unresolved-reference fallback.
 ```
 
 #### First-class sample-data decision
@@ -444,7 +444,7 @@ Maintenance consequence:
 No-data is a valid first-launch state. Sample-specific behavior belongs in metadata/mapping definitions, not a second runtime architecture. Editing a sample changes only the active interpretation and must not mutate the shipped source or canonical mapping.
 ```
 
-#### Deferred cardinality / delimiter decision
+#### Cardinality / delimiter decision
 
 ```text
 Decision:
@@ -463,7 +463,30 @@ Reason:
 Cardinality varies by column and by scholarly structure. The researcher knows whether punctuation is data or separation.
 
 Maintenance consequence:
-This behavior is **deferred, not yet implemented**. Its eventual schema/runtime design must be broad enough for relationship, place, temporal, Identity/Evidence, and other suitable mappings.
+This behavior is implemented through shared per-mapped-item value handling across suitable generalized mappings. Preserve explicit delimiter ownership, common quoted-delimiter normalization, raw source values, and the rule against positional zipping of parallel list-valued fields. Structured component dates/period endpoints remain structured units; multi-valued place cells cannot reuse one row-level coordinate pair.
+```
+
+
+#### Record/participant subject-attribution decision
+
+```text
+Decision:
+Let one mapped Time, Place, or Evidence item describe the record, one or more mapped participants, or both while keeping canonical assertions atomic.
+
+Context:
+A historical source row can contain claims about several represented people/entities and about the record itself. A mutually exclusive “record or one participant” control cannot express shared claims and encourages information to bleed across participants.
+
+Chosen approach:
+Use one shared subject-selection model. The mapping may include the record plus multiple participant indices; runtime processing fans the mapping out into separate single-subject occurrences/assertions. Evidence preserves its per-record EvidenceSource while creating subject-aware canonical assertions linked back to that source.
+
+Rejected alternative:
+Treat all row metadata as belonging to every participant; store arrays of subjects on every canonical assertion; or add separate one-off attribution systems for Time, Places, and Evidence.
+
+Reason:
+Atomic subject-predicate-value assertions remain simpler for Inspector, Search, Network, export, and provenance while still allowing the researcher to express shared source meaning at mapping time.
+
+Maintenance consequence:
+Do not infer participant ownership from co-occurrence in a row. Preserve record-only Evidence as record-level, participant-specific Evidence as canonical entity assertions, and the shared subject-selection compatibility normalization.
 ```
 
 ### 7.2 Routing and workspace model
@@ -471,8 +494,8 @@ This behavior is **deferred, not yet implemented**. Its eventual schema/runtime 
 - The active public model is workspace-first: Home, Data, Visualizations, Explore/Advanced Search, and Learn More are the primary public surfaces.
 - The hamburger menu is the primary public navigation surface; Themes and Accessibility remains implemented but hidden; Export and Timeline are Visualizations-integrated.
 - First launch has no active dataset. **Use sample data** must require an explicit sample choice rather than silently activating a fallback.
-- A later visual redesign will merge the strongest parts of the current branded Home and Data/sample-selection surfaces. That redesign is deferred and must not be smuggled into data-model passes.
-- The final tutorial entry should be a static button integrated into that future Home redesign rather than the current pop-up/launch treatment.
+- A larger visual redesign may still merge the strongest parts of the branded Home and Data/sample-selection surfaces. That redesign remains deferred and must not be smuggled into consumer/data-model passes.
+- The tutorial entry is now a static, shorter secondary Home button beneath the two data-entry CTAs. It is disabled with **“Tutorial coming soon.”** while tutorial revision is pending; do not restore the old floating invitation.
 - MapLibre migrated-overlay work is archived. Active `main` continues the D3/SVG path.
 
 ### 7.3 Inspector
@@ -482,7 +505,7 @@ This behavior is **deferred, not yet implemented**. Its eventual schema/runtime 
 - Linked-data curiosity is a hard preservation contract: a researcher must be able to follow a chain such as node → connected person → another connected person → connected place → connected record, use Back several times, and then branch from an earlier dossier.
 - Generalized Inspector derivation is now the accepted model. Compact and expanded views consume generalized relationship, participant-place, temporal, Identity, and evidence semantics at different densities rather than assuming universal Source/Target pairs.
 - Correspondence-specific sender/recipient or origin/destination summaries remain valid when the mapping genuinely supports them; non-correspondence datasets must not inherit fake directed routes or omit later n-part participants because of a compatibility projection.
-- Participant attribution is authoritative: mapped information about one participant must not bleed onto another merely because both occur in the same row.
+- Participant attribution is authoritative: mapped Time, Places, and Evidence about one participant must not bleed onto another merely because both occur in the same row. Entity Inspector Evidence should consume canonical subject-aware assertions rather than re-scraping source rows.
 - `Unknown` remains a first-class bucket only for genuinely unresolved source evidence; connected-record sorting/filtering/pagination behavior remains a preservation contract.
 
 ### 7.4 Search and data scope

@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-Peridot is an open, research-oriented web application for exploring humanistic data through maps, networks, timelines, charts, advanced search, exports, and evidence dossiers. Its mature first use case is correspondence data based on the creator's dissertation research, but the public import system now uses one generalized mapping model for ordinary CSV, TSV, XLSX, and XLS data rather than asking users to choose a correspondence-versus-genealogy ontology. Underneath those workflows, Peridot uses a canonical normalized research model with authoritative generalized Relations, Identity, Time, Places, and Evidence semantics. Mapped data can be reopened and edited after import, and first-class correspondence, family-tree, and cardinals samples are ordinary downloadable source files processed through the same generalized mapping path.
+Peridot is an open, research-oriented web application for exploring humanistic data through maps, networks, timelines, charts, advanced search, exports, and evidence dossiers. Its mature first use case is correspondence data based on the creator's dissertation research, but the public import system now uses one generalized mapping model for ordinary CSV, TSV, XLSX, and XLS data rather than asking users to choose a correspondence-versus-genealogy ontology. Underneath those workflows, Peridot uses a canonical normalized research model with researcher-controlled Relations, Identity, Time, Places, Evidence, cardinality, and subject-attribution semantics. Mapped data can be reopened and edited after import, and first-class correspondence, family-tree, and cardinals samples are ordinary downloadable source files processed through the same generalized mapping path.
 
 Peridot was created by Haley Price in direct and continuous collaboration with ChatGPT. There is a robust AI disclosure and discussion of AI ethics (and ethical concerns) on the tool's "Learn More About Peridot" page where credit is documented. Please go there for more details. For the purposes of README, it bears mentioning that the reason the documentation is so meticulous (and so robotic) is because Price made ChatGPT record every single decision, commit, redirection, success, and failure throughout Peridot's development so that the full record of labor would be documented and disclosed. This paragraph was written by Price (hi!) but the remainder of the documentation was written by ChatGPT under exacting human direction and quality assurance supervision.
 
@@ -32,7 +32,7 @@ This document owns public orientation, user-facing workflows, installation, data
 Current synchronized checkpoint:
 
 ```text
-8290696 — Add first-class generalized sample datasets
+b7482cb — Add homepage tutorial placeholder
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
@@ -89,7 +89,7 @@ The sample chooser currently offers three ordinary project files:
 
 Each sample can be explored, downloaded as its actual source file, and opened in the same generalized mapping workspace used for researcher data. Sample mappings are editable so users can test why one column was assigned to a particular role. The original sample mapping is preserved and can be restored at any time.
 
-Peridot’s existing guided tutorial remains available, but its entry-point UI is scheduled for a later redesign. The future Home will merge the strongest parts of the branded landing page and Data/sample-selection surface and will provide a static tutorial button rather than the current pop-up/launch treatment.
+Home now includes a third, visually secondary **Tutorial** button centered beneath **Use sample data** and **Upload your data**. The old floating tutorial invitation has been removed. The button is intentionally disabled while the tutorial is being revised and shows **“Tutorial coming soon.”** on hover/focus; the existing tutorial implementation remains in the project for later reactivation and polish.
 
 ### 3.2 Load and map data
 
@@ -99,16 +99,15 @@ The public mapper is now one generalized workflow rather than a Correspondence /
 
 1. **Preview** — review the source table as uploaded.
 2. **Sheets** — for workbooks, choose the primary record sheet and configure any related-sheet joins.
-3. **Relations** — identify repeatable Part A/B/C/... relationship participants and optional relationship-level information.
-4. **Identity** — explain how Peridot should recognize records and recurring entities across rows, roles, or sheets.
-5. **Time** — add and name one or more Date or Period/range assertions.
-6. **Places** — add and name one or more place assertions, optionally with coordinates and participant attachment.
-7. **Evidence** — include, ignore, and label additional source fields.
-8. **Review** — inspect the accepted interpretation and capability/warning summary before import.
+3. **Relations** — identify repeatable Part A/B/C/... relationship participants and optional relationship-level information; configure stronger recurring-entity Identity only when needed.
+4. **Time** — add and name one or more Date or Period/range assertions and choose whether each describes the record, one or more participants, or both.
+5. **Places** — add and name one or more place assertions, optionally with coordinates, participant/record attribution, and place Identity when needed.
+6. **Evidence** — include, ignore, and label additional source fields; declare cardinality and subject attribution where appropriate.
+7. **Review** — inspect the accepted interpretation and capability/warning summary before import.
 
-Identity is researcher-owned and now authoritative at runtime. Records/entities may be recognized by a displayed label, one identifying field, a stable source ID, several fields used together, or intentional row-level uniqueness. Equivalent conceptual fields can be mapped across roles: for example, `Source + Source Title` and `Target + Target Title` can both represent the same Name + Title identity structure. This lets one historical person remain one entity whether they appear as Source or Target while still allowing two same-named people to remain distinct when their mapped identities differ.
+Identity is researcher-owned and authoritative at runtime, but it is no longer a separate required mapping page. Simple datasets default to the same column used for the displayed name or label. When stronger recognition is needed, relationship/place Identity controls can use a stable source ID or a structured alternate recipe such as `(Name A + Title A) OR (Name B + Title B)`. This lets one historical person remain one entity across roles while still allowing same-named people to remain distinct when their mapped identities differ. Canonical display labels are resolved separately from identity, so known IDs display human-readable names while genuinely unresolved source references remain visible as IDs.
 
-Participant attribution is also authoritative. A date or place attached to one participant is not automatically assigned to every other participant in the row. The same source column can therefore support different researcher-named meanings—for example `place of birth` for a child and `birthed child here` for the mother—without conflating the two assertions.
+Participant attribution is also authoritative and can now be multiple. Time, Place, and included Evidence mappings may describe the record, one or more mapped participants, or both. Downstream Peridot keeps the resulting semantic assertions atomic rather than treating every participant in a row as the subject. The same source column can therefore support different researcher-named meanings—for example `place of birth` for a child and `place of childbirth` for the mother—without conflating the two assertions.
 
 Time remains humanities-aware and repeatable. A Date may use one source column or separate year/month/day columns. A Period may use one range column or separate beginning/end representations; each endpoint can itself use one combined field or separate year/month/day fields. Source columns may be reused across multiple temporal assertions, and researcher-note columns remain preserved separately from Peridot’s machine-derived temporal structure.
 
@@ -123,6 +122,8 @@ Sample mappings use the same editor. When a user edits one, Peridot shows:
 **Reset to sample mapping** restores the shipped interpretation. Editing a sample does not modify the underlying downloadable source file or the canonical mapping bundled with Peridot.
 
 Peridot does not silently standardize names, places, dates, relationships, titles, controlled vocabularies, or other source values. Suggestions can help users map recognizable structures, but accepted scholarly semantics remain explicit and user-owned.
+
+For suitable mapped fields, researchers can declare whether one cell contains one value or several values and provide the delimiter. Peridot does not guess punctuation. Common quoted delimiter entries such as `"/"`, `'/'`, `" "`, and `' '` are normalized to the intended separator. Multi-valued place cells cannot also use one row-level coordinate pair; coordinates remain available for single-valued place mappings so several distinct places are never silently assigned the same coordinates.
 
 ### 3.3 Visualize
 
@@ -430,11 +431,11 @@ Using this template is optional. Arbitrary tables and workbooks can instead be m
 
 Peridot treats the uploaded table as source evidence and asks the researcher to describe its structure. Depending on the file, mappings may include:
 
-- one or more relationship participants;
-- record identity and recurring entity identity;
-- one or more dates and periods;
-- one or more places, including participant-specific meanings and coordinates;
-- additional Evidence fields;
+- one or more relationship participants, with integrated recurring-entity Identity controls when needed;
+- record identity and recurring entity identity, including stable IDs and alternate compound recognition recipes;
+- one or more dates and periods, each attributed to the record and/or selected participants;
+- one or more places, including participant/record meanings, optional Identity, and coordinates for single-valued place cells;
+- additional Evidence fields with optional cardinality and record/participant attribution;
 - workbook sheet relationships joined by explicit unique IDs.
 
 The same source field may participate in more than one mapping when that accurately represents the source. For example, one location column in a person-centered family table can be a child’s birthplace and, in the mother’s dossier, the place where she gave birth. Those are separate mapped assertions even when the literal place value is identical.
@@ -479,18 +480,18 @@ These are ordinary project files, not hidden application fixtures. Users can dow
 
 The canonical sample mapping remains preserved even while the active sample is edited. **Reset to sample mapping** returns the editor to the shipped interpretation.
 
-### Current multi-value limitation
+### Multiple values and delimiters
 
-Peridot does not yet have the planned generalized cardinality control for cells that contain several values such as multiple partner IDs or `clerical, familial, diplomatic`. The agreed future model will let the researcher declare one versus multiple values **for each mapped item** and specify the delimiter. Peridot will not guess that punctuation is a delimiter.
+Peridot supports researcher-declared multiple values on suitable mapped fields. Cardinality is configured per mapped item rather than once for the entire file: choose one value versus several values, then supply the delimiter when needed. Peridot preserves the original source cell and does not infer delimiters automatically. Structured component dates and separate period endpoints remain structured units rather than parallel arrays, and multi-valued place cells cannot reuse one row-level coordinate pair.
 
 ### Typical workflow
 
 1. Open Peridot; no dataset is active yet.
 2. Choose a sample, download the template, or upload your own CSV/TSV/XLSX/XLS file.
 3. Review Preview and workbook Sheets if applicable.
-4. Map Relations and Identity.
-5. Add Time and Places with the appropriate participant/record attribution.
-6. Include or ignore Evidence fields.
+4. Map Relations and configure stronger participant Identity only where the default displayed-name rule is insufficient.
+5. Add Time and Places with the appropriate record/participant attribution and per-field cardinality where relevant.
+6. Include or ignore Evidence fields; declare their cardinality and subjects where useful.
 7. Review the full mapping and warnings.
 8. Confirm import.
 9. Reopen **Edit mapped data** later if the interpretation needs revision.
@@ -524,17 +525,13 @@ Peridot is an active research prototype. It can preserve and expose useful incom
 
 Generalized Relations, Identity, Time, Places, Evidence, and Inspector participant attribution are now authoritative across the current import/runtime path. Compatibility projections still exist for older consumers and should be retired only after a repository-wide audit proves that their behavior has been replaced without loss.
 
-The next significant mapping limitation is **cardinality**. Peridot does not yet let a researcher declare that one mapped cell contains several values separated by a chosen delimiter. This matters for examples such as multiple partner IDs or multi-valued evidence categories. The planned solution is per mapped item, not a whole-file delimiter setting and not a genealogy-specific parser.
-
-A second open mapping question is **record versus participant attribution multiplicity**. The current model can attach information to the record or a mapped participant, but future controls need to make it clearer when information belongs to the record, one or more participants, or both.
-
 The generalized Network path still has follow-up work around geographic relationship/event scoping, transparent person-to-place anchoring, generalized playback highlighting, Force-Directed viewport fitting, and edge-arrowhead placement. Search place/facet semantics also remain less generalized than relationship semantics.
 
 Two broader technical audits remain deferred: Search dataset coverage/scope and Timeline playback × Analytics scope. Until those audits are complete, interface language should distinguish loaded, applied/filtered, timeline-visible, selected, charted, and exported data rather than implying that every surface handles scope identically.
 
 Phase 3 of the universal data work—the generalized Chart Builder—also remains deferred. The intended direction is to build charts from saved/generalized variables through structured, human-readable controls rather than unrestricted natural-language prompting.
 
-The first-time tutorial remains functional, but its final entry-point design is deferred with the homepage redesign. The future Home should merge the current branded landing-page strengths with the Data/sample-selection surface and expose a static tutorial button. Additional tutorial attention choreography, placement, typography, accessibility, and full UX polish remain later bounded work.
+The existing guided tutorial implementation remains in source, but its Home entry is currently disabled while tutorial content and polish are revisited. The Home now exposes a smaller static **Tutorial** placeholder beneath the two primary data-entry actions; hover/focus reads **“Tutorial coming soon.”** The larger Home/Data integration, tutorial attention choreography, placement, typography, accessibility, and full UX walkthrough remain later bounded work.
 
 MapLibre work is archived and should not be treated as part of current `main`. For active technical caveats, regression expectations, and compatibility paths, see the Maintainer’s Guide.
 

@@ -20,33 +20,51 @@ This document owns the detailed checkpoint, milestone chronology, deferred/archi
 ## 1. Current Synchronized Checkpoint
 
 ```text
-8290696 — Add first-class generalized sample datasets
+b7482cb — Add homepage tutorial placeholder
 Branch: main
 Status: local and origin/main aligned after the latest sync ritual
 ```
 
-This checkpoint closes the Inspector/Identity authority program that began at `4076e5b` and establishes the current generalized Data workflow plus reusable sample-data QA infrastructure. Since the previous documentation baseline, Peridot has replaced legacy Source/Target-era Inspector derivation with generalized participant attribution, made mapped record/entity Identity rules authoritative at runtime, stabilized composite identity across correspondence roles and workbook imports, made participant-attached place semantics authoritative, restored editable post-import mappings, simplified the Data entry surface around one generalized model, and added three ordinary downloadable sample datasets with preserved canonical mappings.
+This checkpoint closes the cardinality and richer-subject-attribution architecture sequence begun after the first-class sample-data milestone and adds the current Home tutorial-entry placeholder. Since `8290696`, Peridot has generalized per-field multi-value handling, integrated Identity controls into the mappings where recurring entities are declared, established canonical entity display-label authority, generalized record/participant subject attribution across Time, Places, and Evidence, projected subject-aware Evidence through canonical assertions into entity Inspector dossiers, and moved the tutorial entry from a floating invitation to a fixed secondary Home button that is currently disabled pending tutorial revision.
 
 Current architectural significance:
 
-- generalized Identity is now authoritative rather than UI-only groundwork: mapped label, one-field, composite-field, and stable-ID rules compile into machine-facing entity identity and survive across roles;
-- equivalent identity components across different participant roles are unified correctly—for example `Source + Source Title` and `Target + Target Title` can resolve one historical person across both roles without conflating same-label people who have different mapped identities;
-- visible Identity suggestions are materialized into the accepted mapping even when the user does not manually touch the suggested dropdown, while explicitly cleared mappings remain cleared;
-- Inspector person/entity and place dossiers now derive connected people, mapped places, temporal assertions, semantic relationships, and participant-attributed information from generalized mapping semantics rather than assuming every dataset is correspondence-shaped;
-- mapped temporal/place information respects its declared participant subject, so a child’s birthplace and a mother’s childbirth location can use the same underlying source column without being assigned to both people;
-- user-named place roles remain distinct even when they point to the same value, and directed-place summaries appear only when the mapped data genuinely supplies directed place pairs;
-- workbook join validation blocks unsafe duplicate join IDs rather than silently multiplying assembled records;
-- uploaded mapped data can be reopened and edited from the Data workspace; applying revisions recompiles the active dataset from the original source through the generalized mapping path;
-- the public Data entry surface no longer asks users to choose Correspondence versus Genealogy or exposes a separate “universal mapper” test surface. The generalized model is the ordinary upload model;
-- Peridot now starts with **no active dataset**. A user must explicitly select a sample or upload data before a dataset becomes active;
-- `public/sample_data/` now contains ordinary correspondence, family-tree, and cardinals source files. `src/peridotSampleDatasets.js` supplies their preserved generalized mappings, chooser metadata, source-download behavior, and reset baseline;
-- sample mappings are intentionally editable for pedagogy/QA. Changes affect only the active sample interpretation; **Reset to sample mapping** restores the shipped mapping without modifying the underlying source file or canonical sample definition;
-- the former embedded `src/peridotSampleData.js` path is retired;
-- live correspondence QA confirmed one entity across repeated Source/Target appearances, aggregated Inspector records/relationships, ordinary network edges, and usable map/network visualization switching on the tested sample after the prior freeze/occurrence-identity failures.
+- per-mapped-item cardinality is implemented for suitable generalized mappings: the researcher declares one versus multiple values and supplies the delimiter rather than Peridot guessing punctuation;
+- delimiter handling accepts literal delimiters and common quoted forms such as `" "`, `' '`, `"/"`, and `'/'`; split values are trimmed appropriately, while the original source cell remains preserved;
+- structured component dates and separate period endpoints remain structured units rather than parallel arrays, and Peridot does not zip list-valued columns positionally;
+- multi-valued place cells cannot use one row-level coordinate pair, preventing several split places from silently inheriting the same coordinates; single-valued place mappings retain coordinate support;
+- recurring-entity Identity is no longer a separate required mapping page. Simple mappings default to the displayed name/label; relationships and places expose Identity controls only where stronger recognition rules are needed;
+- Identity supports stable source IDs and complex alternate identity recipes such as `(Name A + Title A) OR (Name B + Title B)`, with the `OR` meaning preserved as alternate complete recognition recipes rather than partial-match merging;
+- canonical entity display labels are resolved once from canonical entities and reused by Network and Inspector. A known reference ID such as `XVPKE` can therefore display `Elizabeth von Habsburg`, while genuinely unresolved source references remain visible as their IDs rather than being fabricated;
+- mapping-level subject attribution can include the record, one or more mapped participants, or both. Time and Place mappings fan out into atomic single-subject assertions while keeping the source mapping compact;
+- participant-specific temporal assertions are scoped to the appropriate canonical participation rather than indiscriminately attaching to every participant in the same record;
+- Evidence fields now carry the same subject-selection semantics, including cardinality-first then subject-fan-out behavior for multi-valued cells;
+- canonical subject-aware Evidence assertions link back to the existing per-record EvidenceSource while preserving the legacy/custom-field compatibility projection without duplicating source evidence merely because several subjects were selected;
+- entity Inspector Evidence is projected from canonical subject-aware assertions keyed by canonical entity ID and limited to the currently visible linked-record scope; record-only Evidence does not leak onto unrelated entities;
+- the Family Tree sample now demonstrates place-of-childbirth attribution to mothers from the child birthplace source, exposing historically meaningful court-mobility patterns while preserving the child's distinct birthplace assertion;
+- the Home workspace now includes a centered, visually secondary **Tutorial** button beneath **Use sample data** and **Upload your data**. The floating tutorial invitation is removed. The button is currently disabled and exposes **“Tutorial coming soon.”** on hover/focus; the existing tutorial implementation remains in source for later revision.
 
-The current implementation sequence after documentation is no longer “generalize Inspector, then make Identity authoritative”; those tasks are complete at this checkpoint. The next data-model questions are cardinality/multi-valued cells and richer record-versus-participant attribution, followed by the remaining generalized Network/Search/Chart work and later UI/tutorial polish.
+The next major implementation question is no longer cardinality or subject attribution. The recommended continuation begins with a dedicated **generalized Search audit**, followed by any required Search consumer passes, the Timeline × Analytics scope audit, and then Phase 3 Chart Builder work. Generalized Network semantic/layout follow-ups and the repository-wide compatibility retirement audit remain active bounded work.
 
 ## 2. Recent Milestones, Newest First
+
+### Cardinality, integrated Identity, subject-aware assertions, and Home tutorial placeholder — 2026-08-31
+
+- **`951c21e` — `Synchronize documentation for generalized sample datasets`** documented the first-class sample-data milestone before the next data-model sequence began.
+- **`1d34b89` — `Generalize cardinality and integrated identity mapping`** established researcher-declared per-field one/many semantics and delimiter handling, integrated recurring-entity Identity into relationship/place mapping rather than requiring a separate Identity page, and added complex alternate identity recipes while keeping simple datasets on the displayed-name default.
+- Cardinality explicitly follows the spreadsheet structure rather than code-array assumptions: parallel columns/rows are structural relationships in the table, not lists that Peridot should zip element-by-element. Structured component dates and separate interval endpoints therefore remain scalar structured units.
+- Multi-value delimiter entry accepts ordinary literal delimiters plus quoted forms; user-entered values such as `" "`, `' '`, `"/"`, and `'/'` normalize to the intended delimiter while source cells remain preserved.
+- Family Tree sample mapping was refined so former-partner IDs can resolve through stable entity IDs when a corresponding labeled entity exists, while source references without a represented/labeled entity remain visibly unresolved rather than receiving invented names.
+- The Family Tree sample also maps a child's birthplace as the mother's **Place of childbirth**, preserving separate semantic roles for the same source value. Live QA showed this can reveal historically meaningful court mobility across childbearing years.
+- **`d82e669` — `Canonicalize entity display labels`** made the canonical entity registry authoritative for human-readable labels in Network and Inspector. Resolved references use the canonical display label; genuinely unresolved references remain IDs.
+- **`4405f40` — `Guard multi-value place coordinate mapping`** closed the principal Cardinality Pass 2 safety hole: a multi-valued place cell cannot reuse one row-level coordinate pair for every split place. Single-valued place mappings retain coordinate support. This pass also recorded the legacy `customInspectorFields` duplicate-label collapse for the later compatibility/retirement audit rather than patching the old path independently.
+- **`3f921d0` — `Generalize place and time subject attribution`** replaced mutually exclusive record-or-one-participant attribution with reusable subject selection that can include the record, multiple participants, or both. Mapping fan-out remains atomic downstream, and participant-specific temporal assertions no longer ride indiscriminately on unrelated participations.
+- **`8e69bb6` — `Add subject-aware Evidence mapping`** extended the same subject-selection model to Evidence while preserving current broad Search/custom-field compatibility behavior. Cardinality is resolved before subject fan-out.
+- **`c7069da` — `Add canonical subject-aware Evidence assertions`** created canonical mapped-Evidence assertions linked to the existing per-record EvidenceSource, preserving one source interpretation while allowing several subject-specific semantic assertions.
+- **`ef1c95f` — `Project subject-aware Evidence into Inspector`** made entity Inspector Evidence consume the canonical assertions rather than re-scraping source rows. Record-only Evidence remains record-level, participant Evidence appears only on the selected canonical entity, and visible-record scope filters assertion projection.
+- **`b7482cb` — `Add homepage tutorial placeholder`** removed the floating Home tutorial invitation and added a centered secondary **Tutorial** button beneath the two primary data-entry actions. The button is intentionally shorter/less prominent, disabled for now, and shows **“Tutorial coming soon.”** on hover/focus.
+- Live QA across Cardinals, Family Tree, and correspondence samples confirmed multi-value Evidence/place behavior, ID/name resolution, place-of-childbirth attribution, both geographic map modes, and subject-aware Inspector presentation through this sequence.
+- Prepared this bounded core-documentation synchronization against `b7482cb` before a fresh-chat handoff. The Governance Protocol remains unchanged because its ownership and preservation rules did not change.
 
 ### Generalized Inspector/Identity authority, editable mappings, and first-class sample datasets — 2026-08-21
 
@@ -505,18 +523,17 @@ The following milestone narratives are retained as historical records. They rema
 ---
 ## 3. Deferred, Archived, and Rolled-Back Work
 
-### Current deferred data-model, Network, Search, Chart, and UI work after `8290696`
+### Current deferred consumer, Network, Chart, compatibility, and tutorial work after `b7482cb`
 
-- **Cardinality / multi-valued cells is the next major mapping-model question.** Cardinality should be declared per mapped item rather than once for a file. The agreed direction is an explicit one-value versus multiple-values choice plus a researcher-declared delimiter. For non-space delimiters, Peridot should trim leading/trailing whitespace around split values; if the researcher explicitly chooses a space as the delimiter, the space itself is semantic. This must be designed broadly enough for relationships, places, time, identity/evidence, and similar fields rather than as a genealogy-only partner parser.
-- **Record-versus-participant attribution needs a richer user model.** The current language around “describes this row / record” can imply that a value describes every participant in that record. Future mapping should allow a field/assertion to belong to the record, one or more mapped participants, or both, using a clear multiple-choice/multi-select interaction.
+- **Generalized Search audit is the recommended next task.** Trace canonical entities, relationships, places, temporal assertions, and subject-aware Evidence assertions through Search indexing, Browse, structured criteria, facets, Results, and Inspector handoff. Determine where Search still reconstructs meaning from compatibility rows or flattened custom fields before implementing changes.
+- **Search places/facets remain less generalized than relationship semantics.** Migrate Browse/facet/criteria/result paths to all mapped place associations as the audit demonstrates the need.
+- **Search coverage/scope** remains a dedicated audit concern. Verify loaded dataset versus applied result set versus Browse, Results, Refine/facets, pagination, capability filters, structured criteria, Inspector handoff, and export scope.
+- **Timeline playback × Analytics** remains a separate dedicated audit. Do not claim identical filtered/timeline-visible/charted/exported scope behavior until it is complete.
 - **Generalized Network follow-up remains active.** Correct geographic relationship/event scoping, transparent/user-selected participant-place anchors, generalized playback highlighting, Force-Directed viewport fitting, and arrowhead termination remain separate bounded work.
-- **Search places/facets remain less generalized than relationship semantics.** Migrate Browse/facet/criteria/result paths to all mapped place associations.
-- **Phase 3 Chart Builder remains deferred** until the remaining generalized data-model boundary is stable. The wide/transposed stock-price case remains a key regression target.
-- **Search coverage/scope** and **Timeline playback × Analytics** remain dedicated audits. Do not claim identical loaded/filtered/timeline-visible/charted/exported scope behavior until those audits are complete.
-- **Homepage/tutorial redesign is deferred.** The future Home direction should merge the strongest parts of the current branded landing page and Data/sample-selection surface. The final tutorial entry should be a static button rather than the current pop-up/launch treatment.
+- **Phase 3 Chart Builder remains deferred** until the consumer audits are stable. Build it from saved/generalized variables through structured human-readable controls and the scholarly-sentence/autocomplete direction rather than unrestricted natural-language prompting; retain the wide/transposed stock-price case as a required regression target.
+- **Repository-wide legacy/compatibility retirement audit remains required.** Retire only code proven unnecessary and preserve legitimate specialization. In particular, an older correspondence-oriented `customInspectorFields` path can collapse repeated duplicate labels through object construction while the authoritative generalized Evidence path preserves repeated values; do not patch or delete that path independently before the no-loss audit.
+- **Homepage redesign remains deferred, but the tutorial entry placeholder is now implemented.** The current branded Home retains its two primary data-entry CTAs plus a smaller disabled **Tutorial** button with **“Tutorial coming soon.”** The larger future Home/Data integration and tutorial-content/polish work remain separate visual/product passes.
 - Optional Timeline structure filters for approximate/partial/open values remain deferred if they can be made analytically useful and human-readable.
-- **Legacy `customInspectorFields` duplicate-label collapse remains deferred to the compatibility/retirement audit.** An older correspondence-oriented normalization path can still collapse repeated custom-field labels through object construction, while the authoritative generalized Evidence path preserves repeated values as arrays. Do not patch that legacy path independently before the no-loss retirement audit determines whether it should be retained or removed.
-- A repository-wide legacy/compatibility audit remains appropriate after the universal runtime has carried the remaining consumers end-to-end. Retire only code proven unnecessary; preserve legitimate compatibility/profile-specific specializations until no-loss parity is established.
 
 ### Tutorial attention-animation experiments rolled back before `619bab0`
 
@@ -564,6 +581,15 @@ This is the single authoritative place in the documentation for the cumulative c
 
 | Date | Commit | Message | Branch/tag decoration |
 |---|---|---|---|
+| 2026-08-31 | `b7482cb` | Add homepage tutorial placeholder | (HEAD -> main, origin/main, origin/HEAD) |
+| 2026-08-31 | `ef1c95f` | Project subject-aware Evidence into Inspector |  |
+| 2026-08-31 | `c7069da` | Add canonical subject-aware Evidence assertions |  |
+| 2026-08-31 | `8e69bb6` | Add subject-aware Evidence mapping |  |
+| 2026-08-31 | `3f921d0` | Generalize place and time subject attribution |  |
+| 2026-08-31 | `4405f40` | Guard multi-value place coordinate mapping |  |
+| 2026-08-31 | `d82e669` | Canonicalize entity display labels |  |
+| 2026-08-24 | `1d34b89` | Generalize cardinality and integrated identity mapping |  |
+| 2026-08-21 | `951c21e` | Synchronize documentation for generalized sample datasets |  |
 | 2026-08-21 | `8290696` | Add first-class generalized sample datasets | (HEAD -> main, origin/main, origin/HEAD) |
 | 2026-08-21 | `e944e60` | Stabilize generalized correspondence mapping |  |
 | 2026-08-21 | `bc37b08` | Make mapped identity and place subjects authoritative |  |
