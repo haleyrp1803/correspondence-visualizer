@@ -21,6 +21,7 @@
 
 import React, { useState } from 'react';
 import { buildPeridotInspectorEntityProfile } from './peridotInspectorSemantics.js';
+import { filterPeridotCanonicalEntityEvidenceToRows } from './peridotEntityEvidence.js';
 import { PeridotRecordStructure } from './PeridotRecordStructure.jsx';
 
 function detailLabelClassName() {
@@ -128,9 +129,14 @@ function buildEntityProfile(selectedProps, selectedLetterMetadata = [], viewMode
   const entityType = getSelectedEntityType(selectedProps, viewMode);
   const entityLabel = getSelectedEntityLabel(selectedProps);
   const entityId = getSelectedEntityId(selectedProps);
-  const entityEvidence = entityType === 'person'
+  const canonicalEntityEvidence = filterPeridotCanonicalEntityEvidenceToRows(
+    Array.isArray(selectedProps?.canonicalEntityEvidence) ? selectedProps.canonicalEntityEvidence : [],
+    selectedLetterMetadata,
+  );
+  const compatibilityEntityEvidence = entityType === 'person'
     ? normalizeLetterCustomFields(selectedProps?.personMetadata || {})
     : [];
+  const entityEvidence = [...compatibilityEntityEvidence, ...canonicalEntityEvidence];
   const semanticProfile = buildPeridotInspectorEntityProfile(selectedLetterMetadata, {
     entityType,
     entityLabel,

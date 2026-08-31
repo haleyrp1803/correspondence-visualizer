@@ -100,6 +100,10 @@ import {
   buildPeridotCanonicalEntityDisplayLabelMap,
   resolvePeridotCanonicalEntityDisplayLabel,
 } from './peridotEntityDisplayLabels.js';
+import {
+  buildPeridotCanonicalEntityEvidenceMap,
+  getPeridotCanonicalEntityEvidence,
+} from './peridotEntityEvidence.js';
 import { buildPeridotGenealogyRuntimeModel } from './peridotGenealogyRuntimeModel.js';
 import { buildPeridotCsvValidationSummary } from './peridotCsvValidation.js';
 import { buildInitialPeridotColumnMappingState } from './peridotColumnMapping.js';
@@ -3431,6 +3435,10 @@ export default function EuropeNetworkMapApp() {
     () => buildPeridotCanonicalEntityDisplayLabelMap(peridotNormalizedData?.canonicalDataset),
     [peridotNormalizedData?.canonicalDataset],
   );
+  const entityEvidenceById = useMemo(
+    () => buildPeridotCanonicalEntityEvidenceMap(peridotNormalizedData?.canonicalDataset),
+    [peridotNormalizedData?.canonicalDataset],
+  );
 
   /*
    * Search records preserve every geographic field required by maps and graphs,
@@ -3801,14 +3809,16 @@ export default function EuropeNetworkMapApp() {
       resolvedSelection?.detailLabel || resolvedSelection?.label,
     );
 
-    if (!canonicalDisplayLabel) return resolvedSelection;
+    const canonicalEntityEvidence = getPeridotCanonicalEntityEvidence(entityEvidenceById, resolvedEntityId);
+
+    if (!canonicalDisplayLabel && !canonicalEntityEvidence.length) return resolvedSelection;
 
     return {
       ...resolvedSelection,
-      label: canonicalDisplayLabel,
-      detailLabel: canonicalDisplayLabel,
+      ...(canonicalDisplayLabel ? { label: canonicalDisplayLabel, detailLabel: canonicalDisplayLabel } : {}),
+      canonicalEntityEvidence,
     };
-  }, [selectedSelection, graph, personMetadataByName, personMetadataById, personGraph, viewMode, filteredRowsByTime, inspectorStructuralRelationshipRows, entityDisplayLabelById]);
+  }, [selectedSelection, graph, personMetadataByName, personMetadataById, personGraph, viewMode, filteredRowsByTime, inspectorStructuralRelationshipRows, entityDisplayLabelById, entityEvidenceById]);
 
   const selectedLetterMetadata = useMemo(() => {
     if (selectedProps?.__kind === 'letter-detail') return [];
