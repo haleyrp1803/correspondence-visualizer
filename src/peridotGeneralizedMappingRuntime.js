@@ -99,7 +99,10 @@ function buildGeneralizedPlaces(row = {}, placeParts = [], identityMapping = {},
     const sourceColumn = asText(part?.placeColumn);
     const rawValue = valueFrom(row, sourceColumn);
     const labels = splitPeridotMappedValue(rawValue, part?.valueHandling);
-    const coordinates = coordinatesFromPlacePart(row, part);
+    const usesMultiplePlaceValues = part?.valueHandling?.cardinality === 'multiple';
+    const coordinates = usesMultiplePlaceValues
+      ? { latitude: null, longitude: null, sourceColumns: [] }
+      : coordinatesFromPlacePart(row, part);
     const hasCoordinates = Number.isFinite(coordinates.latitude) && Number.isFinite(coordinates.longitude);
     if (!sourceColumn && !hasCoordinates) return [];
     if (!labels.length && !hasCoordinates) return [];

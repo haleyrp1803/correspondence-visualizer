@@ -18,6 +18,31 @@ export function runPeridotMappedValueHandlingSelfAudit() {
     Roles: 'clerical, diplomatic',
     Dates: '1614-05-03; 1614-05-11',
   };
+  const scalarPlaceWithCoordinates = buildPeridotGeneralizedObservation(
+    { Place: 'Florence', Coordinates: '43.7696, 11.2558' },
+    {
+      placeParts: [
+        { placeColumn: 'Place', coordinatePairColumn: 'Coordinates', roleLabel: 'place', roleMode: 'heading' },
+      ],
+    },
+    0
+  );
+  const multiPlaceWithCoordinates = buildPeridotGeneralizedObservation(
+    { Places: 'Florence; Rome', Coordinates: '43.7696, 11.2558' },
+    {
+      placeParts: [
+        {
+          placeColumn: 'Places',
+          coordinatePairColumn: 'Coordinates',
+          roleLabel: 'place',
+          roleMode: 'heading',
+          valueHandling: { cardinality: 'multiple', delimiter: ';' },
+        },
+      ],
+    },
+    0
+  );
+
   const observation = buildPeridotGeneralizedObservation(row, {
     relationshipParts: [
       { participantColumn: 'Person', roleLabel: 'person', roleMode: 'heading' },
@@ -60,6 +85,15 @@ export function runPeridotMappedValueHandlingSelfAudit() {
       && observation.places[1]?.label === 'Rome'
       && observation.places[0]?.index === 0
       && observation.places[1]?.index === 0,
+    scalarPlaceCoordinatesPreserved:
+      scalarPlaceWithCoordinates.places.length === 1
+      && scalarPlaceWithCoordinates.places[0]?.label === 'Florence'
+      && scalarPlaceWithCoordinates.places[0]?.latitude === 43.7696
+      && scalarPlaceWithCoordinates.places[0]?.longitude === 11.2558,
+    multiValuePlaceCoordinatesUnavailable:
+      multiPlaceWithCoordinates.places.length === 2
+      && multiPlaceWithCoordinates.places.every((place) => place?.latitude === null && place?.longitude === null)
+      && multiPlaceWithCoordinates.places.every((place) => (place?.coordinateSourceColumns || []).length === 0),
     evidenceCardinalityExpandsFields:
       observation.evidenceFields.length === 2
       && observation.evidenceFields[0]?.value === 'clerical'

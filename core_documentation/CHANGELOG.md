@@ -515,6 +515,7 @@ The following milestone narratives are retained as historical records. They rema
 - **Search coverage/scope** and **Timeline playback × Analytics** remain dedicated audits. Do not claim identical loaded/filtered/timeline-visible/charted/exported scope behavior until those audits are complete.
 - **Homepage/tutorial redesign is deferred.** The future Home direction should merge the strongest parts of the current branded landing page and Data/sample-selection surface. The final tutorial entry should be a static button rather than the current pop-up/launch treatment.
 - Optional Timeline structure filters for approximate/partial/open values remain deferred if they can be made analytically useful and human-readable.
+- **Legacy `customInspectorFields` duplicate-label collapse remains deferred to the compatibility/retirement audit.** An older correspondence-oriented normalization path can still collapse repeated custom-field labels through object construction, while the authoritative generalized Evidence path preserves repeated values as arrays. Do not patch that legacy path independently before the no-loss retirement audit determines whether it should be retained or removed.
 - A repository-wide legacy/compatibility audit remains appropriate after the universal runtime has carried the remaining consumers end-to-end. Retire only code proven unnecessary; preserve legitimate compatibility/profile-specific specializations until no-loss parity is established.
 
 ### Tutorial attention-animation experiments rolled back before `619bab0`

@@ -447,14 +447,15 @@ function parseWorkbookFieldValue(value = '') {
   );
 }
 
-function WorkbookFieldSelect({ workbookModel, currentRef = {}, onChange }) {
+function WorkbookFieldSelect({ workbookModel, currentRef = {}, onChange, disabled = false }) {
   const usableSheets = getUsableWorkbookSheets(workbookModel);
 
   return (
     <select
       value={makeWorkbookFieldValue(currentRef)}
       onChange={(event) => onChange(parseWorkbookFieldValue(event.target.value))}
-      className={SPATIAL_SELECT_CLASS}
+      disabled={disabled}
+      className={disabled ? DISABLED_SPATIAL_SELECT_CLASS : SPATIAL_SELECT_CLASS}
     >
       <option value="">Unassigned</option>
       {usableSheets.map((sheet) => (
@@ -586,6 +587,7 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
   const coordinatePairRef = part?.coordinatePairRef || makeWorkbookColumnRef('', '');
   const latitudeRef = part?.latitudeRef || makeWorkbookColumnRef('', '');
   const longitudeRef = part?.longitudeRef || makeWorkbookColumnRef('', '');
+  const usesMultiplePlaceValues = part?.valueHandling?.cardinality === 'multiple';
   const headingLabel = placeRef?.columnName
     ? `${placeRef.sheetName} — ${placeRef.columnName}`
     : '';
@@ -625,7 +627,16 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
       <div className="my-4"><SectionDivider /></div>
       <PeridotValueHandlingControl
         valueHandling={part?.valueHandling}
-        onChange={(valueHandling) => onChange({ valueHandling })}
+        onChange={(valueHandling) => onChange(
+          valueHandling?.cardinality === 'multiple'
+            ? {
+                valueHandling,
+                coordinatePairRef: makeWorkbookColumnRef('', ''),
+                latitudeRef: makeWorkbookColumnRef('', ''),
+                longitudeRef: makeWorkbookColumnRef('', ''),
+              }
+            : { valueHandling }
+        )}
         disabled={!placeRef?.columnName}
       />
 
@@ -739,6 +750,11 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
         <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
           Choose a combined coordinate column, or separate latitude and longitude columns, if your source records them.
         </p>
+        {usesMultiplePlaceValues ? (
+          <p className="mt-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2 text-xs leading-relaxed text-[var(--panel-card-muted-text)]">
+            Coordinates are unavailable for multi-value place cells. If each place has different coordinates, store the places in separate rows, columns, or a related sheet so Peridot can see which coordinates belong to which place.
+          </p>
+        ) : null}
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           <label className="min-w-0">
             <div className="mb-1 text-xs font-semibold text-[var(--panel-card-text)]">Coordinate pair</div>
@@ -746,6 +762,7 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
               workbookModel={workbookModel}
               currentRef={coordinatePairRef}
               onChange={(ref) => onChange({ coordinatePairRef: ref })}
+              disabled={usesMultiplePlaceValues}
             />
             <WorkbookPlaceExamples workbookModel={workbookModel} sourceRef={coordinatePairRef} />
           </label>
@@ -755,6 +772,7 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
               workbookModel={workbookModel}
               currentRef={latitudeRef}
               onChange={(ref) => onChange({ latitudeRef: ref })}
+              disabled={usesMultiplePlaceValues}
             />
             <WorkbookPlaceExamples workbookModel={workbookModel} sourceRef={latitudeRef} />
           </label>
@@ -764,6 +782,7 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
               workbookModel={workbookModel}
               currentRef={longitudeRef}
               onChange={(ref) => onChange({ longitudeRef: ref })}
+              disabled={usesMultiplePlaceValues}
             />
             <WorkbookPlaceExamples workbookModel={workbookModel} sourceRef={longitudeRef} />
           </label>
@@ -810,6 +829,7 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
   const coordinatePairColumn = part?.coordinatePairColumn || '';
   const latitudeColumn = part?.latitudeColumn || '';
   const longitudeColumn = part?.longitudeColumn || '';
+  const usesMultiplePlaceValues = part?.valueHandling?.cardinality === 'multiple';
 
   return (
     <section className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/30 p-4">
@@ -849,7 +869,16 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
       <div className="my-4"><SectionDivider /></div>
       <PeridotValueHandlingControl
         valueHandling={part?.valueHandling}
-        onChange={(valueHandling) => onChange({ valueHandling })}
+        onChange={(valueHandling) => onChange(
+          valueHandling?.cardinality === 'multiple'
+            ? {
+                valueHandling,
+                coordinatePairColumn: '',
+                latitudeColumn: '',
+                longitudeColumn: '',
+              }
+            : { valueHandling }
+        )}
         disabled={!selectedPlaceColumn}
       />
 
@@ -960,13 +989,19 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
         <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
           Choose a combined coordinate column, or separate latitude and longitude columns, if your source records them.
         </p>
+        {usesMultiplePlaceValues ? (
+          <p className="mt-2 rounded-xl border border-[var(--panel-card-border)] bg-[var(--stat-card-bg)] px-3 py-2 text-xs leading-relaxed text-[var(--panel-card-muted-text)]">
+            Coordinates are unavailable for multi-value place cells. If each place has different coordinates, store the places in separate rows, columns, or a related sheet so Peridot can see which coordinates belong to which place.
+          </p>
+        ) : null}
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           <label className="min-w-0">
             <div className="mb-1 text-xs font-semibold text-[var(--panel-card-text)]">Coordinate pair</div>
             <select
               value={coordinatePairColumn}
               onChange={(event) => onChange({ coordinatePairColumn: event.target.value })}
-              className={SPATIAL_SELECT_CLASS}
+              disabled={usesMultiplePlaceValues}
+              className={usesMultiplePlaceValues ? DISABLED_SPATIAL_SELECT_CLASS : SPATIAL_SELECT_CLASS}
             >
               <option value="">Unassigned</option>
               {headers.map((header) => <option key={header} value={header}>{header}</option>)}
@@ -978,7 +1013,8 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
             <select
               value={latitudeColumn}
               onChange={(event) => onChange({ latitudeColumn: event.target.value })}
-              className={SPATIAL_SELECT_CLASS}
+              disabled={usesMultiplePlaceValues}
+              className={usesMultiplePlaceValues ? DISABLED_SPATIAL_SELECT_CLASS : SPATIAL_SELECT_CLASS}
             >
               <option value="">Unassigned</option>
               {headers.map((header) => <option key={header} value={header}>{header}</option>)}
@@ -990,7 +1026,8 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
             <select
               value={longitudeColumn}
               onChange={(event) => onChange({ longitudeColumn: event.target.value })}
-              className={SPATIAL_SELECT_CLASS}
+              disabled={usesMultiplePlaceValues}
+              className={usesMultiplePlaceValues ? DISABLED_SPATIAL_SELECT_CLASS : SPATIAL_SELECT_CLASS}
             >
               <option value="">Unassigned</option>
               {headers.map((header) => <option key={header} value={header}>{header}</option>)}
