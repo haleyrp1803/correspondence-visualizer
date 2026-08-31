@@ -7,13 +7,10 @@
  * their own uploaded data.
  */
 
-import React, { useState } from 'react';
-
-import { useDraggableTutorialPanel } from './useDraggableTutorialPanel.js';
+import React from 'react';
 
 import peridotLogoTransparent from '../assets/Peridot Logo Gilded Transparent.png';
 import homepageFiligree from '../assets/Adobe Stock Filigree 1.png';
-import tutorialFiligreeDivider from '../assets/Adobe Stock Filigree 3.png';
 
 function HomeTextureBackdrop() {
   return (
@@ -56,14 +53,7 @@ const homeActionClass = [
   'hover:-translate-y-0.5 hover:border-[var(--peridot-color-rgba-rgba-245-236-210-0-88)] hover:bg-[var(--peridot-role-button-primary-hover-bg)] hover:text-[var(--peridot-color-hex-fff8e8)] hover:shadow-[0_22px_58px_var(--peridot-color-rgba-rgba-0-0-0-0-34)]',
 ].join(' ');
 
-export function PeridotHomeWorkspace({ onUploadData, onUseSampleData, onStartTutorial }) {
-  const [showTutorialInvitation, setShowTutorialInvitation] = useState(true);
-  const {
-    panelRef: tutorialInvitationRef,
-    panelStyle: tutorialInvitationStyle,
-    dragHandleProps: tutorialInvitationDragHandleProps,
-  } = useDraggableTutorialPanel();
-
+export function PeridotHomeWorkspace({ onUploadData, onUseSampleData }) {
   return (
     <section className="relative h-full min-h-0 overflow-hidden bg-[var(--peridot-color-hex-03120c)] text-[var(--peridot-color-hex-f4f6df)]">
       <HomeTextureBackdrop />
@@ -93,86 +83,47 @@ export function PeridotHomeWorkspace({ onUploadData, onUseSampleData, onStartTut
               Your go-to tool for exploring, visualizing, and presenting humanistic data.
             </p>
 
-            <div className="peridot-appear-rise peridot-appear-delay-3 flex w-full flex-row items-center justify-center gap-[2.1cqw]">
-              <button
-                type="button"
-                onClick={onUseSampleData}
-                className={homeActionClass}
-                aria-label="Start visualizing with Peridot sample data"
-              >
-                Use sample data
-              </button>
+            <div className="peridot-appear-rise peridot-appear-delay-3 flex w-full flex-col items-center justify-center gap-[1.35cqw]">
+              <div className="flex w-full flex-row items-center justify-center gap-[2.1cqw]">
+                <button
+                  type="button"
+                  onClick={onUseSampleData}
+                  className={homeActionClass}
+                  aria-label="Start visualizing with Peridot sample data"
+                >
+                  Use sample data
+                </button>
 
-              <button
-                type="button"
-                onClick={onUploadData}
-                className={homeActionClass}
-                aria-label="Upload your own data"
-              >
-                Upload your data
-              </button>
+                <button
+                  type="button"
+                  onClick={onUploadData}
+                  className={homeActionClass}
+                  aria-label="Upload your own data"
+                >
+                  Upload your data
+                </button>
+              </div>
+
+              <div className="group/tutorial relative flex items-center justify-center" tabIndex={0}>
+                <button
+                  type="button"
+                  aria-disabled="true"
+                  aria-describedby="peridot-home-tutorial-coming-soon"
+                  className={`${homeActionClass} pointer-events-none opacity-40 grayscale`}
+                  style={{ height: '3.15cqw' }}
+                >
+                  Tutorial
+                </button>
+                <span
+                  id="peridot-home-tutorial-coming-soon"
+                  role="tooltip"
+                  className="pointer-events-none absolute bottom-[calc(100%+0.7cqw)] left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-full border border-[var(--peridot-color-rgba-rgba-223-233-200-0-38)] bg-[var(--peridot-color-hex-03120c)] px-[0.9cqw] py-[0.42cqw] text-[0.68cqw] font-bold tracking-[0.08em] text-[var(--peridot-color-hex-f4f6df)] opacity-0 shadow-[0_12px_30px_var(--peridot-color-rgba-rgba-0-0-0-0-34)] transition-opacity duration-150 group-hover/tutorial:opacity-100 group-focus/tutorial:opacity-100"
+                >
+                  Tutorial coming soon.
+                </span>
+              </div>
             </div>
           </div>
-
-          {showTutorialInvitation ? (
-            <aside
-              ref={tutorialInvitationRef}
-              style={tutorialInvitationStyle}
-              className="peridot-home-tutorial-invitation peridot-appear-rise peridot-appear-delay-4"
-              aria-labelledby="peridot-home-tutorial-heading"
-            >
-              <header className="peridot-home-tutorial-header">
-                <div
-                  className="peridot-home-tutorial-title-drag"
-                  {...tutorialInvitationDragHandleProps}
-                  aria-label="Move tutorial invitation with pointer dragging or arrow keys"
-                >
-                  <h2 id="peridot-home-tutorial-heading">TUTORIAL</h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowTutorialInvitation(false)}
-                  className="peridot-home-tutorial-close"
-                  aria-label="Dismiss tutorial invitation"
-                  title="Dismiss tutorial invitation"
-                >
-                  ×
-                </button>
-              </header>
-
-              <div className="peridot-home-tutorial-divider" aria-hidden="true">
-                <img
-                  src={tutorialFiligreeDivider}
-                  alt=""
-                  className="peridot-home-tutorial-divider-image"
-                  draggable="false"
-                />
-              </div>
-
-              <div className="peridot-home-tutorial-dialogue">
-                <p>
-                  Explore <span className="peridot-tutorial-keyword">sample data</span> while Peridot introduces its main tools one idea at a time.
-                </p>
-              </div>
-
-              <footer className="peridot-home-tutorial-actions">
-                <button
-                  type="button"
-                  onClick={() => setShowTutorialInvitation(false)}
-                  className="peridot-home-tutorial-dismiss"
-                >
-                  Explore on my own
-                </button>
-                <button
-                  type="button"
-                  onClick={onStartTutorial}
-                  className="peridot-home-tutorial-start"
-                >
-                  Start tutorial
-                </button>
-              </footer>
-            </aside>
-          ) : null}
         </div>
       </div>
     </section>
