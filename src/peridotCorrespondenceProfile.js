@@ -66,6 +66,30 @@ function unique(values = []) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
+function evidenceInterpretationKey(field = {}) {
+  return [
+    asText(field?.sourceColumn),
+    Number.isInteger(field?.occurrenceIndex) ? field.occurrenceIndex : '',
+    asText(field?.value),
+    asText(field?.rawValue),
+  ].join('::');
+}
+
+function dedupeEvidenceInterpretations(fields = []) {
+  const seen = new Set();
+  return (fields || []).filter((field) => {
+    const key = evidenceInterpretationKey(field);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function makeMappedEvidencePredicate(field = {}) {
+  const semanticLabel = asText(field?.label) || asText(field?.sourceColumn) || 'evidence';
+  return `mapped-evidence:${slugifyPeridotIdPart(semanticLabel)}`;
+}
+
 function sourceRowFromMappedRow(row = {}) {
   if (row.originalUploadedRow && typeof row.originalUploadedRow === 'object') {
     return { ...row.originalUploadedRow };
@@ -801,8 +825,9 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
     })).filter((entry) => entry.placeId);
 
     const evidenceFields = (observation.evidenceFields || []).filter((field) => asText(field?.value));
+    const sourceEvidenceFields = dedupeEvidenceInterpretations(evidenceFields);
     let evidenceSourceId = '';
-    if (evidenceFields.length) {
+    if (sourceEvidenceFields.length) {
       evidenceSourceId = makePeridotCanonicalId({
         itemType: 'evidence',
         datasetId,
@@ -813,9 +838,9 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
       evidenceSources.push(makePeridotEvidenceSource({
         id: evidenceSourceId,
         sourceType: 'user-mapped-evidence',
-        citation: evidenceFields.map((field) => `${asText(field.label)}: ${asText(field.value)}`).join(' · '),
+        citation: sourceEvidenceFields.map((field) => `${asText(field.label)}: ${asText(field.value)}`).join(' · '),
         attributes: {
-          fields: evidenceFields.map((field) => ({ ...field })),
+          fields: sourceEvidenceFields.map((field) => ({ ...field })),
         },
         provenance: makeRowProvenance({
           row,
@@ -823,7 +848,7 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
           sourceFileId,
           sourceFileName,
           sourceSheet,
-          sourceColumns: evidenceFields.map((field) => field.sourceColumn),
+          sourceColumns: sourceEvidenceFields.map((field) => field.sourceColumn),
           transformation: 'Preserve user-confirmed evidence fields on the mapped observation.',
           status: PERIDOT_PROVENANCE_STATUS.IMPORTED_DIRECTLY,
         }),
@@ -857,7 +882,7 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
           sourceColumn: asText(place.sourceColumn),
           subjectParticipantIndex: Number.isInteger(place.subjectParticipantIndex) ? place.subjectParticipantIndex : null,
         })),
-        customFields: evidenceFields.reduce((fields, field) => {
+        customFields: sourceEvidenceFields.reduce((fields, field) => {
           const label = asText(field.label);
           if (!label) return fields;
           if (!(label in fields)) {
@@ -934,6 +959,46 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
           sourceSheet,
           sourceColumns: unique([place.sourceColumn, place.roleSourceColumn, ...(place.coordinateSourceColumns || [])]),
           transformation: 'Create typed place assertion from user-confirmed generalized place assignment.',
+        }),
+      }));
+    });
+
+    evidenceFields.forEach((field, evidenceIndex) => {
+      const hasParticipantSubject = Number.isInteger(field?.subjectParticipantIndex);
+      const associatedParticipant = hasParticipantSubject
+        ? participantEntries.find((entry) => entry?.participant?.index === field.subjectParticipantIndex)
+        : null;
+
+      // A participant-attributed Evidence value cannot become a record-level
+      // assertion merely because that participant is blank in this row. The
+      // source field remains preserved on the EvidenceSource; the assertion is
+      // created only when its researcher-selected subject exists.
+      if (hasParticipantSubject && !associatedParticipant?.entityId) return;
+
+      const evidenceSubjectId = associatedParticipant?.entityId || recordId;
+      assertions.push(makePeridotAssertion({
+        id: `${recordId}:assertion:evidence:${evidenceIndex + 1}`,
+        subjectId: evidenceSubjectId,
+        predicate: makeMappedEvidencePredicate(field),
+        value: field.value,
+        evidenceSourceIds: evidenceSourceId ? [evidenceSourceId] : [],
+        attributes: compactObject({
+          mappedLabel: asText(field.label),
+          sourceColumn: asText(field.sourceColumn),
+          rawValue: field.rawValue,
+          occurrenceIndex: Number.isInteger(field.occurrenceIndex) ? field.occurrenceIndex : null,
+          subjectOccurrenceIndex: Number.isInteger(field.subjectOccurrenceIndex) ? field.subjectOccurrenceIndex : null,
+          subjectParticipantIndex: hasParticipantSubject ? field.subjectParticipantIndex : null,
+          analyticsEligible: Boolean(field.analyticsEligible),
+        }),
+        provenance: makeRowProvenance({
+          row,
+          rowIndex,
+          sourceFileId,
+          sourceFileName,
+          sourceSheet,
+          sourceColumns: unique([field.sourceColumn]),
+          transformation: 'Create atomic subject-aware assertion from user-confirmed mapped Evidence field.',
         }),
       }));
     });
