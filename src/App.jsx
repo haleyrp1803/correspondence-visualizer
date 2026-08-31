@@ -96,6 +96,10 @@ import { InspectorEdgeView as InspectorEdgeViewView } from './InspectorEdgeView'
 import { InspectorNodeView as InspectorNodeViewView } from './InspectorNodeView';
 import { PERIDOT_TEMPLATE_COLUMNS } from './peridotCsvSchema.js';
 import { buildPeridotCanonicalRuntimeModel } from './peridotCanonicalRuntimeModel.js';
+import {
+  buildPeridotCanonicalEntityDisplayLabelMap,
+  resolvePeridotCanonicalEntityDisplayLabel,
+} from './peridotEntityDisplayLabels.js';
 import { buildPeridotGenealogyRuntimeModel } from './peridotGenealogyRuntimeModel.js';
 import { buildPeridotCsvValidationSummary } from './peridotCsvValidation.js';
 import { buildInitialPeridotColumnMappingState } from './peridotColumnMapping.js';
@@ -782,8 +786,12 @@ function computePersonEdgeWidth(count) {
 function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQuery = '', semanticOptions = null) {
   const personMap = new Map();
   const { relationships, locations } = layoutMode === 'geographic' && semanticOptions
-    ? derivePeridotGeographicEntityNetworkSemantics(semanticOptions.relationshipRows, semanticOptions.locationRows)
-    : derivePeridotEntityNetworkSemantics(rows);
+    ? derivePeridotGeographicEntityNetworkSemantics(
+        semanticOptions.relationshipRows,
+        semanticOptions.locationRows,
+        { entityLabelById: semanticOptions.entityLabelById },
+      )
+    : derivePeridotEntityNetworkSemantics(rows, { entityLabelById: semanticOptions?.entityLabelById });
 
   const relationshipPersonKey = (relationship, side) => (
     side === 'source'
@@ -791,12 +799,40 @@ function buildPersonGraph(rows, width, height, layoutMode, minCount = 1, searchQ
       : (relationship.targetId || relationship.target)
   );
 
+  // Force/network rows can encounter an ID-reference appearance before the
+  // canonical labelled appearance of the same entity. Build a local label
+  // registry from the complete relationship semantics so graph construction
+  // never freezes that first raw ID in as the node's display label.
+  const relationshipLabelByEntityId = new Map();
+  const sourceIdToken = (entityId) => String(entityId || '').trim().split(':').pop() || '';
+  const isRawIdentityReferenceLabel = (label, entityId) => {
+    const normalizedLabel = String(label || '').trim();
+    if (!normalizedLabel) return true;
+    const token = sourceIdToken(entityId);
+    return Boolean(token && normalizedLabel === token);
+  };
+  const rememberRelationshipLabel = (entityId, label) => {
+    const id = String(entityId || '').trim();
+    const candidate = String(label || '').trim();
+    if (!id || !candidate) return;
+    const existing = relationshipLabelByEntityId.get(id);
+    if (!existing || (isRawIdentityReferenceLabel(existing, id) && !isRawIdentityReferenceLabel(candidate, id))) {
+      relationshipLabelByEntityId.set(id, candidate);
+    }
+  };
+
+  relationships.forEach((relationship) => {
+    rememberRelationshipLabel(relationship.sourceId, relationship.source);
+    rememberRelationshipLabel(relationship.targetId, relationship.target);
+  });
+
   const canonicalPersonLabel = (entityId, fallbackLabel) => {
     const id = String(entityId || '').trim();
     const canonicalLabel = id && semanticOptions?.entityLabelById?.get
       ? semanticOptions.entityLabelById.get(id)
       : '';
-    return String(canonicalLabel || fallbackLabel || id).trim();
+    const relationshipLabel = id ? relationshipLabelByEntityId.get(id) : '';
+    return String(canonicalLabel || relationshipLabel || fallbackLabel || id).trim();
   };
 
   relationships.forEach((relationship) => {
@@ -3391,18 +3427,10 @@ export default function EuropeNetworkMapApp() {
     [peridotNormalizedData, geographyRows]
   );
 
-  const entityDisplayLabelById = useMemo(() => {
-    const labels = new Map();
-    normalizedRows.forEach((row) => {
-      (row?.generalizedObservation?.participants || []).forEach((participant) => {
-        const entityId = String(participant?.entityId || '').trim();
-        const label = String(participant?.value || '').trim();
-        if (!entityId || !label || participant?.participantValueMode === 'identity-reference') return;
-        if (!labels.has(entityId)) labels.set(entityId, label);
-      });
-    });
-    return labels;
-  }, [normalizedRows]);
+  const entityDisplayLabelById = useMemo(
+    () => buildPeridotCanonicalEntityDisplayLabelMap(peridotNormalizedData?.canonicalDataset),
+    [peridotNormalizedData?.canonicalDataset],
+  );
 
   /*
    * Search records preserve every geographic field required by maps and graphs,
@@ -3749,14 +3777,38 @@ export default function EuropeNetworkMapApp() {
       };
     }
 
-    return resolveSelection(selectedSelection, graph, personMetadataByName, {
+    const resolvedSelection = resolveSelection(selectedSelection, graph, personMetadataByName, {
       personGraphFallback: personGraph,
       personMetadataById,
       viewMode,
       inspectorRows: filteredRowsByTime,
       inspectorRelationshipRows: inspectorStructuralRelationshipRows,
     });
-  }, [selectedSelection, graph, personMetadataByName, personMetadataById, personGraph, viewMode, filteredRowsByTime, inspectorStructuralRelationshipRows]);
+
+    if (!resolvedSelection || resolvedSelection?.entityType === 'place' || resolvedSelection?.__kind === 'place-detail') {
+      return resolvedSelection;
+    }
+
+    const resolvedEntityId = String(
+      resolvedSelection?.entityId
+      || resolvedSelection?.personMetadata?.canonicalEntityId
+      || resolvedSelection?.personMetadata?.id
+      || '',
+    ).trim();
+    const canonicalDisplayLabel = resolvePeridotCanonicalEntityDisplayLabel(
+      entityDisplayLabelById,
+      resolvedEntityId,
+      resolvedSelection?.detailLabel || resolvedSelection?.label,
+    );
+
+    if (!canonicalDisplayLabel) return resolvedSelection;
+
+    return {
+      ...resolvedSelection,
+      label: canonicalDisplayLabel,
+      detailLabel: canonicalDisplayLabel,
+    };
+  }, [selectedSelection, graph, personMetadataByName, personMetadataById, personGraph, viewMode, filteredRowsByTime, inspectorStructuralRelationshipRows, entityDisplayLabelById]);
 
   const selectedLetterMetadata = useMemo(() => {
     if (selectedProps?.__kind === 'letter-detail') return [];

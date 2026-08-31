@@ -14,6 +14,7 @@
  */
 
 import { getRowPrimaryTemporalDisplay } from './timelinePlaybackHelpers.js';
+import { resolvePeridotCanonicalEntityDisplayLabel } from './peridotEntityDisplayLabels.js';
 
 const DIRECTED = 'directed';
 const UNDIRECTED = 'undirected';
@@ -208,6 +209,7 @@ function locationsFromRow(row) {
 export function derivePeridotEntityNetworkSemantics(rows = [], options = {}) {
   const relationshipMap = new Map();
   const locations = [];
+  const entityLabelById = options?.entityLabelById || null;
   const defaultRows = Array.isArray(rows) ? rows : [];
   const relationshipRows = Array.isArray(options.relationshipRows) ? options.relationshipRows : defaultRows;
   const locationRows = Array.isArray(options.locationRows) ? options.locationRows : defaultRows;
@@ -218,7 +220,16 @@ export function derivePeridotEntityNetworkSemantics(rows = [], options = {}) {
   // the active Timeline/playback scope. Keeping the inputs separate preserves explicit
   // relationship semantics without inventing dates for structural relationships.
   locationRows.forEach((row = {}) => {
-    locations.push(...locationsFromRow(row));
+    locationsFromRow(row).forEach((location) => {
+      locations.push({
+        ...location,
+        person: resolvePeridotCanonicalEntityDisplayLabel(
+          entityLabelById,
+          location.personId,
+          location.person,
+        ),
+      });
+    });
   });
 
   relationshipRows.forEach((row = {}, rowIndex) => {
@@ -233,20 +244,25 @@ export function derivePeridotEntityNetworkSemantics(rows = [], options = {}) {
 
     relationshipDrafts.forEach((draft) => {
       if (!draft.source || !draft.target) return;
-      const key = semanticRelationshipKey(draft);
+      const canonicalDraft = {
+        ...draft,
+        source: resolvePeridotCanonicalEntityDisplayLabel(entityLabelById, draft.sourceId, draft.source),
+        target: resolvePeridotCanonicalEntityDisplayLabel(entityLabelById, draft.targetId, draft.target),
+      };
+      const key = semanticRelationshipKey(canonicalDraft);
       if (!relationshipMap.has(key)) {
         relationshipMap.set(key, {
           id: `entity-edge:${key}`,
-          source: draft.source,
-          target: draft.target,
-          sourceId: draft.sourceId || '',
-          targetId: draft.targetId || '',
-          direction: draft.direction,
-          relationshipType: draft.relationshipType,
-          relationshipLabel: draft.relationshipLabel,
-          sourceRole: draft.sourceRole,
-          targetRole: draft.targetRole,
-          semanticSource: draft.semanticSource,
+          source: canonicalDraft.source,
+          target: canonicalDraft.target,
+          sourceId: canonicalDraft.sourceId || '',
+          targetId: canonicalDraft.targetId || '',
+          direction: canonicalDraft.direction,
+          relationshipType: canonicalDraft.relationshipType,
+          relationshipLabel: canonicalDraft.relationshipLabel,
+          sourceRole: canonicalDraft.sourceRole,
+          targetRole: canonicalDraft.targetRole,
+          semanticSource: canonicalDraft.semanticSource,
           count: 0,
           dates: new Set(),
           rows: [],
@@ -275,8 +291,9 @@ export function derivePeridotEntityNetworkSemantics(rows = [], options = {}) {
  * important for genealogy, where canonical family relationships are structural
  * rows while birth/death event rows carry the geographic anchors.
  */
-export function derivePeridotGeographicEntityNetworkSemantics(relationshipRows = [], locationRows = []) {
+export function derivePeridotGeographicEntityNetworkSemantics(relationshipRows = [], locationRows = [], options = {}) {
   return derivePeridotEntityNetworkSemantics(relationshipRows, {
+    ...options,
     relationshipRows,
     locationRows,
   });
