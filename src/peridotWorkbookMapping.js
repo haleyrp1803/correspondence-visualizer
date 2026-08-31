@@ -62,6 +62,7 @@ import {
   projectGeneralizedObservationToLegacyRow,
 } from './peridotGeneralizedMappingRuntime.js';
 import { convertWorkbookIdentityMappingToRuntime, getWorkbookIdentityRefs, materializePeridotWorkbookIdentityMappingSuggestions } from './peridotIdentityRuntime.js';
+import { normalizePeridotSubjectSelectionFromMapping } from './peridotSubjectSelection.js';
 
 export const PERIDOT_WORKBOOK_JOIN_TYPES = Object.freeze({
   letterId: 'letter_id',
@@ -579,7 +580,8 @@ export function getWorkbookTemporalAssertionRefs(mappings = []) {
 }
 
 function temporalAssertionMappingToRuntime(mapping = {}) {
-  const next={...mapping};
+  const next={...mapping, subjectSelection: normalizePeridotSubjectSelectionFromMapping(mapping)};
+  delete next.subjectParticipantIndex;
   ['column','yearColumn','monthColumn','dayColumn','startColumn','startYearColumn','startMonthColumn','startDayColumn','endColumn','endYearColumn','endMonthColumn','endDayColumn'].forEach((key)=>{ next[key]=workbookRefRuntimeKey(mapping?.[key]); });
   next.noteColumns=(mapping.noteColumns||[]).map(workbookRefRuntimeKey).filter(Boolean);
   return next;
@@ -1179,7 +1181,7 @@ function buildWorkbookGeneralizedRuntimeMapping(mappingState = {}, workbookModel
       roleLabel: asText(part?.roleLabel),
       roleMode: part?.roleMode === 'column' ? 'column' : 'heading',
       roleColumn: workbookRefRuntimeKey(part?.roleRef),
-      subjectParticipantIndex: Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : null,
+      subjectSelection: normalizePeridotSubjectSelectionFromMapping(part),
       coordinatePairColumn: workbookRefRuntimeKey(part?.coordinatePairRef),
       latitudeColumn: workbookRefRuntimeKey(part?.latitudeRef),
       longitudeColumn: workbookRefRuntimeKey(part?.longitudeRef),

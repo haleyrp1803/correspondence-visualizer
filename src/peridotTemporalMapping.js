@@ -1,5 +1,7 @@
 /* Repeatable source mappings for canonical temporal assertions. */
 
+import { normalizePeridotSubjectSelectionFromMapping } from './peridotSubjectSelection.js';
+
 function asText(value) { return String(value ?? '').trim(); }
 
 export const PERIDOT_TEMPORAL_ASSERTION_KIND = Object.freeze({ DATE: 'date', PERIOD: 'period' });
@@ -26,7 +28,7 @@ export function makeTemporalAssertionMapping(overrides = {}) {
     endMonthColumn: overrides.endMonthColumn || '',
     endDayColumn: overrides.endDayColumn || '',
     noteColumns: Array.isArray(overrides.noteColumns) ? [...overrides.noteColumns] : [],
-    subjectParticipantIndex: Number.isInteger(overrides.subjectParticipantIndex) ? overrides.subjectParticipantIndex : null,
+    subjectSelection: normalizePeridotSubjectSelectionFromMapping(overrides),
     valueHandling: overrides.valueHandling ? { ...overrides.valueHandling } : undefined,
   };
 }

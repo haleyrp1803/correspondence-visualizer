@@ -12,6 +12,7 @@ import { parsePeridotCoordinatePair } from './peridotDataCapabilityAudit.js';
 import { composeTemporalPartsValue, getTemporalAssertionSourceColumns, normalizeTemporalAssertionMappings } from './peridotTemporalMapping.js';
 import { getPeridotIdentityRuntimeSourceColumns, materializePeridotSingleTableIdentityMappingSuggestions, resolvePeridotMappedEntityIdentity, resolvePeridotMappedRecordIdentity } from './peridotIdentityRuntime.js';
 import { splitPeridotMappedValue } from './peridotMappedValueHandling.js';
+import { expandPeridotSubjectSelection } from './peridotSubjectSelection.js';
 
 function asText(value) {
   return String(value ?? '').trim();
@@ -107,14 +108,16 @@ function buildGeneralizedPlaces(row = {}, placeParts = [], identityMapping = {},
     if (!sourceColumn && !hasCoordinates) return [];
     if (!labels.length && !hasCoordinates) return [];
     const resolvedLabels = labels.length ? labels : [''];
-    return resolvedLabels.map((label, occurrenceIndex) => {
+    const subjectParticipantIndices = expandPeridotSubjectSelection(part);
+    return resolvedLabels.flatMap((label, occurrenceIndex) => {
       const identityRow = sourceColumn ? { ...row, [sourceColumn]: label } : row;
       const identity = resolvePeridotMappedEntityIdentity({
         row: identityRow, rowIndex, identityMapping, appearanceKind: 'place', appearanceIndex: index, label,
       });
-      return {
+      return subjectParticipantIndices.map((subjectParticipantIndex, subjectOccurrenceIndex) => ({
         index,
         occurrenceIndex,
+        subjectOccurrenceIndex,
         label,
         rawValue,
         entityId: identity.entityId,
@@ -122,11 +125,11 @@ function buildGeneralizedPlaces(row = {}, placeParts = [], identityMapping = {},
         role: roleFromPart(row, part, 'placeColumn') || `place-${index + 1}`,
         sourceColumn,
         roleSourceColumn: part?.roleMode === 'column' ? asText(part?.roleColumn) : '',
-        subjectParticipantIndex: Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : null,
+        subjectParticipantIndex,
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
         coordinateSourceColumns: coordinates.sourceColumns,
-      };
+      }));
     });
   });
 }
@@ -153,30 +156,35 @@ function buildTemporalAssertionDescriptors(row = {}, temporalAssertionMappings =
   return normalizeTemporalAssertionMappings(temporalAssertionMappings).flatMap((mapping, index) => {
     const role = asText(mapping.role) || `Time ${index + 1}`;
     const notes = notesFor(mapping);
-    const subjectParticipantIndex = Number.isInteger(mapping.subjectParticipantIndex) ? mapping.subjectParticipantIndex : null;
+    const subjectParticipantIndices = expandPeridotSubjectSelection(mapping);
+    const fanOutSubjects = (descriptor) => subjectParticipantIndices.map((subjectParticipantIndex, subjectOccurrenceIndex) => ({
+      ...descriptor,
+      subjectParticipantIndex,
+      subjectOccurrenceIndex,
+    }));
     if (mapping.kind === 'period') {
       if (mapping.sourceMode === 'single') {
         const rawValue = value(mapping.column);
-        return splitPeridotMappedValue(rawValue, mapping?.valueHandling).map((sourceText, occurrenceIndex) => ({
-          fieldKey: mapping.id, role, sourceText, rawValue, occurrenceIndex, kind: 'span', notes, subjectParticipantIndex,
+        return splitPeridotMappedValue(rawValue, mapping?.valueHandling).flatMap((sourceText, occurrenceIndex) => fanOutSubjects({
+          fieldKey: mapping.id, role, sourceText, rawValue, occurrenceIndex, kind: 'span', notes,
         }));
       }
       const startValue = mapping.startMode === 'parts' ? partValue(mapping, 'start') : value(mapping.startColumn);
       const endValue = mapping.endMode === 'parts' ? partValue(mapping, 'end') : value(mapping.endColumn);
       if (!asText(startValue) && !asText(endValue)) return [];
-      return [{
+      return fanOutSubjects({
         fieldKey: mapping.id, role, startValue, endValue,
-        sourceText: composeDisplayDateValue('', '', startValue, endValue), kind: 'range', notes, subjectParticipantIndex,
-      }];
+        sourceText: composeDisplayDateValue('', '', startValue, endValue), kind: 'range', notes,
+      });
     }
     if (mapping.sourceMode === 'parts') {
       const sourceText = partValue(mapping);
       if (!asText(sourceText)) return [];
-      return [{ fieldKey: mapping.id, role, sourceText, kind: 'point', notes, subjectParticipantIndex }];
+      return fanOutSubjects({ fieldKey: mapping.id, role, sourceText, kind: 'point', notes });
     }
     const rawValue = value(mapping.column);
-    return splitPeridotMappedValue(rawValue, mapping?.valueHandling).map((sourceText, occurrenceIndex) => ({
-      fieldKey: mapping.id, role, sourceText, rawValue, occurrenceIndex, kind: 'point', notes, subjectParticipantIndex,
+    return splitPeridotMappedValue(rawValue, mapping?.valueHandling).flatMap((sourceText, occurrenceIndex) => fanOutSubjects({
+      fieldKey: mapping.id, role, sourceText, rawValue, occurrenceIndex, kind: 'point', notes,
     }));
   });
 }

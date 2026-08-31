@@ -34,6 +34,7 @@ import { applyPeridotGeneralizedColumnMapping } from './peridotGeneralizedMappin
 import { materializePeridotSingleTableIdentityMappingSuggestions, materializePeridotWorkbookIdentityMappingSuggestions } from './peridotIdentityRuntime.js';
 import { buildTemporalAssertionMappingsFromLegacy, deriveLegacyTemporalMapping, getTemporalAssertionSourceColumns, normalizeTemporalAssertionMappings, temporalAssertionMappingHasSource } from './peridotTemporalMapping.js';
 import { normalizePeridotGeneralizedMappedRows } from './peridotCorrespondenceProfile.js';
+import { normalizePeridotSubjectSelectionFromMapping } from './peridotSubjectSelection.js';
 import {
   buildPeridotRowsFromWorkbookMapping,
   buildWorkbookCustomFieldSelectionsForSheet,
@@ -924,16 +925,26 @@ function temporalMappingSourceSummary(mapping = {}, workbook = false) {
 }
 
 function singleMappedSubjectDetail(mapping = {}, relationshipParts = []) {
-  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'Describes only this row / record (not a participant)';
-  const part = relationshipParts[mapping.subjectParticipantIndex];
-  return part?.participantColumn ? `Describes ${part.participantColumn}` : `Describes relationship part ${mapping.subjectParticipantIndex + 1}`;
+  const selection = normalizePeridotSubjectSelectionFromMapping(mapping);
+  const labels = [];
+  if (selection.includeRecord) labels.push('this row / record');
+  selection.participantIndices.forEach((participantIndex) => {
+    const part = relationshipParts[participantIndex];
+    labels.push(part?.participantColumn || `relationship part ${participantIndex + 1}`);
+  });
+  return `Describes ${labels.join(' + ')}`;
 }
 
 function workbookMappedSubjectDetail(mapping = {}, relationshipParts = []) {
-  if (!Number.isInteger(mapping?.subjectParticipantIndex)) return 'Describes only this row / record (not a participant)';
-  const part = relationshipParts[mapping.subjectParticipantIndex];
-  const ref = part?.participantRef || {};
-  return ref?.columnName ? `Describes ${ref.sheetName} — ${ref.columnName}` : `Describes relationship part ${mapping.subjectParticipantIndex + 1}`;
+  const selection = normalizePeridotSubjectSelectionFromMapping(mapping);
+  const labels = [];
+  if (selection.includeRecord) labels.push('this row / record');
+  selection.participantIndices.forEach((participantIndex) => {
+    const part = relationshipParts[participantIndex];
+    const ref = part?.participantRef || {};
+    labels.push(ref?.columnName ? `${ref.sheetName} — ${ref.columnName}` : `relationship part ${participantIndex + 1}`);
+  });
+  return `Describes ${labels.join(' + ')}`;
 }
 
 function SingleTableReviewAssignments({
@@ -1923,7 +1934,7 @@ function buildInitialWorkbookTemporalAssertions(mappingState = {}) {
   if (temporal.Date?.sheetName && temporal.Date?.columnName) result.push({ id:'legacy-date', role:temporal.Date.columnName, kind:'date', sourceMode:'single', column:temporal.Date, noteColumns:notes.Date || [] });
   if (temporal.Date_Range?.sheetName && temporal.Date_Range?.columnName) result.push({ id:'legacy-range', role:temporal.Date_Range.columnName, kind:'period', sourceMode:'single', column:temporal.Date_Range, noteColumns:notes.Date_Range || [] });
   if ((temporal.Date_Start?.sheetName && temporal.Date_Start?.columnName) || (temporal.Date_End?.sheetName && temporal.Date_End?.columnName)) result.push({ id:'legacy-start-end', role:[temporal.Date_Start?.columnName,temporal.Date_End?.columnName].filter(Boolean).join(' / ') || 'Date interval', kind:'period', sourceMode:'endpoints', startMode:'single', startColumn:temporal.Date_Start || makeWorkbookColumnRef('',''), endMode:'single', endColumn:temporal.Date_End || makeWorkbookColumnRef('',''), noteColumns:[...(notes.Date_Start||[]),...(notes.Date_End||[])] });
-  return result.length ? result : [{ id:'time-1', role:'', kind:'date', sourceMode:'single', column:makeWorkbookColumnRef('',''), noteColumns:[], subjectParticipantIndex:null }];
+  return result.length ? result : [{ id:'time-1', role:'', kind:'date', sourceMode:'single', column:makeWorkbookColumnRef('',''), noteColumns:[], subjectSelection:{ includeRecord:true, participantIndices:[] } }];
 }
 
 function workbookTemporalAssertionRefs(mappings = []) {
@@ -1949,7 +1960,7 @@ function deriveWorkbookLegacyTemporalMappings(mappings = []) {
 function buildInitialWorkbookPlaceParts(mappingState = {}) {
   const saved = Array.isArray(mappingState.placeParts) ? mappingState.placeParts : [];
   if (saved.length && saved.some((part) => part?.placeRef || part?.coordinatePairRef || part?.latitudeRef || part?.longitudeRef)) {
-    return saved.map((part) => ({ ...part, subjectParticipantIndex: Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : '' }));
+    return saved.map((part) => ({ ...part }));
   }
 
   const point = mappingState.pointMappings || {};
@@ -1966,7 +1977,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
       roleLabel: '',
       roleMode: 'heading',
       roleRef: emptyRef(),
-      subjectParticipantIndex: '',
+      subjectSelection: { includeRecord: true, participantIndices: [] },
       coordinatePairRef: point.Point_Coordinates || emptyRef(),
       latitudeRef: point.Point_Latitude || emptyRef(),
       longitudeRef: point.Point_Longitude || emptyRef(),
@@ -1979,7 +1990,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
       roleLabel: '',
       roleMode: 'heading',
       roleRef: emptyRef(),
-      subjectParticipantIndex: 0,
+      subjectSelection: { includeRecord: false, participantIndices: [0] },
       coordinatePairRef: routePairs.Source_Coordinates || emptyRef(),
       latitudeRef: core.Source_Latitude || emptyRef(),
       longitudeRef: core.Source_Longitude || emptyRef(),
@@ -1992,7 +2003,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
       roleLabel: '',
       roleMode: 'heading',
       roleRef: emptyRef(),
-      subjectParticipantIndex: 1,
+      subjectSelection: { includeRecord: false, participantIndices: [1] },
       coordinatePairRef: routePairs.Target_Coordinates || emptyRef(),
       latitudeRef: core.Target_Latitude || emptyRef(),
       longitudeRef: core.Target_Longitude || emptyRef(),
@@ -2004,7 +2015,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
     roleLabel: '',
     roleMode: 'heading',
     roleRef: emptyRef(),
-    subjectParticipantIndex: '',
+    subjectSelection: { includeRecord: true, participantIndices: [] },
     coordinatePairRef: emptyRef(),
     latitudeRef: emptyRef(),
     longitudeRef: emptyRef(),
@@ -2013,7 +2024,7 @@ function buildInitialWorkbookPlaceParts(mappingState = {}) {
 
 function buildInitialPlaceParts(mappingState = {}) {
   const saved = Array.isArray(mappingState.placeParts) ? mappingState.placeParts : [];
-  if (saved.length) return saved.map((part) => ({ ...part, subjectParticipantIndex: Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : '' }));
+  if (saved.length) return saved.map((part) => ({ ...part }));
 
   const point = mappingState.pointMapping || {};
   const route = mappingState.coreMapping || {};
@@ -2026,7 +2037,7 @@ function buildInitialPlaceParts(mappingState = {}) {
       roleLabel: '',
       roleMode: 'heading',
       roleColumn: '',
-      subjectParticipantIndex: '',
+      subjectSelection: { includeRecord: true, participantIndices: [] },
       coordinatePairColumn: point.Point_Coordinates || '',
       latitudeColumn: point.Point_Latitude || '',
       longitudeColumn: point.Point_Longitude || '',
@@ -2039,7 +2050,7 @@ function buildInitialPlaceParts(mappingState = {}) {
       roleLabel: '',
       roleMode: 'heading',
       roleColumn: '',
-      subjectParticipantIndex: 0,
+      subjectSelection: { includeRecord: false, participantIndices: [0] },
       coordinatePairColumn: routePairs.Source_Coordinates || '',
       latitudeColumn: route.Source_Latitude || '',
       longitudeColumn: route.Source_Longitude || '',
@@ -2052,7 +2063,7 @@ function buildInitialPlaceParts(mappingState = {}) {
       roleLabel: '',
       roleMode: 'heading',
       roleColumn: '',
-      subjectParticipantIndex: 1,
+      subjectSelection: { includeRecord: false, participantIndices: [1] },
       coordinatePairColumn: routePairs.Target_Coordinates || '',
       latitudeColumn: route.Target_Latitude || '',
       longitudeColumn: route.Target_Longitude || '',
@@ -2064,7 +2075,7 @@ function buildInitialPlaceParts(mappingState = {}) {
     roleLabel: '',
     roleMode: 'heading',
     roleColumn: '',
-    subjectParticipantIndex: '',
+    subjectSelection: { includeRecord: true, participantIndices: [] },
     coordinatePairColumn: '',
     latitudeColumn: '',
     longitudeColumn: '',

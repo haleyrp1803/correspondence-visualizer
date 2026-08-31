@@ -841,7 +841,7 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
       temporalAssertion,
       temporalAssertions,
       participantIds: participantEntries.map((entry) => entry.entityId),
-      placeReferenceIds: placeEntries.map((entry) => entry.placeId),
+      placeReferenceIds: unique(placeEntries.map((entry) => entry.placeId)),
       evidenceSourceIds: evidenceSourceId ? [evidenceSourceId] : [],
       attributes: compactObject({
         relationshipType: asText(relationship.type),
@@ -883,14 +883,19 @@ export function normalizePeridotGeneralizedMappedRows(rows = [], options = {}) {
     }));
 
     participantEntries.forEach(({ participant, entityId }, participantIndex) => {
+      const participantTemporalAssertions = temporalAssertions.filter((assertion) => (
+        !Number.isInteger(assertion?.subjectParticipantIndex)
+        || assertion.subjectParticipantIndex === participant?.index
+      ));
+      const participantTemporalAssertion = participantTemporalAssertions[0] || null;
       participations.push(makePeridotParticipation({
         id: `${recordId}:participation:${participantIndex + 1}`,
         subjectId: entityId,
         targetType: PERIDOT_TARGET_TYPES.RECORD,
         targetId: recordId,
         role: asText(participant.role) || `participant-${participantIndex + 1}`,
-        temporalAssertion,
-        temporalAssertions,
+        temporalAssertion: participantTemporalAssertion,
+        temporalAssertions: participantTemporalAssertions,
         provenance: makeRowProvenance({
           row,
           rowIndex,

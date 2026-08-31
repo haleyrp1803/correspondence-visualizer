@@ -18,6 +18,7 @@
 
 import React from 'react';
 import PeridotValueHandlingControl from './PeridotValueHandlingControl.jsx';
+import PeridotSubjectSelectionControl from './PeridotSubjectSelectionControl.jsx';
 import {
   PERIDOT_CORE_FIELD_DEFINITIONS_BY_KEY,
   PERIDOT_POINT_FIELD_DEFINITIONS_BY_KEY,
@@ -173,27 +174,6 @@ function TemporalPartSelect({ headers, value, onChange, label }) {
   );
 }
 
-function TemporalSubjectSelect({ relationshipParts = [], value, onChange }) {
-  const subjectParticipantIndex = Number.isInteger(value) ? value : '';
-  return (
-    <label className="block text-xs font-semibold text-[var(--muted-text)]">
-      Who or what does this date or period describe?
-      <select
-        value={subjectParticipantIndex}
-        onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
-        className={`${SOURCE_SELECT_CLASS} mt-1`}
-      >
-        <option value="">Only this row / record (not a participant)</option>
-        {(relationshipParts || []).map((part, participantIndex) => {
-          const participantLabel = part?.participantColumn || `Relationship part ${participantIndex + 1}`;
-          return <option key={`time-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
-        })}
-      </select>
-      <span className="mt-1 block text-[11px] font-normal leading-relaxed text-[var(--panel-card-muted-text)]">Choose a relationship participant when this time describes that person or other participant. Otherwise leave it attached to the row as a whole.</span>
-    </label>
-  );
-}
-
 function SingleEndpointControls({ headers, mapping, prefix = '', onPatch }) {
   const modeKey = prefix ? `${prefix}Mode` : 'sourceMode';
   const mode = mapping[modeKey] === 'parts' ? 'parts' : 'single';
@@ -220,7 +200,7 @@ function SingleEndpointControls({ headers, mapping, prefix = '', onPatch }) {
 export function TemporalMappingTable({ headers, rows = [], temporalAssertions = [], relationshipParts = [], onAssertionsChange }) {
   const update = (index, patch) => onAssertionsChange?.((currentMappings) => (currentMappings || []).map((mapping, currentIndex) => currentIndex === index ? { ...mapping, ...patch } : mapping));
   const remove = (index) => onAssertionsChange?.((currentMappings) => (currentMappings || []).filter((_, currentIndex) => currentIndex !== index));
-  const add = () => onAssertionsChange?.((currentMappings) => [...(currentMappings || []), { id: `time-${Date.now()}`, role: '', kind: 'date', sourceMode: 'single', column: '', noteColumns: [], subjectParticipantIndex: null }]);
+  const add = () => onAssertionsChange?.((currentMappings) => [...(currentMappings || []), { id: `time-${Date.now()}`, role: '', kind: 'date', sourceMode: 'single', column: '', noteColumns: [], subjectSelection: { includeRecord: true, participantIndices: [] } }]);
   return (
     <div className="space-y-3">
       <TemporalIntro />
@@ -245,9 +225,20 @@ export function TemporalMappingTable({ headers, rows = [], temporalAssertions = 
                     </select>
                   </label>
                 </div>
-                <div className="mt-4">
-                  <TemporalSubjectSelect relationshipParts={relationshipParts} value={mapping.subjectParticipantIndex} onChange={(subjectParticipantIndex) => update(index, { subjectParticipantIndex })} />
-                </div>
+                {(relationshipParts || []).length ? (
+                  <div className="mt-4">
+                    <PeridotSubjectSelectionControl
+                      value={mapping.subjectSelection}
+                      legacySubjectParticipantIndex={mapping.subjectParticipantIndex}
+                      participants={(relationshipParts || []).map((part, participantIndex) => ({
+                        index: participantIndex,
+                        label: `Part ${String.fromCharCode(65 + participantIndex)} — ${part?.participantColumn || `Relationship part ${participantIndex + 1}`}`,
+                      }))}
+                      noun="date or period"
+                      onChange={(subjectSelection) => update(index, { subjectSelection, subjectParticipantIndex: null })}
+                    />
+                  </div>
+                ) : null}
                 <div className="mt-4">
                   {kind === 'date' ? <SingleEndpointControls headers={headers} mapping={mapping} onPatch={(patch) => update(index, patch)} /> : (
                     <div className="space-y-3">
@@ -531,7 +522,7 @@ const EMPTY_PLACE_PART = Object.freeze({
   roleLabel: '',
   roleMode: 'heading',
   roleColumn: '',
-  subjectParticipantIndex: '',
+  subjectSelection: { includeRecord: true, participantIndices: [] },
   coordinatePairColumn: '',
   latitudeColumn: '',
   longitudeColumn: '',
@@ -561,7 +552,7 @@ const EMPTY_WORKBOOK_PLACE_PART = Object.freeze({
   roleLabel: '',
   roleMode: 'heading',
   roleRef: makeWorkbookColumnRef('', ''),
-  subjectParticipantIndex: '',
+  subjectSelection: { includeRecord: true, participantIndices: [] },
   coordinatePairRef: makeWorkbookColumnRef('', ''),
   latitudeRef: makeWorkbookColumnRef('', ''),
   longitudeRef: makeWorkbookColumnRef('', ''),
@@ -583,7 +574,6 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
   const placeRef = part?.placeRef || makeWorkbookColumnRef('', '');
   const roleMode = part?.roleMode === 'column' ? 'column' : 'heading';
   const roleRef = part?.roleRef || makeWorkbookColumnRef('', '');
-  const subjectParticipantIndex = Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : '';
   const coordinatePairRef = part?.coordinatePairRef || makeWorkbookColumnRef('', '');
   const latitudeRef = part?.latitudeRef || makeWorkbookColumnRef('', '');
   const longitudeRef = part?.longitudeRef || makeWorkbookColumnRef('', '');
@@ -708,42 +698,34 @@ function WorkbookPlacePartCard({ part, index, workbookModel, relationshipParts =
 
       <div className="my-4"><SectionDivider /></div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
-        <div>
-          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Who or what does this place describe?</div>
-          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
-            Connect this place to a relationship participant when it describes that person or other participant. Leave it attached to the row when it describes the event, record, object, or observation as a whole.
-          </p>
-        </div>
-        <div>
-          <select
-            value={subjectParticipantIndex}
-            onChange={(event) => onChange({ subjectParticipantIndex: event.target.value === '' ? '' : Number(event.target.value) })}
-            className={SOURCE_SELECT_CLASS}
-          >
-            <option value="">Only this row / record (not a participant)</option>
-            {(relationshipParts || []).map((relationshipPart, participantIndex) => {
-              const participantRef = relationshipPart?.participantRef || makeWorkbookColumnRef('', '');
-              const participantLabel = participantRef?.columnName
-                ? `${participantRef.sheetName} — ${participantRef.columnName}`
-                : `Relationship part ${participantIndex + 1}`;
-              return <option key={`workbook-place-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
-            })}
-          </select>
-          <p className={`mt-1.5 text-[11px] leading-relaxed ${subjectParticipantIndex === '' && (relationshipParts || []).length ? 'font-semibold text-[var(--danger-text,var(--panel-card-muted-text))]' : 'text-[var(--panel-card-muted-text)]'}`}>
-            {subjectParticipantIndex === ''
-              ? ((relationshipParts || []).length
-                ? 'Currently attached only to the row / record, not to any participant. Choose a participant here if this place should be associated with that person or thing.'
-                : 'This place is attached only to the row / record, not to any participant.')
-              : (() => {
-                  const ref = (relationshipParts || [])[subjectParticipantIndex]?.participantRef || {};
-                  return `This place will be attributed to ${ref?.columnName ? `${ref.sheetName} — ${ref.columnName}` : `relationship part ${subjectParticipantIndex + 1}`}.`;
-                })()}
-          </p>
-        </div>
-      </div>
+      {(relationshipParts || []).length ? (
+        <>
+          <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+            <div>
+              <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Who or what does this place describe?</div>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+                Choose every mapped participant or the row itself that this place genuinely describes. The same mapped place can support several separate subject-specific assertions.
+              </p>
+            </div>
+            <PeridotSubjectSelectionControl
+              value={part?.subjectSelection}
+              legacySubjectParticipantIndex={part?.subjectParticipantIndex}
+              participants={(relationshipParts || []).map((relationshipPart, participantIndex) => {
+                const participantRef = relationshipPart?.participantRef || makeWorkbookColumnRef('', '');
+                return {
+                  index: participantIndex,
+                  label: `Part ${String.fromCharCode(65 + participantIndex)} — ${participantRef?.columnName ? `${participantRef.sheetName} — ${participantRef.columnName}` : `Relationship part ${participantIndex + 1}`}`,
+                };
+              })}
+              noun="place"
+              showTitle={false}
+              onChange={(subjectSelection) => onChange({ subjectSelection, subjectParticipantIndex: null })}
+            />
+          </div>
 
-      <div className="my-4"><SectionDivider /></div>
+          <div className="my-4"><SectionDivider /></div>
+        </>
+      ) : null}
 
       <div>
         <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Coordinates for this place <span className="font-normal text-[var(--panel-card-muted-text)]">(optional)</span></div>
@@ -825,7 +807,6 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
   const selectedPlaceColumn = part?.placeColumn || '';
   const roleMode = part?.roleMode === 'column' ? 'column' : 'heading';
   const roleColumn = part?.roleColumn || '';
-  const subjectParticipantIndex = Number.isInteger(part?.subjectParticipantIndex) ? part.subjectParticipantIndex : '';
   const coordinatePairColumn = part?.coordinatePairColumn || '';
   const latitudeColumn = part?.latitudeColumn || '';
   const longitudeColumn = part?.longitudeColumn || '';
@@ -953,36 +934,31 @@ function PlacePartCard({ part, index, headers, rows, relationshipParts = [], onC
 
       <div className="my-4"><SectionDivider /></div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
-        <div>
-          <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Who or what does this place describe?</div>
-          <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
-            Connect this place to a relationship participant when it describes that person or other participant. Leave it attached to the row when it describes the event, record, object, or observation as a whole.
-          </p>
-        </div>
-        <div>
-          <select
-            value={subjectParticipantIndex}
-            onChange={(event) => onChange({ subjectParticipantIndex: event.target.value === '' ? '' : Number(event.target.value) })}
-            className={SOURCE_SELECT_CLASS}
-          >
-            <option value="">Only this row / record (not a participant)</option>
-            {(relationshipParts || []).map((relationshipPart, participantIndex) => {
-              const participantLabel = relationshipPart?.participantColumn || `Relationship part ${participantIndex + 1}`;
-              return <option key={`place-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
-            })}
-          </select>
-          <p className={`mt-1.5 text-[11px] leading-relaxed ${subjectParticipantIndex === '' && (relationshipParts || []).length ? 'font-semibold text-[var(--danger-text,var(--panel-card-muted-text))]' : 'text-[var(--panel-card-muted-text)]'}`}>
-            {subjectParticipantIndex === ''
-              ? ((relationshipParts || []).length
-                ? 'Currently attached only to the row / record, not to any participant. Choose a participant here if this place should be associated with that person or thing.'
-                : 'This place is attached only to the row / record, not to any participant.')
-              : `This place will be attributed to ${(relationshipParts || [])[subjectParticipantIndex]?.participantColumn || `relationship part ${subjectParticipantIndex + 1}`}.`}
-          </p>
-        </div>
-      </div>
+      {(relationshipParts || []).length ? (
+        <>
+          <div className="grid gap-5 lg:grid-cols-[minmax(14rem,0.9fr)_minmax(16rem,1.1fr)]">
+            <div>
+              <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Who or what does this place describe?</div>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--panel-card-muted-text)]">
+                Choose every mapped participant or the row itself that this place genuinely describes. The same mapped place can support several separate subject-specific assertions.
+              </p>
+            </div>
+            <PeridotSubjectSelectionControl
+              value={part?.subjectSelection}
+              legacySubjectParticipantIndex={part?.subjectParticipantIndex}
+              participants={(relationshipParts || []).map((relationshipPart, participantIndex) => ({
+                index: participantIndex,
+                label: `Part ${String.fromCharCode(65 + participantIndex)} — ${relationshipPart?.participantColumn || `Relationship part ${participantIndex + 1}`}`,
+              }))}
+              noun="place"
+              showTitle={false}
+              onChange={(subjectSelection) => onChange({ subjectSelection, subjectParticipantIndex: null })}
+            />
+          </div>
 
-      <div className="my-4"><SectionDivider /></div>
+          <div className="my-4"><SectionDivider /></div>
+        </>
+      ) : null}
 
       <div>
         <div className="text-[15px] font-bold leading-tight text-[var(--panel-card-text)]">Coordinates for this place <span className="font-normal text-[var(--panel-card-muted-text)]">(optional)</span></div>
@@ -1706,36 +1682,14 @@ export function WorkbookRelationshipMappingPanel({ workbookModel, workbookMappin
 function WorkbookTemporalRefControl({ workbookModel, label, currentRef, onChange }) {
   return <label className="block text-xs font-semibold text-[var(--muted-text)]">{label}<div className="mt-1"><WorkbookFieldSelect workbookModel={workbookModel} currentRef={currentRef || {}} onChange={onChange} /></div></label>;
 }
-function WorkbookTemporalSubjectSelect({ relationshipParts = [], value, onChange }) {
-  const subjectParticipantIndex = Number.isInteger(value) ? value : '';
-  return (
-    <label className="block text-xs font-semibold text-[var(--muted-text)]">
-      Who or what does this date or period describe?
-      <select
-        value={subjectParticipantIndex}
-        onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
-        className={`${SOURCE_SELECT_CLASS} mt-1`}
-      >
-        <option value="">Only this row / record (not a participant)</option>
-        {(relationshipParts || []).map((part, participantIndex) => {
-          const ref = part?.participantRef || makeWorkbookColumnRef('', '');
-          const participantLabel = ref?.columnName ? `${ref.sheetName} — ${ref.columnName}` : `Relationship part ${participantIndex + 1}`;
-          return <option key={`workbook-time-subject-${participantIndex}`} value={participantIndex}>{participantLabel}</option>;
-        })}
-      </select>
-      <span className="mt-1 block text-[11px] font-normal leading-relaxed text-[var(--panel-card-muted-text)]">Choose a relationship participant when this time describes that person or other participant. Otherwise leave it attached to the row as a whole.</span>
-    </label>
-  );
-}
-
 function WorkbookEndpointControls({ workbookModel, mapping, prefix = '', onPatch }) {
   const modeKey = prefix ? `${prefix}Mode` : 'sourceMode'; const mode = mapping[modeKey] === 'parts' ? 'parts' : 'single'; const columnKey = prefix ? `${prefix}Column` : 'column';
   return <div className="space-y-3"><label className="block text-xs font-semibold text-[var(--muted-text)]">How is this date stored?<select value={mode} onChange={(e)=>onPatch({[modeKey]:e.target.value})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="single">In one column</option><option value="parts">In separate year / month / day columns</option></select></label>{mode==='single'?<WorkbookTemporalRefControl workbookModel={workbookModel} label="Date column" currentRef={mapping[columnKey]} onChange={(ref)=>onPatch({[columnKey]:ref})}/>:<div className="grid gap-2 sm:grid-cols-3"><WorkbookTemporalRefControl workbookModel={workbookModel} label="Year" currentRef={mapping[prefix ? `${prefix}YearColumn` : 'yearColumn']} onChange={(ref)=>onPatch({[prefix ? `${prefix}YearColumn` : 'yearColumn']:ref})}/><WorkbookTemporalRefControl workbookModel={workbookModel} label="Month" currentRef={mapping[prefix ? `${prefix}MonthColumn` : 'monthColumn']} onChange={(ref)=>onPatch({[prefix ? `${prefix}MonthColumn` : 'monthColumn']:ref})}/><WorkbookTemporalRefControl workbookModel={workbookModel} label="Day" currentRef={mapping[prefix ? `${prefix}DayColumn` : 'dayColumn']} onChange={(ref)=>onPatch({[prefix ? `${prefix}DayColumn` : 'dayColumn']:ref})}/></div>}</div>;
 }
 export function WorkbookTemporalMappingTable({ workbookModel, workbookMapping, onAssertionsChange }) {
   const temporalAssertions = workbookMapping.temporalAssertionMappings || [];
-  const update=(index,patch)=>onAssertionsChange?.((currentMappings)=>(currentMappings||[]).map((m,i)=>i===index?{...m,...patch}:m)); const remove=(index)=>onAssertionsChange?.((currentMappings)=>(currentMappings||[]).filter((_,i)=>i!==index)); const add=()=>onAssertionsChange?.((currentMappings)=>[...(currentMappings||[]),{id:`time-${Date.now()}`,role:'',kind:'date',sourceMode:'single',column:makeWorkbookColumnRef('',''),noteColumns:[],subjectParticipantIndex:null}]);
-  return <div className="space-y-3"><TemporalIntro/><div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5"><div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]"><div className="space-y-4 min-w-0">{temporalAssertions.map((mapping,index)=>{const kind=mapping.kind==='period'?'period':'date'; return <div key={mapping.id||index} className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-4"><div className="flex items-start justify-between gap-3"><div className="text-[15px] font-bold text-[var(--panel-card-text)]">Time {index+1}</div><button type="button" onClick={()=>remove(index)} className="rounded-lg border border-[var(--input-border)] px-2 py-1 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-[var(--muted-text)]">Name this date or period<input value={mapping.role||''} onChange={(e)=>update(index,{role:e.target.value})} placeholder="e.g. Birth, Creation date, Lifespan, Reign" className={`${SOURCE_SELECT_CLASS} mt-1`}/><span className="mt-1 block text-[11px] font-normal leading-relaxed text-[var(--panel-card-muted-text)]">Peridot will use this name to identify the time later in Timeline, Search, Inspector, and Export.</span></label><label className="text-xs font-semibold text-[var(--muted-text)]">What kind of time is it?<select value={kind} onChange={(e)=>update(index,{kind:e.target.value,sourceMode:'single'})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="date">Date</option><option value="period">Period / range</option></select></label></div><div className="mt-4"><WorkbookTemporalSubjectSelect relationshipParts={workbookMapping.relationshipParts || []} value={mapping.subjectParticipantIndex} onChange={(subjectParticipantIndex)=>update(index,{subjectParticipantIndex})}/></div><div className="mt-4">{kind==='date'?<WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} onPatch={(patch)=>update(index,patch)}/>:<div className="space-y-3"><label className="block text-xs font-semibold text-[var(--muted-text)]">How is this period stored?<select value={mapping.sourceMode==='endpoints'?'endpoints':'single'} onChange={(e)=>update(index,{sourceMode:e.target.value})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="single">In one column</option><option value="endpoints">In separate beginning and ending fields</option></select></label>{mapping.sourceMode==='endpoints'?<div className="grid gap-4 xl:grid-cols-2"><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Beginning</div><WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} prefix="start" onPatch={(patch)=>update(index,patch)}/></div><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Ending</div><WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} prefix="end" onPatch={(patch)=>update(index,patch)}/></div></div>:<WorkbookTemporalRefControl workbookModel={workbookModel} label="Period column" currentRef={mapping.column} onChange={(ref)=>update(index,{column:ref})}/>}</div>}</div>{(kind==='date'?mapping.sourceMode!=='parts':mapping.sourceMode!=='endpoints')?<div className="mt-4 border-t border-[var(--panel-card-border)] pt-4"><PeridotValueHandlingControl valueHandling={mapping.valueHandling} onChange={(valueHandling)=>update(index,{valueHandling})} disabled={!mapping.column?.columnName}/></div>:null}<div className="mt-4 border-t border-[var(--panel-card-border)] pt-3"><div className="text-xs font-semibold text-[var(--muted-text)]">Related temporal notes (optional)</div>{(mapping.noteColumns||[]).map((ref,noteIndex)=><div key={noteIndex} className="mt-2 flex max-w-xl gap-2"><div className="min-w-0 max-w-md flex-1"><WorkbookFieldSelect workbookModel={workbookModel} currentRef={ref||{}} onChange={(nextRef)=>{const notes=[...(mapping.noteColumns||[])];notes[noteIndex]=nextRef;update(index,{noteColumns:notes});}}/></div><button type="button" onClick={()=>update(index,{noteColumns:(mapping.noteColumns||[]).filter((_,i)=>i!==noteIndex)})} className="rounded-lg border border-[var(--input-border)] px-2 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div>)}<button type="button" onClick={()=>update(index,{noteColumns:[...(mapping.noteColumns||[]),makeWorkbookColumnRef('','')]})} className="mt-3 rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add related note column</button></div></div>})}<button type="button" onClick={add} className="rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-3 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add date or period</button></div><TemporalUsagePanel/></div></div></div>;
+  const update=(index,patch)=>onAssertionsChange?.((currentMappings)=>(currentMappings||[]).map((m,i)=>i===index?{...m,...patch}:m)); const remove=(index)=>onAssertionsChange?.((currentMappings)=>(currentMappings||[]).filter((_,i)=>i!==index)); const add=()=>onAssertionsChange?.((currentMappings)=>[...(currentMappings||[]),{id:`time-${Date.now()}`,role:'',kind:'date',sourceMode:'single',column:makeWorkbookColumnRef('',''),noteColumns:[],subjectSelection:{includeRecord:true,participantIndices:[]}}]);
+  return <div className="space-y-3"><TemporalIntro/><div className="peridot-mapping-section-card rounded-2xl border border-[var(--panel-card-border)] bg-[var(--section-bg)] p-5"><div className="grid gap-7 lg:grid-cols-[minmax(0,1.62fr)_minmax(17rem,0.72fr)]"><div className="space-y-4 min-w-0">{temporalAssertions.map((mapping,index)=>{const kind=mapping.kind==='period'?'period':'date'; return <div key={mapping.id||index} className="rounded-2xl border border-[var(--panel-card-border)] bg-[var(--input-bg)]/35 p-4"><div className="flex items-start justify-between gap-3"><div className="text-[15px] font-bold text-[var(--panel-card-text)]">Time {index+1}</div><button type="button" onClick={()=>remove(index)} className="rounded-lg border border-[var(--input-border)] px-2 py-1 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-[var(--muted-text)]">Name this date or period<input value={mapping.role||''} onChange={(e)=>update(index,{role:e.target.value})} placeholder="e.g. Birth, Creation date, Lifespan, Reign" className={`${SOURCE_SELECT_CLASS} mt-1`}/><span className="mt-1 block text-[11px] font-normal leading-relaxed text-[var(--panel-card-muted-text)]">Peridot will use this name to identify the time later in Timeline, Search, Inspector, and Export.</span></label><label className="text-xs font-semibold text-[var(--muted-text)]">What kind of time is it?<select value={kind} onChange={(e)=>update(index,{kind:e.target.value,sourceMode:'single'})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="date">Date</option><option value="period">Period / range</option></select></label></div>{(workbookMapping.relationshipParts || []).length ? <div className="mt-4"><PeridotSubjectSelectionControl value={mapping.subjectSelection} legacySubjectParticipantIndex={mapping.subjectParticipantIndex} participants={(workbookMapping.relationshipParts || []).map((part, participantIndex) => { const ref = part?.participantRef || makeWorkbookColumnRef('', ''); return { index: participantIndex, label: `Part ${String.fromCharCode(65 + participantIndex)} — ${ref?.columnName ? `${ref.sheetName} — ${ref.columnName}` : `Relationship part ${participantIndex + 1}`}` }; })} noun="date or period" onChange={(subjectSelection)=>update(index,{subjectSelection,subjectParticipantIndex:null})}/></div> : null}<div className="mt-4">{kind==='date'?<WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} onPatch={(patch)=>update(index,patch)}/>:<div className="space-y-3"><label className="block text-xs font-semibold text-[var(--muted-text)]">How is this period stored?<select value={mapping.sourceMode==='endpoints'?'endpoints':'single'} onChange={(e)=>update(index,{sourceMode:e.target.value})} className={`${SOURCE_SELECT_CLASS} mt-1`}><option value="single">In one column</option><option value="endpoints">In separate beginning and ending fields</option></select></label>{mapping.sourceMode==='endpoints'?<div className="grid gap-4 xl:grid-cols-2"><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Beginning</div><WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} prefix="start" onPatch={(patch)=>update(index,patch)}/></div><div className="rounded-xl border border-[var(--panel-card-border)] p-3"><div className="mb-2 text-sm font-bold text-[var(--panel-card-text)]">Ending</div><WorkbookEndpointControls workbookModel={workbookModel} mapping={mapping} prefix="end" onPatch={(patch)=>update(index,patch)}/></div></div>:<WorkbookTemporalRefControl workbookModel={workbookModel} label="Period column" currentRef={mapping.column} onChange={(ref)=>update(index,{column:ref})}/>}</div>}</div>{(kind==='date'?mapping.sourceMode!=='parts':mapping.sourceMode!=='endpoints')?<div className="mt-4 border-t border-[var(--panel-card-border)] pt-4"><PeridotValueHandlingControl valueHandling={mapping.valueHandling} onChange={(valueHandling)=>update(index,{valueHandling})} disabled={!mapping.column?.columnName}/></div>:null}<div className="mt-4 border-t border-[var(--panel-card-border)] pt-3"><div className="text-xs font-semibold text-[var(--muted-text)]">Related temporal notes (optional)</div>{(mapping.noteColumns||[]).map((ref,noteIndex)=><div key={noteIndex} className="mt-2 flex max-w-xl gap-2"><div className="min-w-0 max-w-md flex-1"><WorkbookFieldSelect workbookModel={workbookModel} currentRef={ref||{}} onChange={(nextRef)=>{const notes=[...(mapping.noteColumns||[])];notes[noteIndex]=nextRef;update(index,{noteColumns:notes});}}/></div><button type="button" onClick={()=>update(index,{noteColumns:(mapping.noteColumns||[]).filter((_,i)=>i!==noteIndex)})} className="rounded-lg border border-[var(--input-border)] px-2 text-xs text-[var(--panel-card-muted-text)]">Remove</button></div>)}<button type="button" onClick={()=>update(index,{noteColumns:[...(mapping.noteColumns||[]),makeWorkbookColumnRef('','')]})} className="mt-3 rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-3 py-2 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add related note column</button></div></div>})}<button type="button" onClick={add} className="rounded-xl border border-[var(--button-primary-border)] bg-[var(--button-primary-bg)] px-4 py-3 text-sm font-semibold text-[var(--button-primary-text)] hover:bg-[var(--button-primary-hover)]">+ Add date or period</button></div><TemporalUsagePanel/></div></div></div>;
 }
 /*
  * Renders workbook role mappings for caller-supplied role definitions. This is
